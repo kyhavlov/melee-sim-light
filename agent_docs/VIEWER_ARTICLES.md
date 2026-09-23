@@ -46,9 +46,9 @@ offsets measured at spawn (`melee_sim` probe, Final Destination, facing +1):
 | 114 | Greenhouse (jab) | (5.4, 5.2) | can at +4, puffs to +12 |
 | 115 | Manhole (down tilt) | (12.4, 1.5) | cover at +12.4 |
 | 116 | Fire (forward smash) | (4.8, 14.8) | torch flame at (+7, 13) |
-| 117 | Parachute (neutral air) | (-0.7, 7.0) | canopy at +15 |
-| 118 | Turtle (back air) | (5.6, 8.0) at shoulder | ellipse at (-9.5, 8) behind |
-| 119 | Breath (up air) | (-0.5, 13.5) | puffs from +14 |
+| 117 | Parachute (neutral air) | (-0.7, 7.0) | canopy at +15 above the visual joint |
+| 118 | Turtle (back air) | (5.6, 8.0) at shoulder | shell 5 behind the visual joint |
+| 119 | Breath (up air) | (-0.5, 13.5) | puffs rising from the visual joint |
 | 120 | Judge (side special) | (-0.6, 14.7) | hammer at (+8, 8), number at +17 |
 | 121 | Oil Panic (release) | accessory callback | splash from +4 to +16 |
 | 112 | Shadow Ball held | (-7.6, 8.9) | (+7, 9), radius 1.6 + 0.65 x level |
@@ -78,16 +78,18 @@ and falls back to a frame envelope while no hitbox is live.
 Fighter hitboxes (four per fighter on the wire) are now drawn translucently by
 `Player.tsx`, which covers attacks whose visuals are effects rather than
 silhouette geometry (Samus forward air, Ness PSI aerials, Sheik's burst,
-Mewtwo's Confusion). Game & Watch's up-air puffs and back-air turtle anchor to
-those hitboxes while they are live.
+Mewtwo's Confusion). Game & Watch's parachute, turtle and up-air puffs are
+drawn at the item's viewer-lane joint, which follows the fighter bone the
+article is parented to (2026-09-22); their hits still show through the
+fighter hitbox overlay.
 
 Silhouette fallbacks (`replayStore.tsx`): the slippilab zips have no
 victim-side capture, throw, cargo, bury, frozen, asleep or lift animations and
 the per-character maps left them blank, so those fighters vanished. They now
 borrow CaptureWaitHi / DamageFlyN / DownWaitU / FuraFura / Fall / AttackS4S
 silhouettes. Overlays mark buried (mound) and frozen (ice block); Fire Fox / Fire Bird,
-like Game & Watch's turtle, hammer and puffs and Ness's bat and yoyo, rely on
-the hitbox overlay instead of drawn effects.
+like Game & Watch's hammer and Ness's bat and yoyo, rely on the hitbox
+overlay instead of drawn effects.
 
 Donkey Kong's cargo hold: the source only decrements the escape timer on the
 victim's mash inputs (`ftCommon_GrabMash` in `ftCo_Shouldered_Anim`), so a
@@ -223,11 +225,34 @@ viewer-bake-gamewatch` regenerates it in about two minutes.
 
 - Ganondorf's and Marth's airborne capes and the sliver by Donkey Kong's mouth
   in his idle are baked into the slippilab silhouettes.
-- Game & Watch's neutral-air parachute, back-air turtle, up-air puffs and
-  Judge hammer are no longer drawn; their hits are on the fighter and show through the hitbox overlay.
-  The Judge number remains.
+- Game & Watch's Judge hammer is not drawn; its hit is on the fighter and
+  shows through the hitbox overlay. The Judge number remains.
 
-- Game & Watch, Kirby (body and copy hats), Roy and Pichu are baked from
+## Kirby copy hats (2026-09-22)
+
+`PlKbCp<Xx>.dat`'s root is the hat's `KirbyHatStruct`. Twenty hats are a
+joint tree (root word) that `ftKb_UnkMtxFunc0` copies `fp->parts[6]`'s
+matrix onto — the sixth node of Kirby's part list (his head joint, the one
+carrying the 22 head DObjs), not canonical FtPart id 6, which PlCo maps to
+node 45 near the body centre (the 2026-09-22 morning bakes used that and
+sat every tree hat inside the head);
+DK, Falco, G&W, Mewtwo and Jigglypuff are costume swaps (`PlKbNrCp<Xx>.dat`)
+whose meshes hang off the root and skin to Kirby's own JObjs:
+`msl_kirby_load_hat_dobjs` walks the costume tree in preorder against
+Kirby's 59-node part list, and `ftParts_8007506C`'s 13 accessory descriptors
+`{part, attach, mode, preorder}` say which parts are missing from the plain
+skeleton (mode 1 Jigglypuff's 4-joint chain, 2 Mewtwo's 7, 3 Falco's 2; only
+a chain's head carries the mode). So a costume joint maps to the Kirby joint
+with the same part id and accessory joints keep their bind SRT
+(`costume_joint_map`). Mapped joints must take Kirby's world matrices: the
+costume trees lack Kirby's classical-scale flags, and posing them locally
+mis-scales the legs in every animated frame. Every hat also carries its own
+FtPartsDesc (model_num 1) whose vis table hides about half the DObjs (metal
+and alternate copies); the bake draws state 0 and skips the second joint
+tree the costume hats hold for the metal box. Hat states only change on
+rare motion events (`ftKb_UnkIntBoolFunc0`).
+
+- Game & Watch, Kirby (body and all 25 copy hats), Roy and Pichu are baked from
   the game data (see above). Other fighters still use the slippilab zips;
   the bake needs per-character init defaults and any code-driven part
   states before it can replace them. The slippilab zips carry a few broken

@@ -374,7 +374,9 @@ static void write_item_visuals(const MslCoreMatch* match, uint8_t* out)
 
         if (ip != NULL &&
             (ip->kind == It_Kind_Mewtwo_ShadowBall ||
-             ip->kind == It_Kind_Samus_Charge) &&
+             ip->kind == It_Kind_Samus_Charge ||
+             ip->kind == It_Kind_Kirby_MewtwoShadowBall ||
+             ip->kind == It_Kind_Kirby_SamusCharge) &&
             joint != NULL)
         {
             // itMewtwoshadowball_UnkMotion0_Anim and

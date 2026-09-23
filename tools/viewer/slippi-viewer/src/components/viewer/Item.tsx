@@ -50,6 +50,9 @@ const ITEM_MEWTWO_SHADOW_BALL = 112;
 const ITEM_GAMEWATCH_GREENHOUSE = 114;
 const ITEM_GAMEWATCH_MANHOLE = 115;
 const ITEM_GAMEWATCH_FIRE = 116;
+const ITEM_GAMEWATCH_PARACHUTE = 117;
+const ITEM_GAMEWATCH_TURTLE = 118;
+const ITEM_GAMEWATCH_BREATH = 119;
 const ITEM_GAMEWATCH_JUDGE = 120;
 const ITEM_GAMEWATCH_PANIC = 121;
 const ITEM_GAMEWATCH_CHEF = 122;
@@ -303,6 +306,15 @@ export function Item(props: { item: ItemUpdate }) {
       </Match>
       <Match when={props.item.typeId === ITEM_GAMEWATCH_FIRE}>
         <GameWatchFire item={props.item} />
+      </Match>
+      <Match when={props.item.typeId === ITEM_GAMEWATCH_PARACHUTE}>
+        <GameWatchParachute item={props.item} />
+      </Match>
+      <Match when={props.item.typeId === ITEM_GAMEWATCH_TURTLE}>
+        <GameWatchTurtle item={props.item} />
+      </Match>
+      <Match when={props.item.typeId === ITEM_GAMEWATCH_BREATH}>
+        <GameWatchBreath item={props.item} />
       </Match>
       <Match when={props.item.typeId === ITEM_GAMEWATCH_JUDGE}>
         <GameWatchJudge item={props.item} />
@@ -565,9 +577,70 @@ function GameWatchFire(props: { item: ItemUpdate }) {
   );
 }
 
-// Game & Watch's neutral-air parachute (117), back-air turtle (118) and
-// up-air puffs (119) are not drawn:
-// their hitboxes are on the fighter and the hitbox overlay shows the hits.
+// Game & Watch's aerial articles are items parented to a fighter bone
+// (Item_8026AB54 in itgamewatch{parachute,turtle,breath}.c: TransN,
+// LShoulderN, LHandN), so the sim's visual joint follows the bone; the item's
+// own position stays at the spawn point.
+
+/** Bone-following item origin: the viewer-lane joint when present. */
+function useItemOrigin(item: ItemUpdate) {
+  const anchor = useAnchor(item);
+  const hasVisual = createMemo(() => item.visualX !== undefined && item.visualY !== undefined);
+  const x = createMemo(() => (hasVisual() ? item.visualX! : anchor.x()));
+  const y = createMemo(() => (hasVisual() ? item.visualY! : anchor.y()));
+  return { anchor, hasVisual, x, y };
+}
+
+function GameWatchParachute(props: { item: ItemUpdate }) {
+  // Neutral air: canopy above the body; state 1 is the fold after landing
+  // (itGamewatchparachute_UnkMotion1_Anim ends it at frame 30).
+  const o = useItemOrigin(props.item);
+  const top = createMemo(() => o.y() + 15);
+  const half = 6;
+  return (
+    <g opacity={props.item.state === 1 ? 0.5 : 1}>
+      <path
+        d={`M ${o.x() - half} ${top()} A ${half} ${half} 0 0 1 ${
+          o.x() + half
+        } ${top()} Z`}
+        fill="#f43f5e"
+        fill-opacity={0.7}
+        stroke="#881337"
+        stroke-width={0.5}
+      />
+      <line x1={o.x() - half} y1={top()} x2={o.x()} y2={o.y() + 8} stroke="#374151" stroke-width={0.4} />
+      <line x1={o.x() + half} y1={top()} x2={o.x()} y2={o.y() + 8} stroke="#374151" stroke-width={0.4} />
+    </g>
+  );
+}
+
+function GameWatchTurtle(props: { item: ItemUpdate }) {
+  // Back air: the turtle rides the left shoulder and reaches behind him.
+  const o = useItemOrigin(props.item);
+  const back = createMemo(() => -o.anchor.facing());
+  const cx = createMemo(() => o.x() + back() * 5);
+  return (
+    <g>
+      <ellipse cx={cx()} cy={o.y()} rx={4.5} ry={2.4} fill="#16a34a" fill-opacity={0.8} stroke="#14532d" stroke-width={0.5} />
+      <circle cx={cx() + back() * 5.5} cy={o.y() + 0.6} r={1.3} fill="#4ade80" stroke="#14532d" stroke-width={0.4} />
+      <circle cx={cx() - back() * 5} cy={o.y() - 0.4} r={0.7} fill="#4ade80" />
+    </g>
+  );
+}
+
+function GameWatchBreath(props: { item: ItemUpdate }) {
+  // Up air: the pump's air puffs rise from the left hand.
+  const o = useItemOrigin(props.item);
+  const age = createMemo(() => Math.max(0, props.item.expirationTimer));
+  return (
+    <g fill="#bae6fd" fill-opacity={0.7} stroke="#0369a1" stroke-width={0.35}>
+      <circle cx={o.x()} cy={o.y() + 2} r={1.6} />
+      <circle cx={o.x() - 1.6} cy={o.y() + 4.5} r={1.9} />
+      <circle cx={o.x() + 1.7} cy={o.y() + 5} r={2.1} />
+      <circle cx={o.x()} cy={o.y() + 7.5} r={2.4} opacity={age() > 0 ? 1 : 0.6} />
+    </g>
+  );
+}
 
 function GameWatchJudge(props: { item: ItemUpdate }) {
   // Side special: draw the number only; the hammer's hit shows through the
