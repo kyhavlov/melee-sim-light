@@ -124,6 +124,9 @@ let result = "PENDING";
 if (production) {
   let keyboardStarted = false;
   let changedSelection = false;
+  let seekTarget = -1;
+  let seekEdge = -1;
+  let reviewed = false;
   while (Date.now() < deadline) {
     const response = await call("Runtime.evaluate", {
       expression: `(() => {
@@ -145,6 +148,9 @@ if (production) {
           trace: window.__mslTraceSaved === true,
           api: typeof viewer?.setLiveReplayData === "function" && typeof viewer?.setFrame === "function",
           svg: Boolean(svg),
+          viewerFrame: typeof viewer?.getFrame === "function" ? viewer.getFrame() : -1,
+          playing: typeof viewer?.isPlaying === "function" ? viewer.isPlaying() : false,
+          reviewing: window.__mslViewerFollowLive === false,
         });
       })()`,
       returnByValue: true,
@@ -179,7 +185,8 @@ if (production) {
       });
     } else if (
       changedSelection &&
-      state.frames >= 2 &&
+      seekTarget < 0 &&
+      state.frames >= 40 &&
       state.stage === 8 &&
       state.character === 14 &&
       state.externalCharacter === 17 &&
@@ -188,6 +195,21 @@ if (production) {
       state.api &&
       state.svg
     ) {
+      // Seek back while live: playback must run from there with the sim
+      // holding, then rejoin the live edge.
+      seekTarget = state.frames - 20;
+      seekEdge = state.frames;
+      await call("Runtime.evaluate", {
+        expression: `document.querySelector("slippi-viewer").setFrame(${seekTarget})`,
+      });
+    } else if (seekTarget >= 0 && !reviewed) {
+      if (state.reviewing && state.playing && state.viewerFrame > seekTarget && state.viewerFrame < state.frames) {
+        reviewed = true;
+      } else if (state.frames > seekEdge + 2 && !state.reviewing) {
+        result = `FAIL|seek to ${seekTarget} did not hold the sim (frames ${state.frames}, viewer ${state.viewerFrame})`;
+        break;
+      }
+    } else if (reviewed && !state.reviewing && !state.playing && state.frames > seekEdge + 5 && state.viewerFrame === state.frames) {
       result = "PASS|production viewer";
       break;
     }

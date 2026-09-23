@@ -192,16 +192,58 @@ function snapshotWasmTimings() {
   };
 }
 
-function renderViewerFrame(frameNumber, frame) {
-  const renderStartMs = performance.now();
-  // `replayData.frames[frameNumber]` has already been mutated by live play.
-  // Advancing the viewer is enough, and avoids a second Solid-store write into
-  // the large live frames array every RAF.
+// The viewer shows the newest sim frame until the user seeks (seek bar,
+// frame steps, number keys). Then the sim holds, the viewer's own playback
+// runs from that spot, and live play resumes once playback reaches the
+// recorded edge.
+let followLive = true;
+let lastShownFrame = -1;
+
+function viewerFrame() {
+  return typeof viewer.getFrame === "function" ? viewer.getFrame() : lastShownFrame;
+}
+
+function showFrame(frameNumber, frame) {
   if (typeof viewer.setFrame === "function") {
     viewer.setFrame(frameNumber);
   } else if (typeof viewer.setFrameData === "function") {
     viewer.setFrameData(frameNumber, frame);
   }
+  lastShownFrame = frameNumber;
+}
+
+function setFollowLive(value) {
+  followLive = value;
+  window.__mslViewerFollowLive = value;
+}
+
+// Once per paint: hand the timeline to the viewer after a user seek, and
+// take it back when playback reaches the live edge. Returns followLive.
+function syncViewer() {
+  const shown = viewerFrame();
+  if (followLive) {
+    if (shown !== lastShownFrame && shown < frameCount) {
+      setFollowLive(false);
+      if (typeof viewer.resumePlayback === "function") {
+        viewer.resumePlayback();
+      }
+    }
+  } else if (shown >= frameCount) {
+    setFollowLive(true);
+    if (typeof viewer.pausePlayback === "function") {
+      viewer.pausePlayback();
+    }
+    showFrame(frameCount, replayData.frames[frameCount]);
+  }
+  return followLive;
+}
+
+function renderViewerFrame(frameNumber, frame) {
+  const renderStartMs = performance.now();
+  // `replayData.frames[frameNumber]` has already been mutated by live play.
+  // Advancing the viewer is enough, and avoids a second Solid-store write into
+  // the large live frames array every RAF.
+  showFrame(frameNumber, frame);
   return performance.now() - renderStartMs;
 }
 
@@ -256,14 +298,20 @@ function reset() {
   frameCount = 0;
   window.__mslViewerFrameCount = frameCount;
   window.__mslViewerReplayData = replayData;
-  if (typeof viewer.setFrame === "function") {
-    viewer.setFrame(0);
-  }
+  setFollowLive(true);
+  showFrame(0, firstFrame);
   setStatus(`Running. ${playerStatusSuffix()}`);
 }
 
 function tick(nowMs) {
   if (!running) {
+    return;
+  }
+  if (!syncViewer()) {
+    // Reviewing recorded frames: the sim holds until playback catches up.
+    lastTickMs = nowMs;
+    accumulatorMs = 0;
+    requestAnimationFrame(tick);
     return;
   }
   accumulatorMs += nowMs - lastTickMs;

@@ -115,6 +115,14 @@ export function pause(): void {
   stop();
 }
 
+export function play(): void {
+  start();
+}
+
+export function currentFrame(): number {
+  return replayState.frame;
+}
+
 export function setRendererMode(enabled: boolean): void {
   setReplayState("rendererMode", enabled);
   if (enabled) {
@@ -149,9 +157,12 @@ export function adjust(delta: number): void {
 const [running, start, stop] = createRAF(
   targetFPS(
     () =>
-      setReplayState("frame", (f) =>
-        wrapFrame(replayState, f + replayState.framesPerTick)
-      ),
+      setReplayState("frame", (f) => {
+        const next = wrapFrame(replayState, f + replayState.framesPerTick);
+        // Live data preallocates the frames array, so hold at the last
+        // recorded frame instead of walking into empty slots.
+        return replayState.replayData?.frames[next] === undefined ? f : next;
+      }),
     () => replayState.fps
   )
 );
