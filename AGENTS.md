@@ -14,69 +14,46 @@ persistent state, tables, callback ownership, and scheduler order. Organize impl
 source owner, not replay row. Validation challenges a source-completion claim; it is not the
 implementation queue.
 
-## Structural work
+## Implementation
 
-1. Before a multi-owner or representation packet, record its final owner, canonical state,
-   consumers, displaced code/state, and deletion boundary in
-   `agent_docs/ACTIVE_WORK.md`.
-   Keep that file limited to open work, current status, and next steps (target under 100 lines).
-   Put scratch experiments under ignored `reports/triage/`; retain performance evidence under
-   `agent_docs/performance/`. On completion, keep durable facts with their existing source,
-   tests or reference doc, then remove the active entry and temporary report. Completed fighter
-   admissions, dated audits and integration narratives belong in Git history, not new status docs.
-2. Do not add synchronized dual state, setter hooks, compatibility flags, fallback dispatch, or a
-   production bridge for an incomplete cutover.
-3. Establish the approved final representation and deletion boundary first, then recover
-   correctness and performance inside it. Never restore displaced machinery merely because an
-   incomplete cut is red or slower.
-4. Log material experiments before and after execution.
-5. Never blanket-delete or replace substantial dirty work without explicit approval and a salvage
-   inventory. Do not commit unless the user or active goal authorizes it.
-6. All durable performance history lives under `agent_docs/performance/`. Before a performance
-   packet, search that directory for the proposed owner, symbols, and approach, then review
-   `agent_docs/performance/README.md` and the relevant records. Add or update an indexed record
-   when an architectural candidate is rejected or when new evidence materially changes an earlier
-   conclusion.
+- Gameplay lives in C under `src/`; Python handles extraction, code generation,
+  replay tooling and reporting.
+- Back gameplay changes with `refs/melee`, matching assembly,
+  `refs/slippi-ssbm-asm` or extracted data. Do not fit behavior to individual replays.
+- Use one single-threaded batch per process. Immutable game data is shared;
+  mutable state belongs to a match and must support reset/copy/save/restore at any index.
+- No heap allocation after initialization on gameplay, observation, reset, copy
+  or save/restore paths. Size fighter reserves by the number of that fighter,
+  including followers, with separate capacity for stage-owned entities.
+- Refactors should replace the old representation completely. Do not introduce
+  synchronized duplicate state, compatibility flags or bridges for incomplete cutovers.
+- Use `msl_`, `Msl` and `MSL_` for new repository-owned symbols.
+- Preserve upstream formatting. Do not blanket-format imported gameplay.
+- Runtime artifact changes update the extractor, layout, loader and fresh extraction
+  check together. Fighter admissions update this roster, both `supported_character`
+  gates, `VALIDATION_CHARACTERS` and the viewer's `externalCharId` mapping.
 
-## Runtime and source requirements
+## Verification
 
-- No heap allocation after initialization on gameplay, observation, reset, copy, or save/restore.
-- Use deterministic ordering. Immutable game data is shared; mutable state belongs to one match
-  and must save/restore at any batch index.
-- The production API is one single-threaded batch per process. Do not add an internal worker pool.
-- New repository-owned symbols use the plain `msl_`/`Msl`/`MSL_` namespace. Existing
-  `msl_core_`/`MslCore`/`MSL_CORE_` names are cleanup debt, not a naming precedent; when a plain
-  name would collide, use the actual subsystem owner rather than a generic `core` qualifier.
-- Gameplay lives in C under `src/`. Python is cold extraction/codegen/replay/report tooling only.
-- Gameplay logic must be backed nearby by `refs/melee`, matching asm, `refs/slippi-ssbm-asm`, or
-  extracted `data/`. Do not add replay-fit constants or character-id proxies for missing state.
-- Stage geometry and fighter animation/move/hitbox/hurtbox data come from extracted game files.
-- A runtime artifact change updates extractor, deterministic layout, required loader, and fresh
-  extraction smoke together.
-- Admitting a fighter updates the roster above, both `supported_character` gates (`src/api.c` and
-  `src/runtime/batch.c`), `VALIDATION_CHARACTERS`, and `tools/viewer/msltrace1.js::externalCharId`
-  together. Each of these has been missed separately.
-- Per-fighter runtime reserves are per-fighter bounds, not match-wide constants: size them by the
-  count of that fighter in the match, since four ports can each contribute the same worst case.
-  Follower fighters (Nana) and stage-owned spawners (Yoshi's Story's Shy Guys) contribute on top
-  of the ports.
-- Preserve upstream-shaped formatting. No root command may blanket-format imported gameplay.
+- Use the root Makefile's focused checks and `source-check`, `native-smoke`,
+  `validation-suite`, `wasm-smoke`, `viewer-smoke` and bounded benchmark targets.
+- Run the full replay gate at material checkpoints, not after every edit.
+  Announce full builds, replay gates and production viewer builds before running them.
+- Recorded bit-exact suite results and output locks require certified Linux/amd64
+  GNU builds. See `agent_docs/ENVIRONMENT.md`; macOS results are not interchangeable.
+- Compare performance on the same host, compiler and workload. Preserve gameplay
+  and report the relevant correctness checks with any claimed improvement.
 
-## Routine workflow
+## Workspace and documentation
 
-- Routine commands should finish within five seconds and normally remain below ten seconds.
-  Announce fresh full builds, full replay gates, and production viewer builds first. Occasional
-  slower commands are ok if necessary/justified.
-- Use root `Makefile` targets: `source-check`, `native-smoke`, `validation-suite`, `wasm-smoke`,
-  `viewer-smoke`, and the bounded benchmark targets.
-- The full supported-domain gate is a material checkpoint, not an inner loop.
-- Bit-exact suite identities (aggregate results and output locks) are
-  authoritative only from linux/amd64 GNU-toolchain builds: CI, a native Linux host, or the Linux
-  container on macOS. macOS-built binaries — arm64 or the Rosetta `HOST_TARGET_ARCH=x86_64`
-  profile — have no recorded bit-exact equivalence and must not record suite results.
-  `agent_docs/ENVIRONMENT.md` covers host bring-up, the toolchain pins the gate depends on, and
-  the procedure that certifies a new host before it records identities.
-- Put forensic outputs under ignored `reports/triage/` and never hand-edit generated results.
-- New-core plans and evidence live only under `agent_docs/`.
-- A performance commit must include implementation, gates, and refreshed retained evidence in
-  `agent_docs/performance/HISTORY.md`.
+- Keep `agent_docs/ACTIVE_WORK.md` short and limited to open work. For a large
+  refactor, record the intended state ownership and what old code will be removed.
+- Keep scratch experiments and raw measurements under ignored `reports/triage/`.
+  Never hand-edit generated validation results.
+- Keep current benchmark commands and results in `agent_docs/performance/BASELINE.md`.
+  Put change-specific evidence in commit descriptions. Do not recreate historical
+  journals, failed-attempt archives, duplicate ledgers or completed-task status docs.
+- Keep durable correctness facts beside their source or tests. Preserve
+  `agent_docs/validation/*.json`; validation tooling consumes those records.
+- Preserve unrelated dirty work and stashes. Substantial deletion needs user
+  authorization and a salvage inventory. Commit only when authorized.

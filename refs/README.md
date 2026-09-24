@@ -1,6 +1,7 @@
 # Reference checkouts
 
-Reference repositories are local-only and ignored by Git. The primary gameplay source is
+Reference repositories are optional developer tools, not runtime dependencies.
+Most are ignored local checkouts; the two Dolphin forks are pinned Git submodules. The primary gameplay source is
 [`doldecomp/melee`](https://github.com/doldecomp/melee), pinned by `src/upstream.lock`.
 
 Expected checkouts:
@@ -17,6 +18,7 @@ Expected checkouts:
 
 ```bash
 git clone https://github.com/doldecomp/melee.git refs/melee
+git -C refs/melee checkout 91b9789fa6539ea847998a6ed330fa748fa200ec
 git clone https://github.com/project-slippi/slippi-ssbm-asm.git refs/slippi-ssbm-asm
 git clone https://github.com/project-slippi/slippi-wiki.git refs/slippi-wiki
 git clone https://github.com/UnclePunch/UCF.git refs/ucf

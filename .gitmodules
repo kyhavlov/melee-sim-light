@@ -1,6 +1,6 @@
 [submodule "refs/Ishiiruka"]
 	path = refs/Ishiiruka
-	url = git@github.com:kyhavlov/Ishiiruka.git
+	url = https://github.com/kyhavlov/Ishiiruka.git
 	branch = engine-dump-v12-probes
 [submodule "refs/slippi-dolphin"]
 	path = refs/slippi-dolphin

@@ -18,8 +18,8 @@ runtime paths allocate nothing after initialization.
 
 ## Correctness
 
-The canonical gate is the 404-replay `melee_core_aggregate` suite. Exact rows must remain exact;
-the existing classified rows are locked by complete mismatch fingerprints and may not be widened.
+The canonical gate is the `melee_core_aggregate` suite. Every admitted recording must
+pass strict comparison and its output lock; there is no classified-as-success path.
 Validation uses replay RNG/stage-event authority where Slippi playback does, while free-running
 runtime semantics remain source-owned.
 
@@ -49,5 +49,5 @@ Local gameplay deltas are classified in `src/upstream_delta_ledger.tsv`.
 The production benchmark uses packed replay input tapes, resident matches, ordinary free-running
 gameplay, and the 128-frame observation/terminal ring expected by RL consumers. Python and replay
 comparison are outside the timed loop. See the
-[performance record](../agent_docs/melee_core/PERFORMANCE.md) for the retained baseline and
+[performance record](../agent_docs/performance/BASELINE.md) for the retained baseline and
 measured subsystem breakdown.
