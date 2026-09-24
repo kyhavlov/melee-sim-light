@@ -65,15 +65,8 @@ SHARED_LIB_LINK_FLAGS := $(HOST_ARCH_FLAGS) -shared -Wl,-dead_strip
 # different architecture than the runtime (it only talks to the runtime
 # over a pipe), so it builds for the host architecture.
 PY_EXT_LINK_FLAGS := -undefined dynamic_lookup
-# Homebrew LLVM's clang carries every backend; use it to cross-compile the
-# PPC32 DWARF reference object directly instead of running the Linux GNU
-# toolchain inside Docker. -nostdlibinc keeps macOS system headers out of
-# the powerpc-linux target; clang's builtin headers cover the rest.
 LLVM_CLANG := $(shell brew --prefix llvm 2>/dev/null)/bin/clang
 ifneq ($(wildcard $(LLVM_CLANG)),)
-PPC_TYPES_TOOLCHAIN_DEP :=
-PPC_TYPES_COMPILE = "$(LLVM_CLANG)" --target=powerpc-unknown-linux-gnu \
-	-nostdlibinc -isystem "$(ROOT)/tools/build/cross_libc_shim"
 # The wasm32 layout proxy must be a Linux i386 object: Apple clang's -m32
 # produces a Darwin i386 Mach-O whose struct layouts differ (notably
 # -malign-double handling), which corrupts the wasm relocation tables.
@@ -88,7 +81,6 @@ NATIVE_EXE_LINK_FLAGS := -no-pie -Wl,--gc-sections
 SHARED_LIB_LINK_FLAGS := -shared -Wl,--gc-sections -Wl,-Bsymbolic -Wl,-z,defs
 PY_EXT_LINK_FLAGS :=
 endif
-PPC_TYPES_TOOLCHAIN_DEP ?= $(TOOLCHAIN_STAMP)
 PPC_TYPES_COMPILE ?= env PATH="$(TOOLCHAIN_ROOT)/usr/bin:$$PATH" \
 	LD_LIBRARY_PATH="$(TOOLCHAIN_LIBDIR):$$LD_LIBRARY_PATH" \
 	"$(CC)" --sysroot="$(SYSROOT)"
@@ -167,6 +159,8 @@ NATIVE_PLATFORM_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_PL
 WASM_PLATFORM_OBJS := $(patsubst $(ROOT)/%.c,$(WASM_OBJ_DIR)/%.o,$(NATIVE_PLATFORM_SRCS))
 NATIVE_DAT_TYPES_SRC := $(ROOT)/tools/build/native_dat_types.c
 NATIVE_DAT_LAYOUT_GENERATOR := $(ROOT)/tools/build/generate_native_dat_layout.py
+PPC_LAYOUT := $(ROOT)/tools/build/ppc_layout.json
+PPC_LAYOUT_GENERATOR := $(ROOT)/tools/build/generate_ppc_layout.py
 COMMAND_FIELDS_GENERATOR := $(ROOT)/tools/build/generate_command_accessors.py
 NATIVE_DAT_PPC_TYPES_OBJ := $(NATIVE_GENERATED_DIR)/native_dat_types_ppc.o
 NATIVE_DAT_NATIVE_TYPES_OBJ := $(NATIVE_GENERATED_DIR)/native_dat_types_native.o
@@ -411,7 +405,7 @@ endif
 
 NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_SUBSYSTEM_PROFILE)|$(NATIVE_RELEASE_O0_OBJS)|$(NATIVE_RELEASE_O1_OBJS)|$(NATIVE_RELEASE_O2_OBJS)|$(NATIVE_RELEASE_OPT_OBJS)
 
-.PHONY: all bootstrap extract ppc native python-library native-release native-release-benchmark runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain validation-release-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
+.PHONY: ppc-layout ppc-layout-check all bootstrap extract ppc native python-library native-release native-release-benchmark runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain validation-release-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
 
 all: native python-library
 
@@ -569,7 +563,14 @@ $(WASM_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
 $(WASM_OBJ_DIR)/gameplay/melee/lb/lbcommand.o \
 $(WASM_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o: $(WASM_COMMAND_FIELDS)
 
-$(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(PPC_TYPES_TOOLCHAIN_DEP)
+# PPC/QEMU setup is developer-only; package builds consume the versioned layout.
+ppc-layout: $(NATIVE_DAT_PPC_TYPES_OBJ)
+	@"$(PY)" "$(PPC_LAYOUT_GENERATOR)" --object "$<" --output "$(PPC_LAYOUT)"
+
+ppc-layout-check: $(NATIVE_DAT_PPC_TYPES_OBJ)
+	@"$(PY)" "$(PPC_LAYOUT_GENERATOR)" --object "$<" --output "$(PPC_LAYOUT)" --check
+
+$(NATIVE_DAT_PPC_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(TOOLCHAIN_STAMP) $(ROOT)/Makefile
 	@mkdir -p "$(@D)"
 	@$(PPC_TYPES_COMPILE) $(CPPFLAGS) -MMD -MP -g -gdwarf-4 \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
@@ -579,17 +580,17 @@ $(NATIVE_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC)
 	@"$(HOST_CC)" $(NATIVE_CPPFLAGS) $(HOST_ARCH_FLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
-$(WASM_COMMAND_FIELDS): $(NATIVE_DAT_PPC_TYPES_OBJ) $(COMMAND_FIELDS_GENERATOR)
+$(WASM_COMMAND_FIELDS): $(PPC_LAYOUT) $(COMMAND_FIELDS_GENERATOR) $(NATIVE_DAT_LAYOUT_GENERATOR)
 	@mkdir -p "$(@D)"
 	@"$(PY)" "$(COMMAND_FIELDS_GENERATOR)" \
-		--object "$(NATIVE_DAT_PPC_TYPES_OBJ)" --output "$@"
+		--ppc "$(PPC_LAYOUT)" --output "$@"
 
 # Clang hosts (Mach-O) ignore scalar_storage_order and read the authored
 # big-endian command bytes through the same generated accessors as wasm32.
-$(NATIVE_COMMAND_FIELDS): $(NATIVE_DAT_PPC_TYPES_OBJ) $(COMMAND_FIELDS_GENERATOR)
+$(NATIVE_COMMAND_FIELDS): $(PPC_LAYOUT) $(COMMAND_FIELDS_GENERATOR) $(NATIVE_DAT_LAYOUT_GENERATOR)
 	@mkdir -p "$(@D)"
 	@"$(PY)" "$(COMMAND_FIELDS_GENERATOR)" \
-		--object "$(NATIVE_DAT_PPC_TYPES_OBJ)" --output "$@"
+		--ppc "$(PPC_LAYOUT)" --output "$@"
 
 $(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
 $(NATIVE_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
@@ -600,9 +601,9 @@ $(PYTHON_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
 $(PYTHON_OBJ_DIR)/gameplay/melee/lb/lbcommand.o \
 $(PYTHON_OBJ_DIR)/gameplay/melee/lb/lbspdisplay.o: $(NATIVE_COMMAND_FIELDS)
 
-$(NATIVE_DAT_LAYOUT_SRC): $(NATIVE_DAT_PPC_TYPES_OBJ) $(NATIVE_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
+$(NATIVE_DAT_LAYOUT_SRC): $(PPC_LAYOUT) $(NATIVE_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
 	@"$(PY)" "$(NATIVE_DAT_LAYOUT_GENERATOR)" \
-		--ppc "$(NATIVE_DAT_PPC_TYPES_OBJ)" \
+		--ppc "$(PPC_LAYOUT)" \
 		--native "$(NATIVE_DAT_NATIVE_TYPES_OBJ)" --output "$@"
 
 $(NATIVE_DAT_LAYOUT_OBJ): $(NATIVE_DAT_LAYOUT_SRC)
@@ -618,9 +619,9 @@ $(WASM_DAT_NATIVE_TYPES_OBJ): $(NATIVE_DAT_TYPES_SRC) $(WASM_GLIBC_STUB)
 	@$(WASM_PROXY_COMPILE) $(WASM_CPPFLAGS) -MMD -MP -g -gdwarf-4 -w \
 		-fno-eliminate-unused-debug-types -std=gnu11 -c "$<" -o "$@"
 
-$(WASM_DAT_LAYOUT_SRC): $(NATIVE_DAT_PPC_TYPES_OBJ) $(WASM_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
+$(WASM_DAT_LAYOUT_SRC): $(PPC_LAYOUT) $(WASM_DAT_NATIVE_TYPES_OBJ) $(NATIVE_DAT_LAYOUT_GENERATOR)
 	@"$(PY)" "$(NATIVE_DAT_LAYOUT_GENERATOR)" \
-		--ppc "$(NATIVE_DAT_PPC_TYPES_OBJ)" \
+		--ppc "$(PPC_LAYOUT)" \
 		--native "$(WASM_DAT_NATIVE_TYPES_OBJ)" --output "$@"
 
 $(WASM_DAT_LAYOUT_OBJ): $(WASM_DAT_LAYOUT_SRC)

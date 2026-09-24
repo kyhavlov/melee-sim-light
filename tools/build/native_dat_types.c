@@ -1,7 +1,7 @@
 // Type roots for generating the initialization-only native DAT translation
 // descriptions.  The declarations are never linked into the runtime; DWARF
-// from PPC32 and x86-64 compilations supplies the source and destination
-// layouts from the same decomp headers.
+// from PPC32 (versioned by make ppc-layout) and host compilations supplies
+// the source and destination layouts from the same decomp headers.
 //
 // Source: refs/melee/src/sysdolphin/baselib/archive.c::HSD_ArchiveParse and
 // the public-root consumers named below.

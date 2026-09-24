@@ -130,6 +130,9 @@ jobs:
       - name: Check source inventory
         run: make source-check
 
+      - name: Verify versioned PPC layouts (developer toolchain)
+        run: make ppc-layout-check PY=python3
+
       - name: Run the aggregate replay gate
         # Explicit bash turns on pipefail so the tee cannot mask a gate
         # failure. The 8s native per-case default is calibrated for the

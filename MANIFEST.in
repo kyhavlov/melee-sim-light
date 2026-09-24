@@ -1,5 +1,5 @@
 include Makefile
 recursive-include src *.c *.h *.inc *.def *.txt *.tsv *.lock *.dox *.md
-recursive-include tools/build *.py *.sh *.c *.h *.tsv
+recursive-include tools/build *.py *.sh *.c *.h *.tsv *.json
 prune tests
 global-exclude __pycache__ *.py[cod] *.so *.dylib *.pyd

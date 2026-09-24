@@ -27,16 +27,22 @@ copied only between hosts of the same architecture.
 ```sh
 git lfs pull --include="replays/validation/**" --exclude=""
 make bootstrap ISO=/path/to/SSBM.iso     # uv sync --dev, extract, native, python-library
-make toolchain                        # already populated by the first native build
+make ppc-layout-check                 # developer check; bootstraps the PPC toolchain
 make validator
 ```
 
 - `make bootstrap` invokes bare `uv`; it must be on `PATH`.
-- Native layout generation also uses the PowerPC toolchain. Its setup downloads
+- Native/package builds need a host C compiler, GNU Make and binutils, with no
+  PPC compiler or QEMU. They use versioned `tools/build/ppc_layout.json` alongside
+  freshly compiled host layouts. After changing disk-layout declarations, run
+  `make ppc-layout` and commit the regenerated metadata; `make ppc-layout-check`
+  verifies it against the pinned GNU PPC compiler (Docker on macOS). CI runs
+  this explicit developer check.
+- `make toolchain`, PPC builds and the PPC layout targets download
   exact `.deb` files from the URLs in `tools/build/ppc32_toolchain_packages.tsv`,
-  checks their SHA-256 hashes, and unpacks them with `dpkg-deb`. It does not use
+  verify their SHA-256 hashes, and unpack them with `dpkg-deb`. This does not use
   the host's apt package selection or install packages globally. Linux setup
-  needs curl, dpkg-deb and sha256sum; the host compiler needs GNU Make and binutils.
+  needs curl, dpkg-deb and sha256sum.
   An older incompatible host glibc uses the Docker compiler wrapper.
 - Validation replays stay as LFS pointers until explicitly fetched. They are not
   needed for package installation, ISO extraction or normal simulation.
@@ -119,7 +125,7 @@ branches in the `Makefile` and the container recipes in the
 - `docker cp` preserves source mtime, so a copied-in edit could be older than its object file and
   `make` would skip it — a control run that silently measured the previous binary. Gone with the
   container.
-- PPC cross-compilation via Homebrew LLVM (`tools/build/ppc32_cc.sh`), `qemu_ppc.sh`,
+- Containerized PPC compilation (`tools/build/ppc32_cc.sh`), `qemu_ppc.sh`,
   `portable_timeout.sh`, and the `-undefined dynamic_lookup` Python-extension link flag are all
   Mach-O/macOS accommodations.
 - Container platform choice mattered only on Apple Silicon: an amd64 image ran qemu-ppc itself
