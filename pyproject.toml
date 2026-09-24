@@ -1,12 +1,18 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=70.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "melee-sim-light"
 version = "0.0.0"
+description = "A deterministic, batched Melee simulator for reinforcement learning"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["numpy"]
+
+[project.urls]
+Repository = "https://github.com/kyhavlov/melee-sim-light"
+Issues = "https://github.com/kyhavlov/melee-sim-light/issues"
 
 [dependency-groups]
 dev = [
@@ -17,3 +23,4 @@ dev = [
 
 [tool.uv]
 package = true
+default-groups = []

@@ -1,17 +1,16 @@
 # Host environment and bring-up
 
 Everything a working host needs that Git does not carry, the toolchain pins the bit-exact gate
-depends on, and the procedure that certifies a new host as gate-authoritative. Written while
-development ran on macOS with a Linux container; the Linux path below is the canonical one and the
-macOS section exists only to explain the `Darwin` branches in the `Makefile`.
+depends on, and the procedure that certifies a new host as gate-authoritative. Linux/amd64 is the canonical validation platform; macOS details describe the
+existing build accommodations and their limits.
 
 ## What Git does not carry
 
 | Asset | Recreate with | Symptom when missing |
 |---|---|---|
 | `SSBM.iso` (GALE01 rev 2) | supply it; `data/manifest.json` pins its extraction | `make bootstrap` refuses without `ISO=` |
-| `data/raw`, `data/stages` | `make extract ISO=/path/to/SSBM.iso` | data-contract test failures, `msl_batch_create` aborts |
-| Validation replay bytes | `git lfs pull` | `unsupported .slpz version: 1986359923` (ASCII `vers` — an unsmudged LFS pointer) |
+| `data/raw` | `make extract ISO=/path/to/SSBM.iso` | data-contract test failures, `msl_batch_create` aborts |
+| Validation replay bytes | `git lfs pull --include="replays/validation/**" --exclude=""` | `unsupported .slpz version: 1986359923` (ASCII `vers` — an unsmudged LFS pointer) |
 | `refs/*` reference checkouts | `refs/README.md` | source-backing claims cannot be checked |
 | `build/melee_core/toolchain` | `make toolchain` | no `make ppc`, no PPC oracle backend |
 | `.venv` | `uv sync --dev` | `PY` default missing (`$(ROOT)/.venv/bin/python`) |
@@ -26,17 +25,21 @@ copied only between hosts of the same architecture.
 ## Bring-up on a linux/amd64 host
 
 ```sh
-git lfs pull
+git lfs pull --include="replays/validation/**" --exclude=""
 make bootstrap ISO=/path/to/SSBM.iso     # uv sync --dev, extract, native, python-library
-make toolchain                           # pinned PPC cross gcc-13 + qemu, unpacked in-tree from ppc32_toolchain_packages.tsv
+make toolchain                        # already populated by the first native build
 make validator
 ```
 
 - `make bootstrap` invokes bare `uv`; it must be on `PATH`.
-- `make toolchain` shells out to `apt-get download` + `dpkg-deb -x` and unpacks the Ubuntu 24.04
-  `*-powerpc-linux-gnu` / `*-powerpc-cross` package set into `build/melee_core/toolchain/root`.
-  Nothing is installed system-wide, but the host must be Debian-family with those packages
-  reachable. On any other distro the PPC oracle needs a container.
+- Native layout generation also uses the PowerPC toolchain. Its setup downloads
+  exact `.deb` files from the URLs in `tools/build/ppc32_toolchain_packages.tsv`,
+  checks their SHA-256 hashes, and unpacks them with `dpkg-deb`. It does not use
+  the host's apt package selection or install packages globally. Linux setup
+  needs curl, dpkg-deb and sha256sum; the host compiler needs GNU Make and binutils.
+  An older incompatible host glibc uses the Docker compiler wrapper.
+- Validation replays stay as LFS pointers until explicitly fetched. They are not
+  needed for package installation, ISO extraction or normal simulation.
 
 ## Toolchain pins the bit-exact gate depends on
 
@@ -94,16 +97,15 @@ Until steps 1-4 are green on the host, do not record aggregate identities or out
 
 ## Benchmarks are host-pinned
 
-[`performance/BASELINE.md`](performance/BASELINE.md) records its provenance host (AMD Ryzen 9 9950X3D, CPU 0 V-Cache
-CCD, Linux 6.17 x86-64, GCC 13.3.0) and the pinned `benchmark-9950x3d-*` targets. Absolute FPS from
+[`performance/BASELINE.md`](performance/BASELINE.md) records the current provenance host and the pinned `benchmark-9950x3d-*` targets. Absolute FPS from
 a different host is not comparable to the retained ledger; only same-host A/B pairs are. Benchmark **digests** must match for identical
 workload/configuration bytes; historical digests do not describe a changed replay corpus.
-A performance commit made on a new host refreshes provenance in
-`performance/BASELINE.md` before its numbers enter `performance/RETAINED.md`.
+Record the host, workload and validation results with performance commits. Update
+`performance/BASELINE.md` when the production benchmark reference changes.
 
 ## macOS-only machinery (does not transfer)
 
-These exist for the macOS development host and are dead weight on Linux; they explain the `Darwin`
+These support the macOS development host; they explain the `Darwin`
 branches in the `Makefile` and the container recipes in the
 [historical work log](https://github.com/kyhavlov/melee-sim-light/blob/5018738c8b2da68330823bb20fee37a5044841cd/agent_docs/ACTIVE_WORK.md).
 

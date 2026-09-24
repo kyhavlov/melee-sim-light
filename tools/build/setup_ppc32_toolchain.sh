@@ -50,7 +50,7 @@ for command in curl dpkg-deb sha256sum; do
 done
 
 package_dir="$toolchain_dir/packages/$deb_arch"
-rm -rf "$sysroot" "$package_dir" "$stamp"
+rm -rf "$sysroot" "$stamp"
 mkdir -p "$package_dir" "$sysroot"
 
 # The debs are downloaded and unpacked locally; nothing is installed on
@@ -59,8 +59,12 @@ while IFS=$'\t' read -r filename arch sha256 url; do
     [[ -z "$filename" || "$filename" == \#* ]] && continue
     [[ "$arch" == "all" || "$arch" == "$deb_arch" ]] || continue
     package="$package_dir/$filename"
-    curl -fsSL --retry 3 -o "$package" "$url" < /dev/null
-    echo "$sha256  $package" | sha256sum --check --quiet
+    if [[ ! -f "$package" ]] || ! echo "$sha256  $package" | sha256sum --check --status; then
+        echo "Downloading toolchain package: $filename"
+        curl -fsSL --retry 3 --connect-timeout 20 -o "$package.tmp" "$url" < /dev/null
+        echo "$sha256  $package.tmp" | sha256sum --check --quiet
+        mv "$package.tmp" "$package"
+    fi
     dpkg-deb -x "$package" "$sysroot"
 done < "$manifest"
 

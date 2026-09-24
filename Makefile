@@ -129,15 +129,20 @@ endif
 
 SOURCE_SYNC := $(ROOT)/tools/build/source_sync.sh
 UPSTREAM_ROOTS := MSL MetroTRK Runtime melee sysdolphin
-# Enumerate sources from git, not the filesystem: src/Runtime (MW library)
+# In a checkout, enumerate sources from git: src/Runtime (MW library)
 # and src/runtime (port runtime) are distinct in git but collapse into one
 # directory on case-insensitive filesystems (macOS), where find/wildcard
 # would return the union for both. Includes untracked files so new sources
 # build before they are staged.
-MSL_SRC_FILES := $(addprefix $(ROOT)/,$(filter %.c,\
-	$(shell git -C $(ROOT) ls-files --cached --others --exclude-standard -- src 2>/dev/null)))
+# Source distributions have no Git metadata and require a case-sensitive tree.
+MSL_SRC_FILES := $(sort $(filter %.c,$(shell \
+	if test -e "$(ROOT)/.git"; then \
+		git -C "$(ROOT)" ls-files --cached --others --exclude-standard -- src | sed 's|^|$(ROOT)/|'; \
+	else \
+		find "$(CORE)" -type f -name '*.c'; \
+	fi)))
 ifeq ($(strip $(MSL_SRC_FILES)),)
-$(error source enumeration via git failed; build requires a git checkout)
+$(error no C sources found under $(CORE))
 endif
 UPSTREAM_SRCS := $(sort $(filter \
 	$(addsuffix /%,$(addprefix $(CORE)/,$(UPSTREAM_ROOTS))),$(MSL_SRC_FILES)))
