@@ -1,8 +1,0 @@
-[submodule "refs/Ishiiruka"]
-	path = refs/Ishiiruka
-	url = https://github.com/kyhavlov/Ishiiruka.git
-	branch = engine-dump-v12-probes
-[submodule "refs/slippi-dolphin"]
-	path = refs/slippi-dolphin
-	url = https://github.com/vladfi1/dolphin.git
-	branch = engine-dump

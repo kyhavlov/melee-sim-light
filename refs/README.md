@@ -1,7 +1,7 @@
 # Reference checkouts
 
 Reference repositories are optional developer tools, not runtime dependencies.
-Most are ignored local checkouts; the two Dolphin forks are pinned Git submodules. The primary gameplay source is
+All are ignored local checkouts. The primary gameplay source is
 [`doldecomp/melee`](https://github.com/doldecomp/melee), pinned by `src/upstream.lock`.
 
 Expected checkouts:
@@ -23,8 +23,10 @@ git clone https://github.com/project-slippi/slippi-ssbm-asm.git refs/slippi-ssbm
 git clone https://github.com/project-slippi/slippi-wiki.git refs/slippi-wiki
 git clone https://github.com/UnclePunch/UCF.git refs/ucf
 git clone https://github.com/frankborden/slippilab.git refs/slippilab
-git submodule update --init refs/Ishiiruka
-git submodule update --init refs/slippi-dolphin
+git clone https://github.com/kyhavlov/Ishiiruka.git refs/Ishiiruka
+git -C refs/Ishiiruka checkout b8b6b9ba06eca3ddda82b9a9cd0d3fc5707ca03b
+git clone https://github.com/vladfi1/dolphin.git refs/slippi-dolphin
+git -C refs/slippi-dolphin checkout 5015ee8d439b0d6ce3c005e9c404b2d93d4e7d10
 ```
 
 Use `refs/melee/src/` first, its matching assembly when operation order or an incomplete function

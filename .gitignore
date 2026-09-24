@@ -5,8 +5,6 @@
 /data/
 /refs/**
 !/refs/README.md
-!/refs/Ishiiruka
-!/refs/slippi-dolphin
 
 # Replay corpora are LFS-managed only under validation.
 replays/*.slp
