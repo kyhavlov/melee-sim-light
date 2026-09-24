@@ -102,11 +102,47 @@ int main(int argc, char** argv) {
     goto done;
   }
 
+  phase = "shared game data";
+  {
+    // A second batch reuses this process's game data rather than loading its
+    // own copy, and steps the same match to the same observation. Acquiring
+    // the data explicitly (as a fork template would) keeps it loaded across
+    // batch destruction; a different root is rejected.
+    MslBatch* second = NULL;
+    MslObservation second_observations[1];
+    MslTerminal second_terminals[1];
+    MslInput second_inputs[1] = {0};
+    second_inputs[0].players[0].main_x = 80;
+    if (msl_game_data_references() != 1 ||
+        msl_batch_create(argv[1], 1, &second) != MSL_OK ||
+        msl_game_data_references() != 2 ||
+        msl_batch_reset(second, configs, NULL, second_observations) != MSL_OK ||
+        msl_batch_step(second, second_inputs, second_observations, second_terminals) != MSL_OK ||
+        memcmp(&second_observations[0], &expected, sizeof(expected)) != 0 ||
+        msl_game_data_acquire("/nonexistent/other-root") != MSL_INVALID_STATE ||
+        msl_game_data_acquire(argv[1]) != MSL_OK || msl_game_data_references() != 3) {
+      msl_batch_destroy(second);
+      goto done;
+    }
+    msl_batch_destroy(second);
+    if (msl_game_data_references() != 2) {
+      goto done;
+    }
+    msl_game_data_release();
+    if (msl_game_data_references() != 1) {
+      goto done;
+    }
+  }
+
   result = 0;
 
 done:
   free(save);
   msl_batch_destroy(batch);
+  if (result == 0 && msl_game_data_references() != 0) {
+    result = 1;
+    phase = "game data release";
+  }
   if (result == 0) {
     puts("public C API smoke passed");
   } else {

@@ -30,10 +30,12 @@ from .dtypes import (
     gamestate_stage_dtype,
     terminal_dtype,
 )
-from .env_batch import EnvBatch
+from .env_batch import EnvBatch, game_data_loaded, preload_game_data
 
 __all__ = [
     "EnvBatch",
+    "game_data_loaded",
+    "preload_game_data",
     "Buffers",
     "BUTTON_A",
     "BUTTON_B",

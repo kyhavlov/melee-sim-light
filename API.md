@@ -1,12 +1,14 @@
 # Runtime API Reference
 
-The public native surface is declared in [`src/api.h`](src/api.h). One `MslBatch` owns its immutable game data,
-mutable environments, and initialization-only scratch. All runtime arrays are contiguous and have
+The public native surface is declared in [`src/api.h`](src/api.h). One `MslBatch` owns its mutable environments
+and initialization-only scratch; the immutable game data is loaded once per process (one data root
+per process) and shared by every batch. All runtime arrays are contiguous and have
 `msl_batch_size(batch)` rows.
 
 | call | purpose |
 | --- | --- |
-| `msl_batch_create(data_root, count, out)` | load data and create independent environments |
+| `msl_game_data_acquire(data_root)` / `msl_game_data_release()` | load the process's game data ahead of any batch (e.g. before forking) and drop that hold |
+| `msl_batch_create(data_root, count, out)` | load data (if not already loaded) and create independent environments |
 | `msl_batch_reset(batch, configs, mask, observations)` | reset all or selected environments and write initial observations |
 | `msl_batch_step(batch, inputs, observations, terminals)` | advance every environment one frame and write outputs |
 | `msl_batch_observe(batch, observations, terminals)` | project current state without advancing |

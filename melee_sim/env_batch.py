@@ -14,6 +14,34 @@ from .buffers import Buffers
 from .config import Character, MatchConfig, PlayerConfig
 
 
+_preloaded = False
+
+
+def preload_game_data(data_dir: str | os.PathLike[str] | None = None) -> Path:
+    """Load the immutable game data once for this process and keep it loaded.
+
+    Every ``EnvBatch`` in the process then shares it instead of loading its
+    own copy (roughly 300 MB), and processes forked after this call share the
+    pages copy-on-write. Returns the resolved data directory. Calling it again
+    with the same directory is a no-op; a different directory is an error,
+    since a process holds a single data root.
+    """
+    global _preloaded
+    resolved = _resolve_data_dir(data_dir)
+    lib = _native.library()
+    _native.check(lib.msl_game_data_acquire(os.fsencode(resolved)), "preload game data")
+    if _preloaded:
+        # Already holding the preload reference; keep exactly one.
+        lib.msl_game_data_release()
+    _preloaded = True
+    return resolved
+
+
+def game_data_loaded() -> bool:
+    """Whether this process has game data loaded (by a batch or a preload)."""
+    return _native.library().msl_game_data_references() > 0
+
+
 class EnvBatch:
     """One single-threaded batch backed directly by ``src/api.h``."""
 

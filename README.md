@@ -108,8 +108,11 @@ env.copy_matches_from(source, destination_indices, source_indices)
 
 ### C Native API
 
-`MslBatch` owns the shared immutable game data and every mutable environment. Reset and step consume
-contiguous arrays whose length is the batch size; the simulator allocates nothing on those paths.
+`MslBatch` owns every mutable environment and shares the process's immutable game data, which is
+loaded once per process (by the first `msl_batch_create`, or ahead of time by
+`msl_game_data_acquire`, so that processes forked afterwards share its pages copy-on-write; the
+Python binding is `melee_sim.preload_game_data`). Reset and step consume contiguous arrays whose
+length is the batch size; the simulator allocates nothing on those paths.
 
 ```c
 #include <stdio.h>

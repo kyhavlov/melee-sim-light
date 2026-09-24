@@ -44,6 +44,12 @@ def library() -> ctypes.CDLL:
     size = ctypes.c_size_t
     u32 = ctypes.c_uint32
 
+    lib.msl_game_data_acquire.argtypes = [ctypes.c_char_p]
+    lib.msl_game_data_acquire.restype = ctypes.c_int
+    lib.msl_game_data_release.argtypes = []
+    lib.msl_game_data_release.restype = None
+    lib.msl_game_data_references.argtypes = []
+    lib.msl_game_data_references.restype = u32
     lib.msl_batch_create.argtypes = [ctypes.c_char_p, u32, ctypes.POINTER(pointer)]
     lib.msl_batch_create.restype = ctypes.c_int
     lib.msl_batch_destroy.argtypes = [pointer]
