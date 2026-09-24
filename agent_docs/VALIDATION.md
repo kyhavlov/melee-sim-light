@@ -5,7 +5,11 @@ recording must pass capture admission and complete strict gameplay comparison.
 There is no classified-as-success path. An eligible replay that differs is a bug
 investigation, not a reason to exclude it.
 
+Replay bytes are not downloaded on clone. Install Git LFS and opt in before
+running replay-dependent commands:
+
 ```sh
+git lfs pull --include="replays/validation/**" --exclude=""
 make source-check native-smoke
 make validation-supported-domain
 make validation-suite VALIDATION_SUITE=replays/suites/gamewatch.json VALIDATION_BACKEND=ppc

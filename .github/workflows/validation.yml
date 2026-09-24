@@ -6,12 +6,46 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install build and tooling-test dependencies
+        run: python -m pip install uv pytest zstandard
+      - name: Check source inventory
+        run: make source-check
+      - name: Build source distribution and platform wheel
+        env:
+          MAKEFLAGS: -j4
+        run: uv build
+      - name: Install and load the packaged native API outside the checkout
+        run: |
+          python -m pip install dist/*.whl
+          cd "$(mktemp -d)"
+          python -I -c 'from melee_sim import _native; _native.library()'
+          python -I -m melee_sim.extract_data --help
+      - name: Check replay storage tooling without downloading replays
+        run: python -m pytest tests/test_slpz_replay_storage.py -q -k "not real_replay_payload"
+
   aggregate:
+    # Only trusted main code receives the locally supplied game data.
+    # Fork pull requests still run the package/build job above.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      actions: write
     # Pin the image that matches the validated environment (gcc-13). The
     # replay gate asserts bit-exactness, so keep the toolchain stable.
     runs-on: ubuntu-24.04
@@ -20,14 +54,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Replays are LFS objects (~110 MB). Cache them so runs don't burn the
+      # Replays are LFS objects (~222 MB). Cache them so runs don't burn the
       # LFS bandwidth quota; checkout above fetches pointers only.
-      #
-      # Caches use split restore/save steps instead of actions/cache: its
-      # combined form only saves in a post step that is skipped when the job
-      # fails, so a red replay gate would force every run to re-download the
-      # LFS objects and the ISO. Each save sits directly after the step that
-      # produces its artifact, which is valid regardless of the gate outcome.
       - name: Compute LFS asset manifest
         run: git lfs ls-files -l | cut -d' ' -f1 | sort > .lfs-assets-id
 
@@ -39,7 +67,7 @@ jobs:
           key: lfs-${{ hashFiles('.lfs-assets-id') }}
 
       - name: Fetch LFS objects
-        run: git lfs pull
+        run: git lfs pull --include="replays/validation/**" --exclude=""
 
       - name: Save LFS objects to cache
         if: steps.cache-lfs.outputs.cache-hit != 'true'
@@ -48,6 +76,27 @@ jobs:
           path: .git/lfs
           key: lfs-${{ hashFiles('.lfs-assets-id') }}
 
+      - name: Keep only the current validation cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LFS_CACHE_KEY: lfs-${{ hashFiles('.lfs-assets-id') }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" \
+            --jq '.actions_caches' | jq -s 'add' > "$RUNNER_TEMP/msl-caches.json"
+          # Never delete the previous cache unless the replacement is available.
+          keep_id=$(jq -er --arg key "$LFS_CACHE_KEY" '
+            [.[] | select(.key == $key and .ref == "refs/heads/main")]
+            | max_by(.created_at) | .id // error("Current replay cache is missing")
+          ' "$RUNNER_TEMP/msl-caches.json")
+          jq -r --argjson keep "$keep_id" '
+            .[] | select(.id != $keep and
+              (.key | startswith("lfs-") or startswith("ssbm-iso-") or startswith("game-data-")))
+            | .id
+          ' "$RUNNER_TEMP/msl-caches.json" > "$RUNNER_TEMP/msl-old-caches.txt"
+          while read -r cache_id; do
+            gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY"
+          done < "$RUNNER_TEMP/msl-old-caches.txt"
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -55,57 +104,23 @@ jobs:
       - name: Install Python dependencies
         run: pip install peppi-py==0.8.6 pyarrow numpy zstandard py-ubjson pytest
 
-      # data/raw is derived deterministically from the ISO; cache it keyed on
-      # the extractor and the tracked manifest so the ISO download is only
-      # needed when extraction inputs change.
-      - name: Restore cached game data
-        id: cache-data
-        uses: actions/cache/restore@v4
-        with:
-          path: data/raw
-          key: game-data-${{ hashFiles('tools/data/extract.py', 'tools/data/raw.py', 'data/manifest.json') }}
-
-      - name: Restore the cached ISO
-        if: steps.cache-data.outputs.cache-hit != 'true'
-        id: cache-iso
-        uses: actions/cache/restore@v4
-        with:
-          path: SSBM.iso
-          key: ssbm-iso-v1
-
-      - name: Download the ISO
-        # The secret is a direct-download URL. For Dropbox share links that
-        # means ending in dl=1 -- the default dl=0 serves an HTML preview.
-        if: steps.cache-data.outputs.cache-hit != 'true' && steps.cache-iso.outputs.cache-hit != 'true'
+      # Do not place the ISO or extracted game data in Actions caches/artifacts:
+      # fork PRs can read caches from the base branch of a public repository.
+      - name: Download the locally supplied ISO
         env:
           SSBM_ISO_URL: ${{ secrets.SSBM_ISO_URL }}
         run: |
           if [ -z "$SSBM_ISO_URL" ]; then
-            echo "::error::SSBM_ISO_URL secret is unavailable (fork PR or unset secret)."
+            echo "::error::Set SSBM_ISO_URL to run the trusted replay gate."
             exit 1
           fi
           curl --fail --location --retry 3 --silent --show-error \
             "$SSBM_ISO_URL" -o SSBM.iso
 
-      - name: Save the ISO to cache
-        if: steps.cache-data.outputs.cache-hit != 'true' && steps.cache-iso.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: SSBM.iso
-          key: ssbm-iso-v1
-
       - name: Extract game data
-        if: steps.cache-data.outputs.cache-hit != 'true'
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: python3 -m tools.data.extract --iso SSBM.iso --out-dir data
-
-      - name: Save game data to cache
-        if: steps.cache-data.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: data/raw
-          key: game-data-${{ hashFiles('tools/data/extract.py', 'tools/data/raw.py', 'data/manifest.json') }}
 
       - name: Build the native core and validator
         env:

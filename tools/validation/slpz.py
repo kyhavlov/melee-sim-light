@@ -55,6 +55,12 @@ def resolve_replay_path(path: str | Path) -> Path:
 def replay_path_for_peppi(path: str | Path) -> Iterator[Path]:
     """Yield a .slp path suitable for peppi, decompressing .slpz to a temp file."""
     replay = resolve_replay_path(path)
+    with replay.open("rb") as source:
+        if source.read(42).startswith(b"version https://git-lfs.github.com/spec/v1"):
+            raise SlpzError(
+                f"{replay} is a Git LFS pointer; download validation replays with "
+                '`git lfs pull --include="replays/validation/**" --exclude=""`'
+            )
     if replay.suffix != ".slpz":
         yield replay
         return
@@ -219,6 +225,11 @@ def compress_slpz(slp: bytes, *, level: int = 3) -> bytes:
 
 
 def decompress_slpz(slpz: bytes) -> bytes:
+    if slpz.startswith(b"version https://git-lfs.github.com/spec/v1"):
+        raise SlpzError(
+            "Replay contents have not been downloaded from Git LFS; run "
+            '`git lfs pull --include="replays/validation/**" --exclude=""`'
+        )
     if len(slpz) < 24:
         raise SlpzError("input is too small to be .slpz")
 

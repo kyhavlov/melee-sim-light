@@ -9,6 +9,7 @@ from tools.validation.slpz import (
     EVENT_PAYLOADS,
     GAME_START,
     RAW_HEADER,
+    SlpzError,
     _event_sizes,
     _reorder_events,
     _require_zstandard,
@@ -21,6 +22,19 @@ from tools.validation.slpz import (
     replay_path_for_peppi,
     resolve_replay_path,
 )
+
+
+@pytest.mark.parametrize("suffix", [".slp", ".slpz"])
+def test_missing_lfs_payload_explains_opt_in_download(tmp_path: Path, suffix: str) -> None:
+    pointer = b"version https://git-lfs.github.com/spec/v1\noid sha256:" + b"0" * 64 + b"\nsize 123\n"
+    replay = tmp_path / f"game{suffix}"
+    replay.write_bytes(pointer)
+    with pytest.raises(SlpzError, match="git lfs pull"):
+        with replay_path_for_peppi(replay):
+            pytest.fail("An LFS pointer must not reach the replay parser")
+    if suffix == ".slpz":
+        with pytest.raises(SlpzError, match="git lfs pull"):
+            decompress_slpz(pointer)
 
 
 def _fake_slp() -> bytes:
