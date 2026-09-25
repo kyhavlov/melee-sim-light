@@ -381,6 +381,29 @@ def test_masked_step_republishes_unstepped_matches(monkeypatch) -> None:
         assert env.current_frame[1].tobytes() == before[1].tobytes()
 
 
+def test_game_data_root_identity(monkeypatch, tmp_path) -> None:
+    import os
+
+    lib = msl._native.library()
+    baseline = lib.msl_game_data_references()
+    monkeypatch.chdir(ROOT)
+    assert lib.msl_game_data_acquire(b"data") == 0
+    try:
+        alias = tmp_path / "alias"
+        alias.symlink_to(ROOT / "data", target_is_directory=True)
+        for root in (ROOT / "data", ROOT / "data/raw", alias, "./data/", "data/raw/"):
+            assert lib.msl_game_data_acquire(os.fsencode(root)) == 0
+            lib.msl_game_data_release()
+        monkeypatch.chdir(tmp_path)
+        assert lib.msl_game_data_acquire(b"data") == 3
+        (tmp_path / "data/raw").mkdir(parents=True)
+        assert lib.msl_game_data_acquire(b"data") == 3
+        assert lib.msl_game_data_references() == baseline + 1
+    finally:
+        lib.msl_game_data_release()
+    assert lib.msl_game_data_references() == baseline
+
+
 def test_game_data_is_shared_across_batches_and_forks(monkeypatch, tmp_path) -> None:
     import os
 
@@ -405,10 +428,9 @@ def test_game_data_is_shared_across_batches_and_forks(monkeypatch, tmp_path) -> 
             np.testing.assert_array_equal(first.current_frame, second.current_frame)
         assert lib.msl_game_data_references() == baseline + 2
     assert lib.msl_game_data_references() == baseline + 1
-    # A process holds a single data root, even one with identical contents.
+    # Symlinks to the loaded raw directory identify the same data.
     (tmp_path / "raw").symlink_to(ROOT / "data" / "raw")
-    with pytest.raises(msl._native.NativeError, match="invalid simulator state"):
-        msl.preload_game_data(tmp_path)
+    assert msl.preload_game_data(tmp_path) == tmp_path.resolve()
     assert lib.msl_game_data_references() == baseline + 1
     # A forked child inherits the loaded data and can build batches on it.
     pid = os.fork()

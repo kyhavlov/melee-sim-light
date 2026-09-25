@@ -213,20 +213,37 @@ static struct {
 
 static MslResult resolve_raw_root(const char* data_root, char* raw_root, size_t capacity) {
   size_t root_length;
+  char* resolved;
 
   if (data_root == NULL || data_root[0] == '\0') {
     return MSL_INVALID_ARGUMENT;
   }
   root_length = strlen(data_root);
-  if ((root_length == 3 && strcmp(data_root, "raw") == 0) ||
-      (root_length >= 4 && strcmp(data_root + root_length - 4, "/raw") == 0)) {
-    if (root_length >= capacity) {
-      return MSL_INVALID_ARGUMENT;
-    }
-    memcpy(raw_root, data_root, root_length + 1);
-  } else if (snprintf(raw_root, capacity, "%s/raw", data_root) >= (int)capacity) {
+  if (root_length >= capacity) {
     return MSL_INVALID_ARGUMENT;
   }
+  while (root_length > 1 && data_root[root_length - 1] == '/') {
+    --root_length;
+  }
+  memcpy(raw_root, data_root, root_length);
+  raw_root[root_length] = '\0';
+  if (!((root_length == 3 && strcmp(raw_root, "raw") == 0) ||
+        (root_length >= 4 && strcmp(raw_root + root_length - 4, "/raw") == 0))) {
+    if (root_length + sizeof("/raw") > capacity) {
+      return MSL_INVALID_ARGUMENT;
+    }
+    memcpy(raw_root + root_length, "/raw", sizeof("/raw"));
+  }
+  resolved = realpath(raw_root, NULL);
+  if (resolved == NULL) {
+    return MSL_INVALID_STATE;
+  }
+  if (strlen(resolved) >= capacity) {
+    free(resolved);
+    return MSL_INVALID_ARGUMENT;
+  }
+  strcpy(raw_root, resolved);
+  free(resolved);
   return MSL_OK;
 }
 
