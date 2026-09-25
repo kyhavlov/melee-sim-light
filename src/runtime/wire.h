@@ -270,16 +270,25 @@ typedef struct MslCoreViewerPlayer {
     uint8_t combo_count;
     uint8_t last_hit_by;
     uint8_t state_flags[MSL_CORE_STATE_FLAGS_BYTES];
-    // Kirby's copy-ability hat as the copied fighter kind; FTKIND_KIRBY (4)
-    // means no hat and 0xFF marks a non-Kirby fighter.
-    uint8_t kirby_hat;
-    uint8_t _pad0[2];
+    // HitElement of the last hit taken (fp->dmg.x1860_element); viewer-only
+    // status-effect cue, meaningful while hitlag/hitstun are non-zero.
+    uint8_t last_hit_element;
+    // fp->lightshield_amount * 255 while a shield bubble is live: the
+    // source's trigger-derived shield strength, 255 = hard (digital) shield,
+    // lower = lighter. 0 when no bubble.
+    uint8_t shield_strength;
+    // Game & Watch Oil Panic fill (ftGw_Panic_Empty..Full = 0..3); 0 for
+    // every other fighter.
+    uint8_t bucket_fill;
     uint16_t action_id;
     int16_t action_frame;
     uint16_t hitlag;
     uint16_t hitstun;
     uint16_t ground_id;
-    uint16_t _pad1;
+    // Kirby's copy-ability hat as the copied fighter kind; FTKIND_KIRBY (4)
+    // means no hat and 0xFF marks a non-Kirby fighter.
+    uint8_t kirby_hat;
+    uint8_t _pad1;
     uint32_t animation_index;
     float pos_x;
     float pos_y;
@@ -323,6 +332,31 @@ typedef struct MslCoreViewerCamera {
     float fov;
 } MslCoreViewerCamera;
 
+// Viewer-only visual anchor for an item: the world translation and scale of
+// its rendered joint (the article's animated grandchild for Mewtwo's Shadow
+// Ball, the root JObj otherwise). Slots parallel MslCoreViewerState.items.
+typedef struct MslViewerItemVisual {
+    float x;
+    float y;
+    float z;
+    float scale;
+    // First enabled item hit capsule (world position from lb_8000B1CC in
+    // it_2725.c, radius scaled like the fighter lane); hitbox_radius is 0
+    // when the item has no live hitbox this frame.
+    float hitbox_x;
+    float hitbox_y;
+    float hitbox_radius;
+    // Far end of a tether (Link/Young Link hookshot, Samus grapple beam):
+    // the ItemLink x0 chain end, which is the hook or
+    // beam tip, and the ledge grab point while hanging. tip_valid is 0 for
+    // other items.
+    float tip_x;
+    float tip_y;
+    uint8_t valid;
+    uint8_t tip_valid;
+    uint8_t _pad0[2];
+} MslViewerItemVisual;
+
 typedef struct MslCoreViewerState {
     int32_t frame_id;
     uint32_t random_seed;
@@ -336,6 +370,7 @@ typedef struct MslCoreViewerState {
     uint8_t _pad0[3];
     MslCoreViewerPlayer players[MSL_CORE_MAX_PLAYERS];
     MslCoreItem items[MSL_CORE_MAX_ITEMS];
+    MslViewerItemVisual item_visuals[MSL_CORE_MAX_ITEMS];
     MslCoreViewerStage stage;
     MslCoreViewerCamera camera;
     // The Ice Climbers follower is a second rendered body on the owning
@@ -374,7 +409,9 @@ _Static_assert(sizeof(MslCoreViewerStage) == 20,
                "MslCoreViewerStage wire size");
 _Static_assert(sizeof(MslCoreViewerCamera) == 28,
                "MslCoreViewerCamera wire size");
-_Static_assert(sizeof(MslCoreViewerState) == 2332,
+_Static_assert(sizeof(MslViewerItemVisual) == 40,
+               "MslViewerItemVisual wire size");
+_Static_assert(sizeof(MslCoreViewerState) == 2932,
                "MslCoreViewerState wire size");
 
 static inline uint16_t msl_core_get_le16(const void* ptr)
