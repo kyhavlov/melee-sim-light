@@ -11,6 +11,10 @@ main also aborts on frame 2,260. The regression
 checks the unchanged observation prefix, completion of the formerly failing
 frame, and save/restore continuation at another batch index.
 
+The empty `observation_schema` array records the original observation dtype.
+The prefix check copies those named fields into that fixed layout before hashing,
+so adding observations does not change the reference bytes. Missing fields still fail.
+
 The construction census separately forces every registered fighter joint to
 own a scale vector for all supported fighters, all six stages, and 2/3/4
 players. This includes Nana and both transformation halves, preserves at least
