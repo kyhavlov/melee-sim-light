@@ -27,6 +27,9 @@ const PLAYER_FIELDS = [
   "inHitstun",
   "powershield",
   "dead",
+  "element",
+  "shieldStrength",
+  "bucketFill",
 ];
 const ITEM_FIELDS = [
   "alive",
@@ -44,6 +47,16 @@ const ITEM_FIELDS = [
   "misc0",
   "misc1",
   "misc2",
+  "misc3",
+  "visualX",
+  "visualY",
+  "visualScale",
+  "hitboxX",
+  "hitboxY",
+  "hitboxRadius",
+  "tipValid",
+  "tipX",
+  "tipY",
 ];
 
 const HURTBOX_STATES = ["vulnerable", "invulnerable", "intangible"];
@@ -368,6 +381,12 @@ function viewerPlayer(frameNumber, playerIndex, row, playerLookup, inputs) {
       attackBasedYSpeed: 0,
       selfInducedGroundXSpeed: 0,
       hitlagRemaining: Number(row[playerLookup.hitlag] || 0),
+      lastHitElement: Number(row[playerLookup.element] || 0),
+      shieldStrength:
+        playerLookup.shieldStrength !== undefined && row[playerLookup.shieldStrength] !== null
+          ? Number(row[playerLookup.shieldStrength])
+          : undefined,
+      bucketFill: Number(row[playerLookup.bucketFill] || 0),
       isReflectActive: Boolean(row[playerLookup.reflect]),
       isFastfalling: Boolean(row[playerLookup.fastfall]),
       isShieldActive: Boolean(row[playerLookup.shielding]),
@@ -431,8 +450,27 @@ function decodeItems(items, frameCount) {
       spawnId: Number(row[lookup.spawnId] || 0),
       samusMissileType: Number(row[lookup.misc0] || 0),
       peachTurnipFace: Number(row[lookup.misc1] || 0),
-      isChargeShotLaunched: false,
-      chargeShotChargeLevel: Number(row[lookup.misc2] || 0),
+      // The original v1 writer stored charge level under misc2 and omitted
+      // misc3. Preserve those recordings; new rows carry both source bytes.
+      isChargeShotLaunched: lookup.misc3 !== undefined && Number(row[lookup.misc2] || 0) !== 0,
+      chargeShotChargeLevel: Number(row[lookup.misc3 ?? lookup.misc2] || 0),
+      ...(lookup.visualScale !== undefined && Number(row[lookup.visualScale] || 0) > 0
+        ? {
+            visualX: Number(row[lookup.visualX] || 0),
+            visualY: Number(row[lookup.visualY] || 0),
+            visualScale: Number(row[lookup.visualScale] || 0),
+          }
+        : {}),
+      ...(lookup.tipValid !== undefined && Number(row[lookup.tipValid] || 0)
+        ? { tipX: Number(row[lookup.tipX] || 0), tipY: Number(row[lookup.tipY] || 0) }
+        : {}),
+      ...(lookup.hitboxRadius !== undefined && Number(row[lookup.hitboxRadius] || 0) > 0
+        ? {
+            hitboxX: Number(row[lookup.hitboxX] || 0),
+            hitboxY: Number(row[lookup.hitboxY] || 0),
+            hitboxRadius: Number(row[lookup.hitboxRadius] || 0),
+          }
+        : {}),
     }));
   }
   return out;
@@ -467,6 +505,9 @@ function playerRowFromViewer(player) {
     state.isInHitstun ? 1 : 0,
     state.isPowershieldActive ? 1 : 0,
     state.isDead ? 1 : 0,
+    Number(state.lastHitElement || 0),
+    state.shieldStrength === undefined ? null : roundNumber(Number(state.shieldStrength)),
+    Number(state.bucketFill || 0),
   ];
 }
 
@@ -486,7 +527,17 @@ function itemRowFromViewer(item) {
     Number(item.spawnId || 0),
     Number(item.samusMissileType || 0),
     Number(item.peachTurnipFace || 0),
+    item.isChargeShotLaunched ? 1 : 0,
     Number(item.chargeShotChargeLevel || 0),
+    roundNumber(Number(item.visualX || 0)),
+    roundNumber(Number(item.visualY || 0)),
+    roundNumber(Number(item.visualScale || 0)),
+    roundNumber(Number(item.hitboxX || 0)),
+    roundNumber(Number(item.hitboxY || 0)),
+    roundNumber(Number(item.hitboxRadius || 0)),
+    item.tipX !== undefined ? 1 : 0,
+    roundNumber(Number(item.tipX || 0)),
+    roundNumber(Number(item.tipY || 0)),
   ];
 }
 

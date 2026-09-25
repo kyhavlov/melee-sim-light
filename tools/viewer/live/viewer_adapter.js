@@ -3,8 +3,10 @@ import {
   BUTTONS,
   ITEM_SIZE,
   VIEWER_HITBOX_SIZE,
+  VIEWER_ITEM_VISUAL_SIZE,
   VIEWER_PLAYER_SIZE,
   itemOffsets,
+  viewerItemVisualOffsets,
   viewerCameraOffsets,
   viewerHitboxOffsets,
   viewerOffsets,
@@ -181,7 +183,11 @@ function playerStateFromBase(state, base, frameNumber, idx, isNana) {
     const flags221c = u8(state, flags + 3);
     const hurtboxState = u8(state, base + viewerPlayerOffsets.hurtboxState);
     const shieldRadius = f32(state, base + viewerPlayerOffsets.shieldRadius);
-    const hasShieldBubble = Number.isFinite(shieldRadius) && shieldRadius > 0;
+    // Game & Watch's shield bone reports a world scale near 0.03 (radius
+    // ~0.06) where every other fighter reports 3-4; treat an implausibly
+    // small bubble as unavailable so the viewer's per-character shield size
+    // formula is used instead. Open item: see VIEWER_ARTICLES.md.
+    const hasShieldBubble = Number.isFinite(shieldRadius) && shieldRadius > 1;
     const sourceShieldX = f32(state, base + viewerPlayerOffsets.shieldX);
     const sourceShieldY = f32(state, base + viewerPlayerOffsets.shieldY);
     const hasShieldCenter =
@@ -226,6 +232,11 @@ function playerStateFromBase(state, base, frameNumber, idx, isNana) {
         selfInducedGroundXSpeed: f32(state, base + viewerPlayerOffsets.speedGroundXSelf),
         hitlagRemaining: u16(state, base + viewerPlayerOffsets.hitlag),
         hitboxes: playerHitboxes(state, base),
+        lastHitElement: u8(state, base + viewerPlayerOffsets.lastHitElement),
+        bucketFill: u8(state, base + viewerPlayerOffsets.bucketFill),
+        shieldStrength: hasShieldBubble
+          ? u8(state, base + viewerPlayerOffsets.shieldStrength) / 255
+          : undefined,
         isReflectActive: Boolean(flags2218 & 0x10),
         isFastfalling: Boolean(flags221a & 0x08),
         isShieldActive: Boolean(flags221b & 0x80),
@@ -235,6 +246,32 @@ function playerStateFromBase(state, base, frameNumber, idx, isNana) {
         isDead: Boolean(u8(state, base + viewerPlayerOffsets.isDead)),
         isOffscreen: false,
     };
+}
+
+function itemVisual(state, slot) {
+  const off = viewerOffsets.itemVisuals + slot * VIEWER_ITEM_VISUAL_SIZE;
+  if (!u8(state, off + viewerItemVisualOffsets.valid)) {
+    return {};
+  }
+  const hitboxRadius = f32(state, off + viewerItemVisualOffsets.hitboxRadius);
+  return {
+    visualX: f32(state, off + viewerItemVisualOffsets.x),
+    visualY: f32(state, off + viewerItemVisualOffsets.y),
+    visualScale: f32(state, off + viewerItemVisualOffsets.scale),
+    ...(hitboxRadius > 0
+      ? {
+          hitboxX: f32(state, off + viewerItemVisualOffsets.hitboxX),
+          hitboxY: f32(state, off + viewerItemVisualOffsets.hitboxY),
+          hitboxRadius,
+        }
+      : {}),
+    ...(u8(state, off + viewerItemVisualOffsets.tipValid)
+      ? {
+          tipX: f32(state, off + viewerItemVisualOffsets.tipX),
+          tipY: f32(state, off + viewerItemVisualOffsets.tipY),
+        }
+      : {}),
+  };
 }
 
 export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
@@ -287,9 +324,12 @@ export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
       spawnId: u32(state, off + itemOffsets.spawnId),
       samusMissileType: u8(state, off + itemOffsets.misc0),
       peachTurnipFace: u8(state, off + itemOffsets.misc1),
-      isChargeShotLaunched: false,
-      chargeShotChargeLevel: u8(state, off + itemOffsets.misc2),
+      // Slippi item lanes: misc2 (0xDEB) is the charge-shot launched flag and
+      // misc3 (0xDEF) is the charge level (Samus 0..7, Mewtwo 0..7).
+      isChargeShotLaunched: u8(state, off + itemOffsets.misc2) !== 0,
+      chargeShotChargeLevel: u8(state, off + itemOffsets.misc3),
       owner: i8(state, off + itemOffsets.owner),
+      ...itemVisual(state, idx),
     });
   }
 

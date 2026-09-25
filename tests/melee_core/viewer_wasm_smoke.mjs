@@ -25,7 +25,7 @@ import {
   viewerFrameFromState,
   viewerSettingsFromState,
 } from "../../tools/viewer/live/viewer_adapter.js";
-import { replayDataToMslTrace } from "../../tools/viewer/msltrace1.js";
+import { mslTraceToReplayData, replayDataToMslTrace } from "../../tools/viewer/msltrace1.js";
 
 const neutral = () => ({
   buttons: 0,
@@ -157,8 +157,14 @@ try {
     }
   }
   assert(sawShield, "live viewer never observed a source shield bubble");
-  assert.equal(neutralShield.shieldX, undefined);
-  assert.equal(neutralShield.shieldY, undefined);
+  // The projection publishes the source collision center (shield bone world
+  // transform + descriptor offset): near the fighter, above the feet.
+  assert(Number.isFinite(neutralShield.shieldX) && Number.isFinite(neutralShield.shieldY),
+    "live viewer shield projection did not expose the shield center");
+  assert(Math.abs(neutralShield.shieldX - neutralShield.xPosition) < 10 &&
+    neutralShield.shieldY > neutralShield.yPosition &&
+    neutralShield.shieldY < neutralShield.yPosition + 30,
+    "live viewer shield center is not near the fighter");
   let tiltedShield = neutralShield;
   for (let index = 0; index < 20; index += 1) {
     const pads = controllers({
@@ -174,6 +180,64 @@ try {
       Math.abs(tiltedShield.shieldTiltY ?? 0) > 0.01,
     "live viewer shield projection did not expose Guard tilt",
   );
+
+  // A flattened skeleton must still publish a full-sized shield. Analog-only
+  // shielding also exercises the source strength byte rather than the button.
+  const shieldFor = (l, buttons) => {
+    reset({ p1Char: CHAR_GAMEWATCH });
+    let state;
+    for (let index = 0; index < 12; index += 1) {
+      state = step(controllers({ ...neutral(), l, buttons })).players[0].state;
+    }
+    assert(state.isShieldActive);
+    assert(state.shieldRadius > 1 && state.shieldRadius < 20);
+    assert(Number.isFinite(state.shieldX) && Number.isFinite(state.shieldY));
+    return state;
+  };
+  const hardShield = shieldFor(1, BUTTONS.L);
+  // The live adapter encodes triggers on 0..255; Melee saturates at raw 140.
+  const lightShield = shieldFor(0.3, 0);
+  assert.equal(hardShield.shieldStrength, 1);
+  assert(lightShield.shieldStrength > 0 && lightShield.shieldStrength < 1);
+  assert(lightShield.shieldRadius > hardShield.shieldRadius);
+
+  // Preserve an actual flame's viewer-only anchor and hitbox through export
+  // and import, not just a synthetic row with the expected field names.
+  const flameFrames = [reset({ p1Char: CHAR_BOWSER })];
+  let flame;
+  for (let index = 0; index < 90 && !flame; index += 1) {
+    const current = step(controllers({ ...neutral(), buttons: BUTTONS.B }));
+    flameFrames.push(current);
+    flame = current.items.find(item => item.typeId === 100 && item.hitboxRadius > 0);
+  }
+  assert(flame, "Bowser flame never published a live item hitbox");
+  assert(Number.isFinite(flame.visualX) && Number.isFinite(flame.visualY));
+  assert(flame.visualScale > 0);
+  const flameTrace = replayDataToMslTrace({
+    replayData: {
+      settings: viewerSettingsFromState(sim.viewerView()),
+      frames: flameFrames,
+      ending: { gameEndMethod: "GAME!", quitInitiator: -1 },
+    },
+    frameCount: flameFrames.length - 1,
+  });
+  const restoredFlame = mslTraceToReplayData(flameTrace).frames.at(-1).items
+    .find(item => item.spawnId === flame.spawnId);
+  assert(restoredFlame);
+  for (const field of ["visualX", "visualY", "visualScale", "hitboxX", "hitboxY", "hitboxRadius"]) {
+    assert(Math.abs(restoredFlame[field] - flame[field]) < 0.001, `flame trace ${field}`);
+  }
+  const legacyTrace = {
+    ...flameTrace,
+    items: {
+      encoding: flameTrace.items.encoding,
+      fields: ["alive", "typeId", "misc2"],
+      rows: [[0, 0, 0, [1, 64, 5]]],
+    },
+  };
+  const legacyShot = mslTraceToReplayData(legacyTrace).frames[0].items[0];
+  assert.equal(legacyShot.chargeShotChargeLevel, 5);
+  assert.equal(legacyShot.isChargeShotLaunched, false);
 
   reset({ p1Char: CHAR_PEACH, stageId: STAGE_FINAL_DESTINATION, seed: 31 });
   let sawItem = false;

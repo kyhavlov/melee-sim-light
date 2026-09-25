@@ -204,6 +204,53 @@ if (production) {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
+if (production && result.startsWith("PASS|")) {
+  // Exercise the actual bundled renderer, not only the live adapter: Bowser
+  // breath must draw flames, and the checkbox must reveal their hit capsules.
+  await call("Runtime.evaluate", {
+    expression: `(() => {
+      const character = document.querySelector("#p1-character");
+      character.value = "5";
+      character.dispatchEvent(new Event("change"));
+      document.querySelector('button[data-stage-id="32"]').click();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+    })()`,
+  });
+  const effectsDeadline = Date.now() + 4000;
+  let enabled = false;
+  result = "FAIL|Bowser flames or hitbox toggle did not render";
+  while (Date.now() < effectsDeadline) {
+    const response = await call("Runtime.evaluate", {
+      expression: `(() => {
+        const viewer = document.querySelector("slippi-viewer");
+        const root = viewer.shadowRoot || viewer;
+        const frame = window.__mslViewerReplayData?.frames?.[window.__mslViewerFrameCount];
+        return JSON.stringify({
+          flame: frame?.items?.some(item => item.typeId === 100 && item.hitboxRadius > 0),
+          art: root.querySelectorAll('circle[fill="#f97316"]').length,
+          hitboxes: root.querySelectorAll('circle[stroke="#b91c1c"]').length,
+          enabled: viewer.getShowHitboxes(),
+        });
+      })()`,
+      returnByValue: true,
+    });
+    const state = JSON.parse(response.result?.result?.value || "{}");
+    if (!enabled && state.flame && state.art > 0) {
+      if (state.enabled || state.hitboxes !== 0) {
+        result = "FAIL|item hitboxes were visible by default";
+        break;
+      }
+      enabled = true;
+      await call("Runtime.evaluate", {
+        expression: `document.querySelector("#show-hitboxes").click()`,
+      });
+    } else if (enabled && state.enabled && state.art > 0 && state.hitboxes > 0) {
+      result = "PASS|production viewer effects and hitbox toggle";
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
 socket.close();
 signalChromeGroup("SIGTERM");
 await Promise.race([

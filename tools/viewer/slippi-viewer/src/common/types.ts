@@ -300,6 +300,12 @@ export interface PlayerState {
   readonly selfInducedGroundXSpeed: number;
   readonly hitlagRemaining: number;
   readonly hitboxes?: HitboxUpdate[];
+  /** HitElement of the last hit taken (sim viewer lane); 0 when unknown. */
+  readonly lastHitElement?: number;
+  /** Source shield strength 0..1 (1 = hard shield, lower = light shield); sim viewer lane. */
+  readonly shieldStrength?: number;
+  /** Game & Watch Oil Panic fill 0..3 (sim viewer lane). */
+  readonly bucketFill?: number;
   readonly isReflectActive: boolean;
   readonly isFastfalling: boolean;
   readonly isShieldActive: boolean;
@@ -339,6 +345,17 @@ export interface ItemUpdate {
   /** Mewtwo/Samus */
   readonly chargeShotChargeLevel: number;
   readonly owner: number;
+  /** World position and uniform scale of the item's rendered joint (sim viewer lane). */
+  readonly visualX?: number;
+  readonly visualY?: number;
+  readonly visualScale?: number;
+  /** First live item hit capsule (sim viewer lane). */
+  readonly hitboxX?: number;
+  readonly hitboxY?: number;
+  readonly hitboxRadius?: number;
+  /** Far end of a tether chain (hook / beam tip, ledge grab point while hanging). */
+  readonly tipX?: number;
+  readonly tipY?: number;
 }
 
 export interface FodPlatforms {

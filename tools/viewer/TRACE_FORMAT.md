@@ -116,7 +116,7 @@ Frame rows are the primary trace data. Player rows are ordered to match
 `match.players`.
 
 ```json
-{"encoding":"sparse-delta-v1","keyframeInterval":60,"fields":["frame","randomSeed","players"],"playerFields":["charId","actionId","actionFrame","x","y","facing","grounded","percent","shield","stocks","jumps","hitlag","hitstun","hurtbox","reflect","fastfall","shielding","inHitstun","powershield","dead"],"rows":[[0,0,12345,[[1,14,0,-30,0,1,1,0,60,4,2,0,0,0,0,0,0,0,0,0],[22,14,0,30,0,-1,1,0,60,4,2,0,0,0,0,0,0,0,0,0]]],[1,1,null,[[[2,1]],[[2,1]]]]]}
+{"encoding":"sparse-delta-v1","keyframeInterval":60,"fields":["frame","randomSeed","players"],"playerFields":["charId","actionId","actionFrame","x","y","facing","grounded","percent","shield","stocks","jumps","hitlag","hitstun","hurtbox","reflect","fastfall","shielding","inHitstun","powershield","dead","element","shieldStrength","bucketFill"],"rows":[[0,0,12345,[[1,14,0,-30,0,1,1,0,60,4,2,0,0,0,0,0,0,0,0,0,0,null,0],[22,14,0,30,0,-1,1,0,60,4,2,0,0,0,0,0,0,0,0,0,0,null,0]]],[1,1,null,[[[2,1]],[[2,1]]]]]}
 ```
 
 - `encoding`: exactly `"sparse-delta-v1"`.
@@ -157,6 +157,10 @@ Optional standard player fields:
 - `dead`: `1` when dead.
 
 Additional player columns may be appended by adding names to `playerFields`.
+`element` is the HitElement of the last hit taken, for
+status-effect overlays; readers treat a missing column as `0`. `shieldStrength`
+is the source light-shield amount 0..1 (1 = hard shield) or `null` without a
+bubble. `bucketFill` is Game & Watch's Oil Panic fill 0..3 (0 for others).
 Readers must use the field list instead of hard-coded positions outside the v1
 required fields.
 
@@ -179,7 +183,7 @@ state rather than viewer-side approximations. Missing `stage` data is allowed.
 Items are optional. Omit `items` when a trace has no item data.
 
 ```json
-{"encoding":"sparse-delta-v1","keyframeInterval":60,"fields":["alive","typeId","state","owner","x","y","vx","vy","facing","damage","timer","spawnId","misc0","misc1","misc2"],"rows":[]}
+{"encoding":"sparse-delta-v1","keyframeInterval":60,"fields":["alive","typeId","state","owner","x","y","vx","vy","facing","damage","timer","spawnId","misc0","misc1","misc2","misc3","visualX","visualY","visualScale","hitboxX","hitboxY","hitboxRadius","tipValid","tipX","tipY"],"rows":[]}
 ```
 
 - `encoding`: exactly `"sparse-delta-v1"`.
@@ -202,8 +206,20 @@ Items are optional. Omit `items` when a trace has no item data.
 - `damage`: item damage taken or carried damage.
 - `timer`: item expiration/lifetime timer.
 - `spawnId`: stable spawn id when available.
-- `misc0`, `misc1`, `misc2`: item-type-specific small values. Prefer promoting
-  these to named fields when they become stable viewer/debug concepts.
+- `misc0`, `misc1`, `misc2`, `misc3`: item-type-specific small values, the
+  four Slippi item lanes (`0xDD7`, `0xDDB`, `0xDEB`, `0xDEF`): missile type,
+  turnip face / Chef trajectory, charge-shot launched flag, and charge level
+  (Samus and Mewtwo). The original v1 exporter stored charge level in `misc2`;
+  when `misc3` is absent, readers retain that interpretation and leave the
+  launched flag false. Other missing item values default to `0`.
+- `visualX`, `visualY`, `visualScale`: world translation and uniform scale of
+  the item's rendered joint from the sim's viewer projection (Mewtwo's
+  charging Shadow Ball orbit). `visualScale` is `0` when unavailable.
+- `hitboxX`, `hitboxY`, `hitboxRadius`: the item's first live hit capsule
+  (Bowser's flames, Yoshi's stars, PK Fire pillar, Blizzard); `hitboxRadius` is
+  `0` when the item has no active hitbox.
+- `tipValid`, `tipX`, `tipY`: far end of a tether's link chain (hookshot,
+  grapple beam), which is the ledge grab point while hanging.
 
 An item reader reconstructs each slot by carrying the previous decoded item row
 forward and applying changed fields. A delta row with `alive = 0` closes that
