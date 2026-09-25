@@ -1,6 +1,7 @@
 # melee-sim-light
 
 [![melee-core validation](https://github.com/kyhavlov/melee-sim-light/actions/workflows/validation.yml/badge.svg?branch=main)](https://github.com/kyhavlov/melee-sim-light/actions/workflows/validation.yml)
+[![Discord](https://img.shields.io/badge/Discord-melee--sim--light-5865F2?logo=discord&logoColor=white)](https://discord.com/channels/200648447559204865/1553092548598173936)
 
 `melee-sim-light` is a Melee gameplay simulator made for reinforcement learning.
 It can run many independent matches at once, with exact equivalence to Melee's
