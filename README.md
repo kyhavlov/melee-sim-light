@@ -76,84 +76,36 @@ with msl.EnvBatch(batch_size=512, length=128) as env:
         ],
     )
 
+    env.reset_all()
+    # Wait through start-of-match countdown, since the game begins on frame -123
+    while env.current_frame[0]["frame_id"] < 0:
+        env.step()
+    env.reset_cursor()
+
     fox = msl.neutral_controller((env.length, env.batch_size))
     fox.buttons.B[0] = True
     fox.main_stick.x[0] = 1.0
     msl.write_controller(env.controller_action_view, fox, player=0)
 
-    env.reset_all()
     for _ in range(env.length):
         env.step()
 
     state = env.current_frame[0]
-    print(state["frame_id"], state["slots"][0]["percent"])
+    print(state["frame_id"], state["slots"][0]["pos_x"])
 ```
 
-Controller buffers start neutral. `gamestate_view[0]` is the reset state and each call to
-`step()` writes the next row. Rebind or reset the cursor to reuse a fixed-length buffer chunk.
+Controller buffers start neutral. Each `step()` writes the next observation row.
+`reset_cursor()` moves the cursor back to the start of the buffer to reuse it.
 
-The main Python operations are:
+See [Python API operations](API.md#python-api) for configuration, reset, and save/restore calls.
 
-```python
-env.configure_match(...)
-env.configure_matches(configs, env_ids=...)
-env.reset_all()
-env.reset_matches(env_ids)
-env.step()
-env.observe()
-state = env.save(env_index)
-env.restore(env_index, state)
-env.copy_matches_from(source, destination_indices, source_indices)
-```
-
-### Sharing game data across worker processes
-
-An `EnvBatch` needs the process's immutable game data, about 300 MB, which is loaded once per
-process. A trainer that shards its environments over one `EnvBatch` per CPU core would pay that per
-worker if each worker loaded it independently. Instead, load it once in a template process and
-fork the workers from that: the game data is never written after initialization (workers stepping
-thousands of frames dirty only a few MB), so the forked copies share its pages copy-on-write.
-
-The training process itself is usually not a safe template (a JAX or CUDA context, thread pools).
-Use `multiprocessing`'s `forkserver`, which is a fresh interpreter, and give it a preload module
-that loads the data before any worker is forked:
-
-```python
-# myproject/sim_preload.py -- imported by the forkserver before it forks workers.
-import os
-os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")  # workers don't need BLAS threads
-import gc
-import melee_sim
-
-melee_sim.preload_game_data()  # MSL_DATA_DIR, or pass the data dir explicitly
-gc.collect()
-gc.freeze()  # keep the workers' first GC pass from copying the inherited heap
-```
-
-```python
-import multiprocessing as mp
-
-ctx = mp.get_context("forkserver")
-ctx.set_forkserver_preload(["myproject.sim_preload"])
-workers = [ctx.Process(target=step_shard, args=(i,)) for i in range(16)]
-```
-
-Each worker then builds its own `EnvBatch` as usual; `msl_batch_create` finds the data already
-loaded. In C the equivalent is `msl_game_data_acquire(root)` in the template before forking, and
-`msl_game_data_release()` when the template no longer needs it.
-
-Constraints: one data root per process (a second root is `MSL_INVALID_STATE`), and the usual
-one: a batch is driven from one thread at a time. Which thread does not matter; every reset and
-step rebinds the runtime's thread-local context from the batch. Without a preload nothing changes:
-each process loads the data on its first batch.
+For multiple workers, see [sharing game data across processes](API.md#sharing-game-data-across-worker-processes).
 
 ### C Native API
 
-`MslBatch` owns every mutable environment and shares the process's immutable game data, which is
-loaded once per process (by the first `msl_batch_create`, or ahead of time by
-`msl_game_data_acquire`, so that processes forked afterwards share its pages copy-on-write; the
-Python binding is `melee_sim.preload_game_data`). Reset and step consume contiguous arrays whose
-length is the batch size; the simulator allocates nothing on those paths.
+`MslBatch` owns the mutable environments and shares immutable game data within its process.
+Reset and step consume contiguous arrays whose length is the batch size; the simulator
+allocates nothing on those paths.
 
 ```c
 #include <stdio.h>
@@ -217,7 +169,6 @@ Prerequisites:
 - network access on the first build to download character display assets
 
 ```bash
-npm --prefix tools/viewer/slippi-viewer install
 make viewer-build
 make viewer
 ```
