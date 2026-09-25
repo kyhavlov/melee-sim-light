@@ -66,6 +66,15 @@ Player slots are viewpoint-relative: `slots[0]` is self, then allies by source
 player index, then opponents by source player index. Unused slots have
 `present == 0`.
 
+`followers[k]` is the Ice Climbers follower (Nana) of the player in `slots[k]`,
+in the same `MslObservationPlayer` layout. Her `char_id` is her own fighter kind,
+`11`, which is not an `MSL_CHARACTER_*` value; `source_player`, `team_relation`,
+`team_id` and `stocks` repeat her leader's.
+It has `present == 1` exactly while Slippi records follower rows: while her
+fighter is awake, including her death animation, but not while she sleeps
+until the leader's Rebirth. Otherwise, and for every other character, it is
+zeroed.
+
 Top-level fields:
 
 | field | type | values / range | shape |
@@ -79,6 +88,7 @@ Top-level fields:
 | `stage` | `MslObservationStage` | stage-owned state | scalar |
 | `slots` | `MslObservationPlayer` | viewpoint-relative players | `[4]` |
 | `items` | `MslItem` | active/inactive item slots | `[15]` |
+| `followers` | `MslObservationPlayer` | follower of each slot's player | `[4]` |
 
 `MslObservationPlayer`:
 

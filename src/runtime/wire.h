@@ -359,7 +359,7 @@ _Static_assert(sizeof(MslCoreObservationPlayer) == 56,
                "MslCoreObservationPlayer wire size");
 _Static_assert(sizeof(MslCoreObservationStage) == 20,
                "MslCoreObservationStage wire size");
-_Static_assert(sizeof(MslCoreObservation) == 980,
+_Static_assert(sizeof(MslCoreObservation) == 1204,
                "MslCoreObservation wire size");
 _Static_assert(sizeof(MslCoreTerminal) == 16,
                "MslCoreTerminal wire size");

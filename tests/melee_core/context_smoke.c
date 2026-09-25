@@ -1,6 +1,10 @@
 #include "runtime/scalar.h"
 #include "runtime/observation.h"
+#include "ft/fighter.h"
+#include "ft/ftcommon.h"
 #include "ft/types.h"
+#include "ftCommon/forward.h"
+#include "ftCommon/ftCo_Fall.h"
 #include "it/types.h"
 
 #include <stdio.h>
@@ -202,6 +206,110 @@ static int observation_projection_matches(const MslCoreMatch* match,
     return 1;
 }
 
+static void place_off_stage(Fighter_GObj* gobj)
+{
+    Fighter* fp = GET_FIGHTER(gobj);
+    fp->cur_pos = (Vec3) { -300, 40, 0 };
+    fp->prev_pos = fp->cur_pos;
+    ftCommon_8007D5D4(fp);
+    ftCo_Fall_Enter(gobj);
+}
+
+static int follower_frame_matches(const MslCoreMatch* match,
+                                  MslCoreObservation* observation)
+{
+    static const MslCoreObservationPlayer absent;
+    const MslCoreObservationPlayer* nana = &observation->followers[0];
+    if (!observation_projection_matches(match, "follower life-cycle") ||
+        msl_core_match_write_observation(match, 0, observation) != 0)
+    {
+        return 0;
+    }
+    if (nana->present != msl_core_match_output(match)->follower_present[0] ||
+        (!nana->present && memcmp(nana, &absent, sizeof(absent)) != 0))
+    {
+        fprintf(stderr, "follower observation leaves the compare life-cycle: "
+                        "frame=%d present=%d\n",
+                match->frame_id, nana->present);
+        return 0;
+    }
+    return 1;
+}
+
+/* Nana alone past the blast zone, then her leader. She must stay observed
+ * until her KO, show a death animation, be absent while asleep, and return
+ * only with the leader's Rebirth after his KO. Every frame must keep the live
+ * and compare observations identical and followers[0] on the compare lane's
+ * life-cycle, zeroed while absent. */
+static int follower_life_cycle_observed(const MslCoreGameData* game_data)
+{
+    enum { NANA_KO = 150, LEADER_KO_DELAY = 60 };
+    MslCoreMatchConfig config;
+    MslCoreInput input = { 0 };
+    MslCoreStageEvents stage_events = { 0 };
+    MslCoreMatch match;
+    MslCoreObservation observation;
+    const MslCoreObservationPlayer* nana = &observation.followers[0];
+    const char* failure = NULL;
+    int frame;
+    int died = 0;
+    int slept_at = -1;
+    int leader_ko = -1;
+    int returned = 0;
+    uint8_t stocks = 0;
+
+    config_init(&config, 32, MSL_CHARACTER_ICE_CLIMBERS, 4);
+    if (msl_core_match_init(&match, game_data, &config, &input) != 0) {
+        return 0;
+    }
+    for (frame = 0; frame < 900 && !returned && failure == NULL; ++frame) {
+        if (frame == NANA_KO) {
+            place_off_stage(match.follower_fighters[0]);
+        }
+        if (slept_at >= 0 && frame == slept_at + LEADER_KO_DELAY) {
+            leader_ko = frame;
+            place_off_stage(match.fighters[0]);
+        }
+        if (msl_core_match_step(&match, &input, 1, &stage_events) != 0 ||
+            !follower_frame_matches(&match, &observation))
+        {
+            msl_memory_context_destroy(&match.memory);
+            return 0;
+        }
+        if (frame < NANA_KO) {
+            stocks = observation.slots[0].stocks;
+            if (!nana->present) {
+                failure = "absent before her KO";
+            }
+        } else if (slept_at < 0) {
+            if (nana->present) {
+                died |= nana->action_id <= ftCo_MS_DeadUpFallHitCameraIce;
+            } else if (!died) {
+                failure = "absent without a death animation";
+            } else {
+                slept_at = frame;
+            }
+        } else if (nana->present) {
+            if (leader_ko < 0 || observation.slots[0].stocks != stocks - 1) {
+                failure = "back without her leader's KO";
+            }
+            returned = 1;
+        }
+    }
+    msl_memory_context_destroy(&match.memory);
+    if (failure == NULL && !returned) {
+        failure = "never back";
+    }
+    if (failure != NULL) {
+        fprintf(stderr, "follower life-cycle: %s (frame %d)\n", failure, frame);
+        return 0;
+    }
+    fprintf(stderr, "follower life-cycle: KO at %d, asleep from %d, leader KO "
+                    "at %d, back at %d\n",
+            NANA_KO, slept_at, leader_ko, frame - 1);
+    return 1;
+}
+
 /* Nested color loops overlay pointer/count slots beyond CommandInfo's
  * declared three entries; every owning object must relocate all six. */
 static int color_return_slots_registered(void)
@@ -344,6 +452,9 @@ int main(int argc, char** argv)
             return 1;
         }
         msl_memory_context_destroy(&reference.memory);
+    }
+    if (!follower_life_cycle_observed(&game_data)) {
+        return 1;
     }
 
     // All class/source initialization has now been exercised. Gameplay Match

@@ -117,11 +117,10 @@ static void write_player_from_compare(const MslCoreCompare* compare,
     out[offsetof(MslCoreObservationPlayer, invulnerable)] = hurtbox != 0;
 }
 
-static void write_player(const MslCoreMatch* match, int player,
-                         uint8_t relation,
-                         MslCoreObservationPlayer* output)
+static void write_fighter(const MslCoreMatch* match, const Fighter* fp,
+                          float pos_x, float pos_y, int player,
+                          uint8_t relation, MslCoreObservationPlayer* output)
 {
-    const Fighter* fp = GET_FIGHTER(match->fighters[player]);
     uint8_t* out = (uint8_t*) output;
     float hitstun = fp->x221C_b6 ? fp->mv.co.damage.x0 : 0.0F;
     int hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
@@ -131,10 +130,8 @@ static void write_player(const MslCoreMatch* match, int player,
     out[offsetof(MslCoreObservationPlayer, source_player)] = (uint8_t) player;
     out[offsetof(MslCoreObservationPlayer, team_relation)] = relation;
     out[offsetof(MslCoreObservationPlayer, team_id)] = fp->team;
-    put_f32(out, offsetof(MslCoreObservationPlayer, pos_x),
-            match->output_pos_x[player]);
-    put_f32(out, offsetof(MslCoreObservationPlayer, pos_y),
-            match->output_pos_y[player]);
+    put_f32(out, offsetof(MslCoreObservationPlayer, pos_x), pos_x);
+    put_f32(out, offsetof(MslCoreObservationPlayer, pos_y), pos_y);
     put_f32(out, offsetof(MslCoreObservationPlayer, speed_air_x_self),
             fp->self_vel.x);
     put_f32(out, offsetof(MslCoreObservationPlayer, speed_ground_x_self),
@@ -167,6 +164,86 @@ static void write_player(const MslCoreMatch* match, int player,
     out[offsetof(MslCoreObservationPlayer, jumps_left)] =
         jumps_left > 0 ? (uint8_t) jumps_left : 0;
     out[offsetof(MslCoreObservationPlayer, hurtbox_state)] = (uint8_t) hurtbox;
+    out[offsetof(MslCoreObservationPlayer, invulnerable)] = hurtbox != 0;
+}
+
+// Writes the player into slots[slot] and its follower (Nana) into
+// followers[slot]. The follower follows the compare lanes' life-cycle: she is
+// absent while asleep before Rebirth.
+// refs/melee/src/melee/ft/ftcolanim.c::ftCo_800BFD04
+static void write_slot(const MslCoreMatch* match, int player, uint8_t relation,
+                       int slot, MslCoreObservation* output)
+{
+    const Fighter* follower;
+
+    write_fighter(match, GET_FIGHTER(match->fighters[player]),
+                  match->output_pos_x[player], match->output_pos_y[player],
+                  player, relation, &output->slots[slot]);
+    if (match->follower_fighters[player] == NULL) {
+        return;
+    }
+    follower = GET_FIGHTER(match->follower_fighters[player]);
+    if (follower->x221F_b3) {
+        return;
+    }
+    write_fighter(match, follower, match->follower_output_pos_x[player],
+                  match->follower_output_pos_y[player], player, relation,
+                  &output->followers[slot]);
+}
+
+static void write_follower_from_compare(const MslCoreCompare* compare,
+                                        int player, uint8_t relation,
+                                        MslCoreObservationPlayer* output)
+{
+    const uint8_t* source = (const uint8_t*) compare;
+    uint8_t* out = (uint8_t*) output;
+    uint8_t hurtbox;
+
+    if (!source[offsetof(MslCoreCompare, follower_present) + player]) {
+        return;
+    }
+    hurtbox = source[offsetof(MslCoreCompare, follower_hurtbox_state) + player];
+    out[offsetof(MslCoreObservationPlayer, present)] = 1;
+    out[offsetof(MslCoreObservationPlayer, source_player)] = (uint8_t) player;
+    out[offsetof(MslCoreObservationPlayer, team_relation)] = relation;
+    // Slippi has no follower team lane: the follower is on her leader's team.
+    out[offsetof(MslCoreObservationPlayer, team_id)] =
+        source[offsetof(MslCoreCompare, team_id) + player];
+#define COPY_F32(field)                                                       \
+    put_f32(out, offsetof(MslCoreObservationPlayer, field),                  \
+            compare_player_f32(compare,                                      \
+                               offsetof(MslCoreCompare, follower_##field),   \
+                               player))
+#define COPY_U16(field)                                                       \
+    put_u16(out, offsetof(MslCoreObservationPlayer, field),                  \
+            compare_player_u16(compare,                                      \
+                               offsetof(MslCoreCompare, follower_##field),   \
+                               player))
+#define COPY_U8(field)                                                        \
+    out[offsetof(MslCoreObservationPlayer, field)] =                          \
+        source[offsetof(MslCoreCompare, follower_##field) + player]
+    COPY_F32(pos_x);
+    COPY_F32(pos_y);
+    COPY_F32(speed_air_x_self);
+    COPY_F32(speed_ground_x_self);
+    COPY_F32(speed_y_self);
+    COPY_F32(speed_x_attack);
+    COPY_F32(speed_y_attack);
+    COPY_F32(percent);
+    COPY_F32(shield_hp);
+    COPY_U16(action_id);
+    COPY_U16(action_frame);
+    COPY_U16(hitlag);
+    COPY_U16(hitstun);
+    COPY_U8(char_id);
+    COPY_U8(stocks);
+    COPY_U8(facing);
+    COPY_U8(on_ground);
+    COPY_U8(jumps_left);
+#undef COPY_F32
+#undef COPY_U16
+#undef COPY_U8
+    out[offsetof(MslCoreObservationPlayer, hurtbox_state)] = hurtbox;
     out[offsetof(MslCoreObservationPlayer, invulnerable)] = hurtbox != 0;
 }
 
@@ -284,13 +361,13 @@ int msl_core_match_write_observation(const MslCoreMatch* match,
 
     viewpoint_team =
         GET_FIGHTER(match->fighters[viewpoint_player])->team;
-    write_player(match, viewpoint_player, 0, &output->slots[slot++]);
+    write_slot(match, viewpoint_player, 0, slot++, output);
     if (match->config.is_teams) {
         for (player = 0; player < match->config.num_players; ++player) {
             if (player != viewpoint_player &&
                 GET_FIGHTER(match->fighters[player])->team == viewpoint_team)
             {
-                write_player(match, player, 1, &output->slots[slot++]);
+                write_slot(match, player, 1, slot++, output);
             }
         }
     }
@@ -299,7 +376,7 @@ int msl_core_match_write_observation(const MslCoreMatch* match,
             (!match->config.is_teams ||
              GET_FIGHTER(match->fighters[player])->team != viewpoint_team))
         {
-            write_player(match, player, 2, &output->slots[slot++]);
+            write_slot(match, player, 2, slot++, output);
         }
     }
     item_count = msl_core_write_items_into_zeroed(match, output->items);
@@ -341,6 +418,8 @@ int msl_core_match_write_observation_from_compare(
 
     viewpoint_team = source[offsetof(MslCoreCompare, team_id) +
                             viewpoint_player];
+    write_follower_from_compare(compare, viewpoint_player, 0,
+                                &output->followers[slot]);
     write_player_from_compare(compare, viewpoint_player, 0,
                               &output->slots[slot++]);
     if (match->config.is_teams) {
@@ -349,6 +428,8 @@ int msl_core_match_write_observation_from_compare(
                 source[offsetof(MslCoreCompare, team_id) + player] ==
                     viewpoint_team)
             {
+                write_follower_from_compare(compare, player, 1,
+                                            &output->followers[slot]);
                 write_player_from_compare(compare, player, 1,
                                           &output->slots[slot++]);
             }
@@ -360,6 +441,8 @@ int msl_core_match_write_observation_from_compare(
              source[offsetof(MslCoreCompare, team_id) + player] !=
                  viewpoint_team))
         {
+            write_follower_from_compare(compare, player, 2,
+                                        &output->followers[slot]);
             write_player_from_compare(compare, player, 2,
                                       &output->slots[slot++]);
         }

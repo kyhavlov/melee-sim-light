@@ -215,6 +215,10 @@ typedef struct MslObservation {
   MslObservationStage stage;
   MslObservationPlayer slots[MSL_MAX_PLAYERS];
   MslItem items[MSL_MAX_ITEMS];
+  // Ice Climbers' Nana: followers[k] is the follower of the player in
+  // slots[k], present only while Slippi would record a follower row for her
+  // (awake, including her death animation; not while asleep before Rebirth).
+  MslObservationPlayer followers[MSL_MAX_PLAYERS];
 } MslObservation;
 
 typedef struct MslTerminal {
