@@ -84,13 +84,44 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     assert dtypes.controller_input_dtype().itemsize == 112
     assert dtypes.input_dtype().itemsize == 32
     assert dtypes.match_config_dtype().itemsize == 52
-    assert dtypes.gamestate_dtype().itemsize == 1204
+    assert dtypes.gamestate_dtype().itemsize == 1208
+    assert dtypes.gamestate_stage_dtype().itemsize == 24
+    assert dtypes.gamestate_stage_dtype().fields["whispy"][1] == 20
     assert dtypes.terminal_dtype().itemsize == 16
 
     buffers = msl.Buffers.empty(length=2, batch_size=3)
     players = buffers.controller_action_view["players"]
     assert np.all(players["main_stick_x"] == 0.5)
     assert np.all(players["main_stick_y"] == 0.5)
+
+
+def test_whispy_observes_live_wind_and_clears_on_reset(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    wind = msl.WhispyBlowDirection
+    assert (int(wind.NONE), int(wind.LEFT), int(wind.RIGHT)) == (0, 1, 2)
+    with msl.EnvBatch(batch_size=2, length=128) as env:
+        env.configure_matches([
+            msl.MatchConfig(stage=msl.Stage.DREAM_LAND_N64, seed=1),
+            msl.MatchConfig(stage=msl.Stage.FINAL_DESTINATION, seed=1),
+        ])
+        env.reset_all()
+        assert np.all(env.current_frame["stage"]["whispy"] == wind.NONE)
+        for _ in range(4000):
+            if env.t == env.length:
+                env.reset_cursor()
+            env.step()
+            directions = env.current_frame["stage"]["whispy"].copy()
+            assert directions[1] == wind.NONE
+            if directions[0] != wind.NONE:
+                break
+        else:
+            pytest.fail("Whispy never started blowing")
+        assert directions[0] in (wind.LEFT, wind.RIGHT)
+        env.observe()
+        np.testing.assert_array_equal(env.current_frame["stage"]["whispy"], directions)
+        env.configure_match(stage=msl.Stage.FINAL_DESTINATION, env_ids=[0])
+        env.reset_matches([0])
+        assert np.all(env.current_frame["stage"]["whispy"] == wind.NONE)
 
 
 @pytest.mark.parametrize("characters", [

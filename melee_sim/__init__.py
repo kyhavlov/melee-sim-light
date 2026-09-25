@@ -17,7 +17,7 @@ from .controller import (
     neutral_controller,
     write_controller,
 )
-from .config import Character, MatchConfig, PlayerConfig, Stage
+from .config import Character, MatchConfig, PlayerConfig, Stage, WhispyBlowDirection
 from .dtypes import (
     controller_input_dtype,
     input_dtype,
@@ -51,6 +51,7 @@ __all__ = [
     "MatchConfig",
     "PlayerConfig",
     "Stage",
+    "WhispyBlowDirection",
     "controller_input_dtype",
     "input_dtype",
     "item_dtype",

@@ -1,4 +1,5 @@
 #include "runtime/context.h"
+#include "runtime/observation.h"
 #include "runtime/savestate.h"
 #include "runtime/scalar.h"
 #include "ft/ftlib.h"
@@ -13,6 +14,18 @@ static Ground* controller(MslCoreMatch* match)
 {
     msl_core_bind_match(match);
     return Ground_801C2BA4(3)->user_data;
+}
+
+static int whispy_is(const MslCoreMatch* match, uint8_t direction)
+{
+    MslCoreObservation live;
+    MslCoreObservation compared;
+    memset(&live, 0xA5, sizeof(live));
+    memset(&compared, 0xA5, sizeof(compared));
+    return msl_core_match_write_observation(match, 0, &live) == 0 &&
+           msl_core_match_write_observation_from_compare(match, 0, &compared) == 0 &&
+           live.stage.whispy == direction &&
+           memcmp(&live, &compared, sizeof(live)) == 0;
 }
 
 int main(int argc, char** argv)
@@ -117,6 +130,55 @@ int main(int argc, char** argv)
     matches[0].random.value = 1;
     if (ftLib_800864A8(&(Vec3) { 0 }, NULL) != 1 ||
         matches[0].random.value != 1)
+        goto fail;
+
+    // Replay events change the source actor at the callback epilogue. The
+    // observation must publish that frame's value, and retain it on frames
+    // without a new event, just as libmelee retains its last 0x40 payload.
+    config.stage_event_streams = 2;
+    if (msl_core_match_reset(&matches[0], &game_data, &config, &input) != 0 ||
+        !whispy_is(&matches[0], MSL_WHISPY_NONE))
+        goto fail;
+    free(snapshot);
+    snapshot_size = msl_core_match_save_size(&matches[0]);
+    snapshot = malloc(snapshot_size);
+    if (snapshot == NULL) goto fail;
+    {
+        const uint8_t directions[] = {
+            MSL_WHISPY_LEFT, MSL_WHISPY_RIGHT, MSL_WHISPY_NONE,
+        };
+        for (i = 0; i < 3; ++i) {
+            events.dreamland_whispy_valid = 1;
+            events.dreamland_whispy_direction = directions[i];
+            if (msl_core_match_step(&matches[0], &input, 1, &events) != 0 ||
+                !whispy_is(&matches[0], directions[i]))
+                goto fail;
+            events.dreamland_whispy_valid = 0;
+            if (msl_core_match_step(&matches[0], &input, 1, &events) != 0 ||
+                !whispy_is(&matches[0], directions[i]) ||
+                msl_core_match_copy(&matches[1], &matches[0]) != 0 ||
+                msl_core_match_save(&matches[0], snapshot, snapshot_size, NULL) != 0 ||
+                msl_core_match_restore(&matches[2], snapshot, snapshot_size) != 0 ||
+                !whispy_is(&matches[1], directions[i]) ||
+                !whispy_is(&matches[2], directions[i]))
+                goto fail;
+        }
+    }
+    // A dirty observation must not carry a previous Dream Land wind into
+    // another stage or a fresh match.
+    events.dreamland_whispy_valid = 1;
+    events.dreamland_whispy_direction = MSL_WHISPY_RIGHT;
+    if (msl_core_match_step(&matches[0], &input, 1, &events) != 0 ||
+        !whispy_is(&matches[0], MSL_WHISPY_RIGHT))
+        goto fail;
+    config.stage_event_streams = 0;
+    config.stage_id = MSL_STAGE_FINAL_DESTINATION;
+    if (msl_core_match_reset(&matches[0], &game_data, &config, &input) != 0 ||
+        !whispy_is(&matches[0], MSL_WHISPY_NONE))
+        goto fail;
+    config.stage_id = MSL_STAGE_DREAM_LAND_N64;
+    if (msl_core_match_reset(&matches[0], &game_data, &config, &input) != 0 ||
+        !whispy_is(&matches[0], MSL_WHISPY_NONE))
         goto fail;
 
     free(snapshot);

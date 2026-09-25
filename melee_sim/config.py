@@ -42,6 +42,12 @@ class Stage(IntEnum):
     FINAL_DESTINATION = 32
 
 
+class WhispyBlowDirection(IntEnum):
+    NONE = 0
+    LEFT = 1
+    RIGHT = 2
+
+
 @dataclass(frozen=True, slots=True)
 class PlayerConfig:
     character: int | Character

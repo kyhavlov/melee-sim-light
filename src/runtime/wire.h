@@ -357,9 +357,9 @@ _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");
 _Static_assert(sizeof(MslCoreObservationPlayer) == 56,
                "MslCoreObservationPlayer wire size");
-_Static_assert(sizeof(MslCoreObservationStage) == 20,
+_Static_assert(sizeof(MslCoreObservationStage) == 24,
                "MslCoreObservationStage wire size");
-_Static_assert(sizeof(MslCoreObservation) == 1204,
+_Static_assert(sizeof(MslCoreObservation) == 1208,
                "MslCoreObservation wire size");
 _Static_assert(sizeof(MslCoreTerminal) == 16,
                "MslCoreTerminal wire size");

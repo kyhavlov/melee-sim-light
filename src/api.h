@@ -67,6 +67,12 @@ typedef enum MslStage {
   MSL_STAGE_FINAL_DESTINATION = 32,
 } MslStage;
 
+typedef enum MslWhispyBlowDirection {
+  MSL_WHISPY_NONE = 0,
+  MSL_WHISPY_LEFT = 1,
+  MSL_WHISPY_RIGHT = 2,
+} MslWhispyBlowDirection;
+
 typedef enum MslButton {
   MSL_BUTTON_D_DOWN = 0x0004,
   MSL_BUTTON_D_UP = 0x0008,
@@ -202,6 +208,8 @@ typedef struct MslObservationFodPlatforms {
 typedef struct MslObservationStage {
   MslObservationRandall randall;
   MslObservationFodPlatforms fod_platforms;
+  uint8_t whispy; // MSL_WHISPY_*; NONE outside Dream Land.
+  uint8_t _pad0[3];
 } MslObservationStage;
 
 typedef struct MslObservation {

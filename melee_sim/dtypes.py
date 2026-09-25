@@ -10,7 +10,7 @@ _SIZES = {
     "controller_input": 112,
     "input": 32,
     "match_config": 52,
-    "gamestate": 1204,
+    "gamestate": 1208,
     "terminal": 16,
 }
 
@@ -208,6 +208,8 @@ def gamestate_stage_dtype() -> np.dtype:
         [
             ("randall", gamestate_randall_dtype()),
             ("fod_platforms", [("left", "<f4"), ("right", "<f4")]),
+            ("whispy", "u1"),
+            ("_pad0", "u1", (3,)),
         ],
         align=False,
     )

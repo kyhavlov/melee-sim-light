@@ -131,13 +131,14 @@ Top-level fields:
 | `spawn_id` | `uint32_t` | deterministic spawn identity |
 | `misc0`, `misc1`, `misc2`, `misc3` | `uint8_t` | item-specific bytes |
 
-`MslObservationStage` exposes the policy-relevant moving platform state:
+`MslObservationStage` exposes moving platforms and Whispy's wind:
 
 | field | type | values / range |
 | --- | --- | --- |
 | `randall.exists` | `uint8_t` | `0` or `1` |
 | `randall.x`, `randall.y` | `float` | world coordinates |
 | `fod_platforms.left`, `fod_platforms.right` | `float` | Fountain of Dreams platform heights |
+| `whispy` | `uint8_t` | `MSL_WHISPY_NONE` (0), `MSL_WHISPY_LEFT` (1), `MSL_WHISPY_RIGHT` (2) |
 
 ## Terminal Output
 

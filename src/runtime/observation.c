@@ -276,6 +276,21 @@ static void write_stage(const MslCoreMatch* match,
                         ground->gv.izumi3.xD0);
             }
         }
+    } else if (match->config.stage_id == MSL_STAGE_DREAM_LAND_N64) {
+        for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
+            const Ground* ground = &match->stage_ground[i];
+            if (!match->stage_ground_used[i] || ground->map_id != 7) {
+                continue;
+            }
+            // refs/slippi-ssbm-asm/Recording/Stages/SendDreamlandInfo.asm
+            // records actor 7's xDC at 0x80211BF8, the epilogue of
+            // grOldPupupu_802113E0. fn_802112F4 consumes the same value:
+            // 0=none, 1=left, 2=right.
+            // Read the actor, not the optional replay-input override.
+            out[offsetof(MslCoreObservationStage, whispy)] =
+                (uint8_t) ground->gv.oldpupupu.xDC;
+            break;
+        }
     } else if (match->config.stage_id == MSL_CORE_STAGE_YOSHIS_STORY) {
         for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
             const Ground* ground = &match->stage_ground[i];
