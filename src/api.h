@@ -166,8 +166,8 @@ typedef struct MslItem {
 } MslItem;
 
 typedef struct MslObservationPlayer {
-  uint8_t present;
-  uint8_t source_player;
+  uint8_t present; /* Fighter is awake; roster metadata remains when absent. */
+  uint8_t source_player; /* UINT8_MAX for unused roster slots. */
   uint8_t team_relation;
   uint8_t team_id;
   float pos_x;

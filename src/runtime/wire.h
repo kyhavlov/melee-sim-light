@@ -73,11 +73,14 @@ typedef struct MslCoreStreamFrame {
     MslCoreStageEvents stage_events;
 } MslCoreStreamFrame;
 
+enum { MSL_FACING_AUTO_FLAG = 0x10 };
+
 typedef struct MslCoreMatchPlayerConfig {
     uint8_t char_id;
     uint8_t team_id;
     // Bit 0 is facing. Bits 1..3 optionally carry the one-based physical
-    // controller port; zero keeps the compact legacy slot default.
+    // controller port; zero selects the source index and automatic facing.
+    // Bit 4 selects automatic facing with an explicit controller port.
     uint8_t facing_and_port;
     uint8_t costume_id;
     uint8_t handicap;

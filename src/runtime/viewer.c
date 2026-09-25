@@ -298,27 +298,12 @@ static void write_stage(const MslCoreMatch* match, uint8_t* out)
             }
         }
     } else if (match->config.stage_id == MSL_CORE_STAGE_YOSHIS_STORY) {
-        for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
-            const Ground* ground = &match->stage_ground[i];
-            Vec3 position;
-            if (!match->stage_ground_used[i] || ground->map_id != 2 ||
-                ground->u.randall.jobj == NULL)
-            {
-                continue;
-            }
-            // Randall is map actor 2; its child JObj drives the moving
-            // collision box and therefore is the authoritative render point.
-            // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,
-            //   grStory_801E33E0}
-            // The stage process has already published the matrix consumed by
-            // collision for this frame. Output must not force a newer lazy
-            // matrix epoch or mutate the state it observes.
-            position.x = ground->u.randall.jobj->mtx[0][3];
-            position.y = ground->u.randall.jobj->mtx[1][3];
+        float x;
+        float y;
+        if (msl_match_randall_position(match, &x, &y)) {
             out[offsetof(MslCoreViewerStage, randall_exists)] = 1;
-            put_f32(out, offsetof(MslCoreViewerStage, randall_x), position.x);
-            put_f32(out, offsetof(MslCoreViewerStage, randall_y), position.y);
-            break;
+            put_f32(out, offsetof(MslCoreViewerStage, randall_x), x);
+            put_f32(out, offsetof(MslCoreViewerStage, randall_y), y);
         }
     }
 }

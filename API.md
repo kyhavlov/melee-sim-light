@@ -65,15 +65,17 @@ constant; facing accepts `MSL_FACING_LEFT`, `MSL_FACING_RIGHT`, or `MSL_FACING_A
 and `msl_batch_observe()`.
 
 Player slots are viewpoint-relative: `slots[0]` is self, then allies by source
-player index, then opponents by source player index. Unused slots have
-`present == 0`.
+player index, then opponents by source player index. Eliminated leaders have
+`present == 0` and zero dynamic fields; `source_player`, `team_relation`, `team_id`,
+`char_id`, and `stocks` remain available. Unused leader slots have
+`source_player == 255` and all other fields zero.
 
 `followers[k]` is the Ice Climbers follower (Nana) of the player in `slots[k]`,
 in the same `MslObservationPlayer` layout. Her `char_id` is her own fighter kind,
 `11`, which is not an `MSL_CHARACTER_*` value; `source_player`, `team_relation`,
 `team_id` and `stocks` repeat her leader's.
 It has `present == 1` exactly while Slippi records follower rows: while her
-fighter is awake, including her death animation, but not while she sleeps
+fighter is awake, including her death animation, but not while she is eliminated
 until the leader's Rebirth. Otherwise, and for every other character, it is
 zeroed.
 
@@ -97,7 +99,7 @@ Top-level fields:
 | field | type | values / range |
 | --- | --- | --- |
 | `present` | `uint8_t` | `0` or `1` |
-| `source_player` | `uint8_t` | `0..num_players-1` when present |
+| `source_player` | `uint8_t` | roster index `0..num_players-1`, or `255` for unused slots |
 | `team_relation` | `uint8_t` | `0` self, `1` ally, `2` opponent |
 | `team_id` | `uint8_t` | team assignment |
 | `pos_x`, `pos_y` | `float` | world coordinates |
@@ -138,7 +140,7 @@ Top-level fields:
 | field | type | values / range |
 | --- | --- | --- |
 | `randall.exists` | `uint8_t` | `0` or `1` |
-| `randall.x`, `randall.y` | `float` | world coordinates |
+| `randall.x`, `randall.y` | `float` | midpoint of the live collision floor in world coordinates |
 | `fod_platforms.left`, `fod_platforms.right` | `float` | Fountain of Dreams platform heights |
 | `whispy` | `uint8_t` | `MSL_WHISPY_NONE` (0), `MSL_WHISPY_LEFT` (1), `MSL_WHISPY_RIGHT` (2) |
 

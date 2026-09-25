@@ -90,14 +90,14 @@ static int valid_config(const MslCoreMatchConfig* config)
     }
     for (player = 0; player < config->num_players; ++player) {
         uint8_t encoded = config->players[player].facing_and_port;
-        uint8_t port = encoded >> 1;
+        uint8_t port = (encoded >> 1) & 7;
         uint32_t previous;
         source_slots[player] = port == 0 ? (uint8_t) player : (uint8_t) (port - 1);
         if (!supported_character(config->players[player].char_id) ||
             config->players[player].handicap > 9 ||
             config->players[player].start_percent > 100 ||
             (config->is_teams && config->players[player].team_id > 2) ||
-            source_slots[player] >= MSL_CORE_MAX_PLAYERS)
+            source_slots[player] >= MSL_CORE_MAX_PLAYERS || (encoded & 0xE0))
         {
             return 0;
         }

@@ -1,4 +1,9 @@
 #include "runtime/scalar.h"
+#include "runtime/observation.h"
+#include "runtime/viewer.h"
+#include "mp/mplib.h"
+#include "ft/fighter.h"
+#include "ft/chara/ftCommon/forward.h"
 #include "runtime/wire.h"
 #include "runtime/context.h"
 #include "runtime/match.h"
@@ -10,6 +15,85 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static int check_absent_observation(MslCoreMatch* match)
+{
+    Fighter* fp = GET_FIGHTER(match->fighters[0]);
+    Fighter saved = *fp;
+    int stocks = Player_GetStocks(fp->player_id);
+    MslCoreObservation direct;
+    MslCoreObservation compared;
+    MslCoreObservationPlayer expected = { 0 };
+    int result = 0;
+
+    Player_SetStocks(fp->player_id, 0);
+    fp->motion_id = ftCo_MS_DeadDown;
+    fp->x221F_b3 = 0;
+    fp->dmg.x1830_percent = 43;
+    msl_core_match_write_observation(match, 0, &direct);
+    if (!direct.slots[0].present || direct.slots[0].percent != 43) {
+        fprintf(stderr, "KO animation disappeared before Sleep\n");
+        result = 1;
+    }
+    fp->motion_id = ftCo_MS_Sleep;
+    fp->x221F_b3 = 1;
+    msl_core_match_write_observation(match, 0, &direct);
+    msl_core_match_write_observation_from_compare(match, 0, &compared);
+    expected.char_id = fp->kind;
+    expected.team_id = fp->team;
+    if (memcmp(&direct.slots[0], &expected, sizeof(expected)) != 0 ||
+        memcmp(&direct, &compared, sizeof(direct)) != 0 ||
+        fp->dmg.x1830_percent != 43 || fp->motion_id != ftCo_MS_Sleep)
+    {
+        fprintf(stderr, "absent fighter observation leaked state or changed the fighter\n");
+        result = 1;
+    }
+    *fp = saved;
+    Player_SetStocks(fp->player_id, stocks);
+    return result;
+}
+
+static int check_randall_surface(MslCoreMatch* match, const MslCoreGameData* data,
+                                 MslCoreMatchConfig config)
+{
+    MslCoreInput input = { 0 };
+    int frame;
+    config.stage_id = MSL_STAGE_YOSHIS_STORY;
+    if (msl_core_match_reset(match, data, &config, &input) != 0) return 1;
+    for (frame = 0; frame < 1200; ++frame) {
+        MslCoreObservation observation;
+        MslCoreViewerState viewer;
+        Vec3 hit;
+        Vec3 normal;
+        Vec3 left;
+        Vec3 right;
+        int line;
+        u32 flags;
+        float x;
+        float y;
+        if (msl_core_match_step(match, &input, (uint32_t) frame,
+                                &(MslCoreStageEvents) { 0 }) != 0) return 1;
+        msl_core_match_write_observation(match, 0, &observation);
+        msl_core_match_write_viewer(match, &viewer);
+        x = observation.stage.randall.x;
+        y = observation.stage.randall.y;
+        if (!observation.stage.randall.exists || !viewer.stage.randall_exists ||
+            viewer.stage.randall_x != x || viewer.stage.randall_y != y ||
+            !mpCheckFloor(x, y + 1, x, y - 1, 0, &hit, &line, &flags,
+                          &normal, -1, -1, -1, NULL, NULL))
+        {
+            fprintf(stderr, "Randall observation is not on a collision floor at %d\n", frame);
+            return 1;
+        }
+        mpFloorGetLeft(line, &left);
+        mpFloorGetRight(line, &right);
+        if (x != (left.x + right.x) * 0.5F || y != (left.y + right.y) * 0.5F) {
+            fprintf(stderr, "Randall surface differs from source collision endpoints\n");
+            return 1;
+        }
+    }
+    return 0;
+}
 
 int main(int argc, char** argv)
 {
@@ -118,6 +202,7 @@ int main(int argc, char** argv)
     }
     msl_core_bind_match(&match);
     msl_core_bind_match_rules(&match.rules);
+    if (check_absent_observation(&match) != 0) return 1;
     Player_SetStocks(match.source_slots[1], 0);
     gm_80167320(match.source_slots[1], false);
     if (match.rules.ended) {
@@ -130,6 +215,7 @@ int main(int argc, char** argv)
         fprintf(stderr, "doubles team elimination did not end the match\n");
         return 1;
     }
+    if (check_randall_surface(&match, &game_data, config) != 0) return 1;
     msl_core_match_destroy(&match);
     return 0;
 }

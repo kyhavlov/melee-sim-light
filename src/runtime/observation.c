@@ -1,8 +1,10 @@
 #include "runtime/observation.h"
 
+#include "ft/chara/ftCommon/forward.h"
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
+#include "mp/types.h"
 #include "runtime/item_projection.h"
 #include "runtime/scalar.h"
 
@@ -75,11 +77,20 @@ static void write_player_from_compare(const MslCoreCompare* compare,
     uint8_t hurtbox =
         source[offsetof(MslCoreCompare, hurtbox_state) + player];
 
-    out[offsetof(MslCoreObservationPlayer, present)] = 1;
     out[offsetof(MslCoreObservationPlayer, source_player)] = (uint8_t) player;
     out[offsetof(MslCoreObservationPlayer, team_relation)] = relation;
     out[offsetof(MslCoreObservationPlayer, team_id)] =
         source[offsetof(MslCoreCompare, team_id) + player];
+    out[offsetof(MslCoreObservationPlayer, char_id)] =
+        source[offsetof(MslCoreCompare, char_id) + player];
+    out[offsetof(MslCoreObservationPlayer, stocks)] =
+        source[offsetof(MslCoreCompare, stocks) + player];
+    if (compare_player_u16(compare, offsetof(MslCoreCompare, action_id), player) ==
+        ftCo_MS_Sleep)
+    {
+        return;
+    }
+    out[offsetof(MslCoreObservationPlayer, present)] = 1;
 #define COPY_F32(field)                                                       \
     put_f32(out, offsetof(MslCoreObservationPlayer, field),                  \
             compare_player_f32(compare, offsetof(MslCoreCompare, field),     \
@@ -103,10 +114,6 @@ static void write_player_from_compare(const MslCoreCompare* compare,
     COPY_U16(hitstun);
 #undef COPY_F32
 #undef COPY_U16
-    out[offsetof(MslCoreObservationPlayer, char_id)] =
-        source[offsetof(MslCoreCompare, char_id) + player];
-    out[offsetof(MslCoreObservationPlayer, stocks)] =
-        source[offsetof(MslCoreCompare, stocks) + player];
     out[offsetof(MslCoreObservationPlayer, facing)] =
         source[offsetof(MslCoreCompare, facing) + player];
     out[offsetof(MslCoreObservationPlayer, on_ground)] =
@@ -126,10 +133,18 @@ static void write_fighter(const MslCoreMatch* match, const Fighter* fp,
     int hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
     int jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
 
-    out[offsetof(MslCoreObservationPlayer, present)] = 1;
     out[offsetof(MslCoreObservationPlayer, source_player)] = (uint8_t) player;
     out[offsetof(MslCoreObservationPlayer, team_relation)] = relation;
     out[offsetof(MslCoreObservationPlayer, team_id)] = fp->team;
+    out[offsetof(MslCoreObservationPlayer, char_id)] = fp->kind;
+    out[offsetof(MslCoreObservationPlayer, stocks)] =
+        (uint8_t) match->source.player.slots[fp->player_id].stocks;
+    // Slippi's SendGamePostFrame omits sleeping fighters. Keep roster data,
+    // but leave the absent fighter's dynamic fields zeroed.
+    if (fp->x221F_b3) {
+        return;
+    }
+    out[offsetof(MslCoreObservationPlayer, present)] = 1;
     put_f32(out, offsetof(MslCoreObservationPlayer, pos_x), pos_x);
     put_f32(out, offsetof(MslCoreObservationPlayer, pos_y), pos_y);
     put_f32(out, offsetof(MslCoreObservationPlayer, speed_air_x_self),
@@ -154,9 +169,6 @@ static void write_fighter(const MslCoreMatch* match, const Fighter* fp,
             float_frames_u16(fp->dmg.x195c_hitlag_frames));
     put_u16(out, offsetof(MslCoreObservationPlayer, hitstun),
             float_frames_u16(hitstun));
-    out[offsetof(MslCoreObservationPlayer, char_id)] = fp->kind;
-    out[offsetof(MslCoreObservationPlayer, stocks)] =
-        (uint8_t) match->source.player.slots[fp->player_id].stocks;
     out[offsetof(MslCoreObservationPlayer, facing)] =
         fp->facing_dir > 0.0F;
     out[offsetof(MslCoreObservationPlayer, on_ground)] =
@@ -247,6 +259,43 @@ static void write_follower_from_compare(const MslCoreCompare* compare,
     out[offsetof(MslCoreObservationPlayer, invulnerable)] = hurtbox != 0;
 }
 
+int msl_match_randall_position(const MslCoreMatch* match, float* x, float* y)
+{
+    const MslMpLibState* map = &match->source.mp_lib;
+    int i;
+    int j;
+
+    if (match->config.stage_id != MSL_CORE_STAGE_YOSHIS_STORY) {
+        return 0;
+    }
+    // Read the collision vertices already published by grStory_801E33E0.
+    // The actor origin is below the floor; touching its lazy JObj matrix here
+    // could also advance the collision epoch. No binding or mutation is needed.
+    for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
+        const Ground* ground = &match->stage_ground[i];
+        if (!match->stage_ground_used[i] || ground->map_id != 2 ||
+            ground->u.randall.jobj == NULL)
+        {
+            continue;
+        }
+        for (j = 0; j < map->data->joint_count; ++j) {
+            const CollJoint* joint = &map->joints[j];
+            const MapJoint* bounds = joint->inner;
+            if (joint->x20 == ground->u.randall.jobj && bounds->floor_count > 0) {
+                const MapLine* left = map->lines[bounds->floor_start].x0;
+                const MapLine* right =
+                    map->lines[bounds->floor_start + bounds->floor_count - 1].x0;
+                const Vec2* v0 = &map->vertices[left->v0_idx].pos;
+                const Vec2* v1 = &map->vertices[right->v1_idx].pos;
+                *x = (v0->x + v1->x) * 0.5F;
+                *y = (v0->y + v1->y) * 0.5F;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 static void write_stage(const MslCoreMatch* match,
                         MslCoreObservationStage* output)
 {
@@ -292,28 +341,15 @@ static void write_stage(const MslCoreMatch* match,
             break;
         }
     } else if (match->config.stage_id == MSL_CORE_STAGE_YOSHIS_STORY) {
-        for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
-            const Ground* ground = &match->stage_ground[i];
-            if (!match->stage_ground_used[i] || ground->map_id != 2 ||
-                ground->u.randall.jobj == NULL)
-            {
-                continue;
-            }
-            // Randall's source JObj matrix is the moving collision actor's
-            // already-published position; observation must not advance it.
-            // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,
-            //   grStory_801E33E0}
+        float x;
+        float y;
+        if (msl_match_randall_position(match, &x, &y)) {
             out[offsetof(MslCoreObservationStage, randall) +
                 offsetof(MslCoreObservationRandall, exists)] = 1;
-            put_f32(out,
-                    offsetof(MslCoreObservationStage, randall) +
-                        offsetof(MslCoreObservationRandall, x),
-                    ground->u.randall.jobj->mtx[0][3]);
-            put_f32(out,
-                    offsetof(MslCoreObservationStage, randall) +
-                        offsetof(MslCoreObservationRandall, y),
-                    ground->u.randall.jobj->mtx[1][3]);
-            break;
+            put_f32(out, offsetof(MslCoreObservationStage, randall) +
+                            offsetof(MslCoreObservationRandall, x), x);
+            put_f32(out, offsetof(MslCoreObservationStage, randall) +
+                            offsetof(MslCoreObservationRandall, y), y);
         }
     }
 }
@@ -363,6 +399,9 @@ int msl_core_match_write_observation(const MslCoreMatch* match,
     }
     out = (uint8_t*) output;
     memset(output, 0, sizeof(*output));
+    for (player = 0; player < MSL_CORE_MAX_PLAYERS; ++player) {
+        output->slots[player].source_player = UINT8_MAX;
+    }
     put_u32(out, offsetof(MslCoreObservation, frame_id),
             (uint32_t) match->frame_id);
     put_u32(out, offsetof(MslCoreObservation, frame_pre_random_seed),
@@ -419,6 +458,9 @@ int msl_core_match_write_observation_from_compare(
     source = (const uint8_t*) compare;
     out = (uint8_t*) output;
     memset(output, 0, sizeof(*output));
+    for (player = 0; player < MSL_CORE_MAX_PLAYERS; ++player) {
+        output->slots[player].source_player = UINT8_MAX;
+    }
     memcpy(out + offsetof(MslCoreObservation, frame_id),
            source + offsetof(MslCoreCompare, frame_id), sizeof(uint32_t));
     memcpy(out + offsetof(MslCoreObservation, frame_pre_random_seed),

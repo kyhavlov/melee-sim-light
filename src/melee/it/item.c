@@ -1,5 +1,6 @@
 #include "item.h"
 #ifdef MSL_CORE_NATIVE
+#include <runtime/context.h>
 #include <runtime/relocation.h>
 #endif
 
@@ -2132,6 +2133,11 @@ void Item_OnUserDataRemove(void* user_data)
 {
     Item* item_data = (Item*) user_data;
 
+#ifdef MSL_CORE_NATIVE
+    // Native stores the source-width turnip owner pointer outside Item.
+    // Release that record with the Item, before its pool slot can be reused.
+    msl_core_peach_turnip_owner_set(item_data, NULL);
+#endif
     if (item_data->xBBC_dynamicBoneTable != NULL) {
         HSD_ObjFree(&item_dynamic_bones_alloc_data,
                     item_data->xBBC_dynamicBoneTable);

@@ -90,7 +90,7 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
 
   memset(target, 0, sizeof(*target));
   target->stage_id = source->stage;
-  target->frame_id = -123;
+  target->frame_id = -124;
   target->frame_pre_random_seed = source->random_seed;
   target->initial_random_seed = source->random_seed;
   target->match_damage_ratio = source->damage_ratio;
@@ -136,7 +136,8 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
             ? (source->is_teams ? (uint8_t)(player >= source->num_players / 2) : (uint8_t)player)
             : (uint8_t)src->team;
     dst->facing_and_port =
-        (uint8_t)((src->facing == MSL_FACING_AUTO ? player == 0 : src->facing == MSL_FACING_RIGHT) |
+        (uint8_t)((src->facing == MSL_FACING_AUTO ? MSL_FACING_AUTO_FLAG
+                                               : src->facing == MSL_FACING_RIGHT) |
                   ((port + 1) << 1));
     dst->costume_id = src->costume;
     dst->handicap = src->handicap;
@@ -372,9 +373,17 @@ MslResult msl_batch_reset(MslBatch* batch, const MslMatchConfig configs[],
   }
   for (env = 0; env < batch->size; ++env) {
     if (reset_mask == NULL || reset_mask[env] != 0) {
+      memset(&batch->inputs[env], 0, sizeof(batch->inputs[env]));
       batch->viewpoint_players[env] = configs[env].viewpoint_player;
       batch->max_frames[env] = configs[env].max_frame;
     }
+  }
+  // Slippi's first published row (-123) is after the first gameplay tick.
+  // Match the replay runner's bootstrap before exposing the entry observation.
+  result = msl_core_batch_step_matches(batch->runtime, batch->inputs, sizeof(batch->inputs[0]),
+                                        reset_mask, reset_mask != NULL ? sizeof(reset_mask[0]) : 0);
+  if (result != MSL_CORE_OK) {
+    return public_result(result);
   }
   return public_result(msl_core_batch_write_observation(
       batch->runtime, batch->viewpoint_players, sizeof(batch->viewpoint_players[0]), observations,

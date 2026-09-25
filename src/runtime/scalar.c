@@ -256,6 +256,54 @@ static int neutral_spawn_order(const MslCoreMatch* match, int player)
     return order;
 }
 
+static void resolve_initial_facing(const MslCoreMatch* match)
+{
+    float spawn_x[MSL_CORE_MAX_PLAYERS];
+    int i;
+    int j;
+
+    // fn_8016DEEC faces the furthest eligible opponent, resolving ties in
+    // physical-port order. NeutralSpawn changes the positions it reads.
+    // refs/melee/src/melee/gm/gm_16AE.c::fn_8016DEEC
+    for (i = 0; i < MSL_CORE_MAX_PLAYERS; ++i) {
+        if (Player_GetPlayerSlotType(i) != Gm_PKind_NA) {
+            Vec3 spawn;
+            Player_LoadPlayerCoords(i, &spawn);
+            spawn_x[i] = spawn.x;
+        }
+    }
+    for (i = 0; i < MSL_CORE_MAX_PLAYERS; ++i) {
+        int opponent = -1;
+        float distance = 0.0F;
+        float facing = 1.0F;
+        if (Player_GetPlayerSlotType(i) == Gm_PKind_NA ||
+            Player_GetFacingDirection(i) != 0.0F)
+        {
+            continue;
+        }
+        for (j = 0; j < MSL_CORE_MAX_PLAYERS; ++j) {
+            if (j != i && Player_GetPlayerSlotType(j) != Gm_PKind_NA &&
+                (!match->config.is_teams || Player_GetTeam(i) != Player_GetTeam(j)))
+            {
+                float next_distance = fabsf(spawn_x[i] - spawn_x[j]);
+                if (opponent == -1 || distance < next_distance) {
+                    opponent = j;
+                    distance = next_distance;
+                }
+            }
+        }
+        if (opponent != -1) {
+            float dx = spawn_x[opponent] - spawn_x[i];
+            if (dx < -5.0F) {
+                facing = -1.0F;
+            } else if (dx <= 5.0F && Player_GetFacingDirection(opponent) == 1.0F) {
+                facing = -1.0F;
+            }
+        }
+        Player_SetFacingDirection(i, facing);
+    }
+}
+
 static CharacterKind source_character_kind(uint8_t external_id)
 {
     switch (external_id) {
@@ -1064,9 +1112,9 @@ static int match_construct(MslCoreMatch* match,
     for (i = 0; i < match->config.num_players; ++i) {
         int j;
         uint8_t encoded = match->config.players[i].facing_and_port;
-        uint8_t port = encoded >> 1;
+        uint8_t port = (encoded >> 1) & 7;
         match->source_slots[i] = port == 0 ? (uint8_t) i : (uint8_t) (port - 1);
-        if (match->source_slots[i] >= MSL_CORE_MAX_PLAYERS) {
+        if (match->source_slots[i] >= MSL_CORE_MAX_PLAYERS || (encoded & 0xE0)) {
             fprintf(stderr, "invalid physical port mapping\n");
             return -1;
         }
@@ -1221,8 +1269,8 @@ static int match_construct(MslCoreMatch* match,
         }
 
 #endif
-        float facing = (encoded >> 1) == 0 ? (i == 0 ? 1.0F : -1.0F)
-                                           : ((encoded & 1) ? 1.0F : -1.0F);
+        float facing = (encoded & MSL_FACING_AUTO_FLAG) || (encoded >> 1) == 0
+                           ? 0.0F : ((encoded & 1) ? 1.0F : -1.0F);
         Player_SetPlayerCharacter(
             slot, source_character_kind(match->config.players[i].char_id));
         Player_SetSlottype(slot, match->config.players[i].cpu_level != 0
@@ -1253,6 +1301,7 @@ static int match_construct(MslCoreMatch* match,
         Player_SetUnk4C(slot, (slot + 1) * 5);
         Player_80032768(slot, (Vec3*) spawn);
     }
+    resolve_initial_facing(match);
     // The versus bootstrap initializes fighter/device/item allocation before
     // Fighter_Create. Items are disabled in the current Fox/FD domain, so the
     // exact Item_80266FA8(false) entry is equivalent to Item_80266F70's source
