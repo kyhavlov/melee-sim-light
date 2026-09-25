@@ -41,3 +41,7 @@ tools/viewer/live/public/
 DEV_LOCAL.md
 tools/notify_discord.sh
 SSBM.iso
+
+# devenv
+.devenv/
+devenv.local.nix

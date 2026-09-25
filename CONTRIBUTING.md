@@ -4,6 +4,20 @@ Follow the [quick start](README.md#quick-start) for the native prerequisites and
 ISO extraction. Runtime users do not need the replay corpus, reference checkouts
 or the additional validation tools below.
 
+## Optional Nix shell
+
+With Nix and devenv installed, run `devenv shell` for the native and viewer
+build tools, Git LFS, debugger and `uv`. Then create the Python environment:
+
+```bash
+devenv shell
+uv sync --dev
+```
+
+Game data extraction and the PPC validation toolchain still use the setup
+steps below and in [host requirements](agent_docs/ENVIRONMENT.md). Local shell
+overrides can go in the ignored `devenv.local.nix`.
+
 ## Validation replays
 
 The files under `replays/validation/` use Git LFS. The committed `.lfsconfig`
