@@ -106,10 +106,54 @@ env.restore(env_index, state)
 env.copy_matches_from(source, destination_indices, source_indices)
 ```
 
+### Sharing game data across worker processes
+
+An `EnvBatch` needs the process's immutable game data, about 300 MB, which is loaded once per
+process. A trainer that shards its environments over one `EnvBatch` per CPU core would pay that per
+worker if each worker loaded it independently. Instead, load it once in a template process and
+fork the workers from that: the game data is never written after initialization (workers stepping
+thousands of frames dirty only a few MB), so the forked copies share its pages copy-on-write.
+
+The training process itself is usually not a safe template (a JAX or CUDA context, thread pools).
+Use `multiprocessing`'s `forkserver`, which is a fresh interpreter, and give it a preload module
+that loads the data before any worker is forked:
+
+```python
+# myproject/sim_preload.py -- imported by the forkserver before it forks workers.
+import os
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")  # workers don't need BLAS threads
+import gc
+import melee_sim
+
+melee_sim.preload_game_data()  # MSL_DATA_DIR, or pass the data dir explicitly
+gc.collect()
+gc.freeze()  # keep the workers' first GC pass from copying the inherited heap
+```
+
+```python
+import multiprocessing as mp
+
+ctx = mp.get_context("forkserver")
+ctx.set_forkserver_preload(["myproject.sim_preload"])
+workers = [ctx.Process(target=step_shard, args=(i,)) for i in range(16)]
+```
+
+Each worker then builds its own `EnvBatch` as usual; `msl_batch_create` finds the data already
+loaded. In C the equivalent is `msl_game_data_acquire(root)` in the template before forking, and
+`msl_game_data_release()` when the template no longer needs it.
+
+Constraints: one data root per process (a second root is `MSL_INVALID_STATE`), and the usual
+one: a batch is driven from one thread at a time. Which thread does not matter; every reset and
+step rebinds the runtime's thread-local context from the batch. Without a preload nothing changes:
+each process loads the data on its first batch.
+
 ### C Native API
 
-`MslBatch` owns the shared immutable game data and every mutable environment. Reset and step consume
-contiguous arrays whose length is the batch size; the simulator allocates nothing on those paths.
+`MslBatch` owns every mutable environment and shares the process's immutable game data, which is
+loaded once per process (by the first `msl_batch_create`, or ahead of time by
+`msl_game_data_acquire`, so that processes forked afterwards share its pages copy-on-write; the
+Python binding is `melee_sim.preload_game_data`). Reset and step consume contiguous arrays whose
+length is the batch size; the simulator allocates nothing on those paths.
 
 ```c
 #include <stdio.h>

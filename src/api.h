@@ -245,6 +245,16 @@ typedef struct MslTerminal {
 MSL_API const char* msl_result_string(MslResult result);
 MSL_API MslMatchConfig msl_match_config_default(void);
 
+// Immutable game data is loaded once per process, on the first
+// msl_batch_create or msl_game_data_acquire, and shared by every batch; a
+// process holds a single data root. Acquire it ahead of time to pay the load
+// once for processes forked afterwards, which then share its pages
+// copy-on-write. Each acquire is balanced by a release; the data is freed
+// when no batch or acquire holds it.
+MSL_API MslResult msl_game_data_acquire(const char* data_root);
+MSL_API void msl_game_data_release(void);
+MSL_API uint32_t msl_game_data_references(void);
+
 // data_root is the extraction root or its raw/ directory.
 MSL_API MslResult msl_batch_create(const char* data_root, uint32_t batch_size,
                                    MslBatch** out_batch);

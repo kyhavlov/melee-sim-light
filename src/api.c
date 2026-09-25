@@ -202,24 +202,109 @@ MslMatchConfig msl_match_config_default(void) {
   return config;
 }
 
-MslResult msl_batch_create(const char* data_root, uint32_t batch_size, MslBatch** out_batch) {
+// Immutable game data is loaded once per process and shared by every batch
+// (and by processes forked after msl_game_data_acquire). One data root per
+// process: the runtime binds a single game-data context per thread.
+static struct {
+  MslCoreGameData* data;
   char raw_root[1024];
-  MslBatch* batch;
-  MslCoreResult core_result;
-  size_t root_length;
+  uint32_t references;
+} shared_game_data;
 
-  if (data_root == NULL || data_root[0] == '\0' || out_batch == NULL || batch_size == 0 ||
-      batch_size > MSL_BATCH_LIMIT) {
+static MslResult resolve_raw_root(const char* data_root, char* raw_root, size_t capacity) {
+  size_t root_length;
+  char* resolved;
+
+  if (data_root == NULL || data_root[0] == '\0') {
     return MSL_INVALID_ARGUMENT;
   }
   root_length = strlen(data_root);
-  if ((root_length == 3 && strcmp(data_root, "raw") == 0) ||
-      (root_length >= 4 && strcmp(data_root + root_length - 4, "/raw") == 0)) {
-    if (root_length >= sizeof(raw_root)) {
+  if (root_length >= capacity) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  while (root_length > 1 && data_root[root_length - 1] == '/') {
+    --root_length;
+  }
+  memcpy(raw_root, data_root, root_length);
+  raw_root[root_length] = '\0';
+  if (!((root_length == 3 && strcmp(raw_root, "raw") == 0) ||
+        (root_length >= 4 && strcmp(raw_root + root_length - 4, "/raw") == 0))) {
+    if (root_length + sizeof("/raw") > capacity) {
       return MSL_INVALID_ARGUMENT;
     }
-    memcpy(raw_root, data_root, root_length + 1);
-  } else if (snprintf(raw_root, sizeof(raw_root), "%s/raw", data_root) >= (int)sizeof(raw_root)) {
+    memcpy(raw_root + root_length, "/raw", sizeof("/raw"));
+  }
+  resolved = realpath(raw_root, NULL);
+  if (resolved == NULL) {
+    return MSL_INVALID_STATE;
+  }
+  if (strlen(resolved) >= capacity) {
+    free(resolved);
+    return MSL_INVALID_ARGUMENT;
+  }
+  strcpy(raw_root, resolved);
+  free(resolved);
+  return MSL_OK;
+}
+
+static MslResult acquire_game_data(const char* data_root, MslCoreGameData** out_game_data) {
+  char raw_root[sizeof(shared_game_data.raw_root)];
+  MslResult result;
+  MslCoreResult core_result;
+
+  result = resolve_raw_root(data_root, raw_root, sizeof(raw_root));
+  if (result != MSL_OK) {
+    return result;
+  }
+  if (shared_game_data.data != NULL) {
+    if (strcmp(shared_game_data.raw_root, raw_root) != 0) {
+      return MSL_INVALID_STATE;
+    }
+    ++shared_game_data.references;
+    *out_game_data = shared_game_data.data;
+    return MSL_OK;
+  }
+  core_result = msl_core_game_data_create(raw_root, &shared_game_data.data);
+  if (core_result != MSL_CORE_OK) {
+    shared_game_data.data = NULL;
+    return public_result(core_result);
+  }
+  memcpy(shared_game_data.raw_root, raw_root, strlen(raw_root) + 1);
+  shared_game_data.references = 1;
+  *out_game_data = shared_game_data.data;
+  return MSL_OK;
+}
+
+static void release_game_data(MslCoreGameData* game_data) {
+  if (game_data == NULL || game_data != shared_game_data.data) {
+    return;
+  }
+  if (--shared_game_data.references > 0) {
+    return;
+  }
+  msl_core_game_data_destroy(shared_game_data.data);
+  memset(&shared_game_data, 0, sizeof(shared_game_data));
+}
+
+MslResult msl_game_data_acquire(const char* data_root) {
+  MslCoreGameData* game_data;
+  return acquire_game_data(data_root, &game_data);
+}
+
+void msl_game_data_release(void) {
+  release_game_data(shared_game_data.data);
+}
+
+uint32_t msl_game_data_references(void) {
+  return shared_game_data.references;
+}
+
+MslResult msl_batch_create(const char* data_root, uint32_t batch_size, MslBatch** out_batch) {
+  MslBatch* batch;
+  MslResult result;
+  MslCoreResult core_result;
+
+  if (out_batch == NULL || batch_size == 0 || batch_size > MSL_BATCH_LIMIT) {
     return MSL_INVALID_ARGUMENT;
   }
   *out_batch = NULL;
@@ -237,10 +322,10 @@ MslResult msl_batch_create(const char* data_root, uint32_t batch_size, MslBatch*
     msl_batch_destroy(batch);
     return MSL_OUT_OF_MEMORY;
   }
-  core_result = msl_core_game_data_create(raw_root, &batch->game_data);
-  if (core_result != MSL_CORE_OK) {
+  result = acquire_game_data(data_root, &batch->game_data);
+  if (result != MSL_OK) {
     msl_batch_destroy(batch);
-    return public_result(core_result);
+    return result;
   }
   core_result = msl_core_batch_create(batch->game_data, batch_size, &batch->runtime);
   if (core_result != MSL_CORE_OK) {
@@ -256,7 +341,7 @@ void msl_batch_destroy(MslBatch* batch) {
     return;
   }
   msl_core_batch_destroy(batch->runtime);
-  msl_core_game_data_destroy(batch->game_data);
+  release_game_data(batch->game_data);
   free(batch->max_frames);
   free(batch->viewpoint_players);
   free(batch->inputs);

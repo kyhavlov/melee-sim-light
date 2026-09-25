@@ -433,3 +433,70 @@ def test_masked_step_republishes_unstepped_matches(monkeypatch) -> None:
         env.step(np.array([1, 0], dtype=np.uint8))
         assert env.current_frame[0]["frame_id"] == before[0]["frame_id"] + 1
         assert env.current_frame[1].tobytes() == before[1].tobytes()
+
+
+def test_game_data_root_identity(monkeypatch, tmp_path) -> None:
+    import os
+
+    lib = msl._native.library()
+    baseline = lib.msl_game_data_references()
+    monkeypatch.chdir(ROOT)
+    assert lib.msl_game_data_acquire(b"data") == 0
+    try:
+        alias = tmp_path / "alias"
+        alias.symlink_to(ROOT / "data", target_is_directory=True)
+        for root in (ROOT / "data", ROOT / "data/raw", alias, "./data/", "data/raw/"):
+            assert lib.msl_game_data_acquire(os.fsencode(root)) == 0
+            lib.msl_game_data_release()
+        monkeypatch.chdir(tmp_path)
+        assert lib.msl_game_data_acquire(b"data") == 3
+        (tmp_path / "data/raw").mkdir(parents=True)
+        assert lib.msl_game_data_acquire(b"data") == 3
+        assert lib.msl_game_data_references() == baseline + 1
+    finally:
+        lib.msl_game_data_release()
+    assert lib.msl_game_data_references() == baseline
+
+
+def test_game_data_is_shared_across_batches_and_forks(monkeypatch, tmp_path) -> None:
+    import os
+
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    lib = msl._native.library()
+    baseline = lib.msl_game_data_references()
+    # A preload holds one reference; repeating it is a no-op.
+    assert msl.preload_game_data() == (ROOT / "data").resolve()
+    assert msl.preload_game_data() == (ROOT / "data").resolve()
+    assert msl.game_data_loaded()
+    assert lib.msl_game_data_references() == baseline + 1
+    # Batches share the loaded data instead of loading their own copy.
+    with msl.EnvBatch(batch_size=1, length=32) as first:
+        assert lib.msl_game_data_references() == baseline + 2
+        with msl.EnvBatch(batch_size=1, length=32) as second:
+            assert lib.msl_game_data_references() == baseline + 3
+            for env in (first, second):
+                env.configure_matches([msl.MatchConfig(seed=7)])
+                env.reset_all()
+                for _ in range(30):
+                    env.step()
+            np.testing.assert_array_equal(first.current_frame, second.current_frame)
+        assert lib.msl_game_data_references() == baseline + 2
+    assert lib.msl_game_data_references() == baseline + 1
+    # Symlinks to the loaded raw directory identify the same data.
+    (tmp_path / "raw").symlink_to(ROOT / "data" / "raw")
+    assert msl.preload_game_data(tmp_path) == tmp_path.resolve()
+    assert lib.msl_game_data_references() == baseline + 1
+    # A forked child inherits the loaded data and can build batches on it.
+    pid = os.fork()
+    if pid == 0:
+        code = 1
+        try:
+            with msl.EnvBatch(batch_size=1, length=4) as env:
+                env.configure_matches([msl.MatchConfig(seed=7)])
+                env.reset_all()
+                env.step()
+                code = 0 if int(env.current_frame["frame_id"][0]) == -122 else 2
+        finally:
+            os._exit(code)
+    _, status = os.waitpid(pid, 0)
+    assert os.waitstatus_to_exitcode(status) == 0
