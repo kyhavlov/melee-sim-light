@@ -33,6 +33,29 @@ def test_envbatch_constructs_three_and_four_player_teams(monkeypatch) -> None:
                 assert np.all(env.current_frame["frame_id"] == -122)
 
 
+@pytest.mark.parametrize("viewpoint", range(4))
+def test_followers_pair_with_their_leaders_in_teams(monkeypatch, viewpoint: int) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    ics, fox = msl.Character.ICE_CLIMBERS, msl.Character.FOX
+    with msl.EnvBatch(batch_size=1, length=4, num_players=4) as env:
+        env.configure_matches([msl.MatchConfig(
+            players=tuple(msl.PlayerConfig(c, team_id=t)
+                          for c, t in ((ics, 0), (fox, 0), (ics, 1), (fox, 1))),
+            is_teams=True, viewpoint_player=viewpoint)])
+        env.reset_all()
+        row = env.current_frame[0]
+        assert row["slots"][0]["source_player"] == viewpoint
+        assert sorted(row["slots"]["team_relation"]) == [0, 1, 2, 2]
+        for slot, follower in zip(row["slots"], row["followers"]):
+            if slot["char_id"] == ics:
+                # Nana's own fighter kind; the rest is her leader's.
+                assert (follower["present"], follower["char_id"]) == (1, 11)
+                for field in ("source_player", "team_relation", "team_id", "stocks"):
+                    assert follower[field] == slot[field], field
+            else:
+                assert not follower.tobytes().strip(b"\0")
+
+
 def test_peach_pull_throw_reserves_runtime_items(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=64, length=128, num_players=4) as env:
@@ -61,7 +84,7 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     assert dtypes.controller_input_dtype().itemsize == 112
     assert dtypes.input_dtype().itemsize == 32
     assert dtypes.match_config_dtype().itemsize == 52
-    assert dtypes.gamestate_dtype().itemsize == 980
+    assert dtypes.gamestate_dtype().itemsize == 1204
     assert dtypes.terminal_dtype().itemsize == 16
 
     buffers = msl.Buffers.empty(length=2, batch_size=3)
