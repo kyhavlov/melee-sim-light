@@ -52,6 +52,7 @@ const genericProjectiles: Record<string, [number, string]> = {
   "Toad": [4, "#ff80c0"],
   "Toad's spore": [1, "#ffc0e0"],
   "Kirby's Yoshi egg": [6, "#c0f0a0"],
+  "Yoshi's Star": [3, "#ffd75e"],
   "Kirby's Cutter beam": [3, "#f0f0f0"],
   "Kirby's Hammer": [3, "#c08040"],
 };
