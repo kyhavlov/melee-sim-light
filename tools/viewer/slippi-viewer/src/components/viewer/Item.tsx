@@ -42,6 +42,7 @@ const genericProjectiles: Record<string, [number, string]> = {
   "Dr. Mario's capsule": [1.5, "#e8e8ff"],
   "Ice(Iceclimbers)": [2, "#9fdcff"],
   "Mewtwo's Shadowball": [3, "#7040c0"],
+  "PK Fire": [2, "#ff8030"],
   "PK Flash": [3, "#40e070"],
   "PK Flash (explosion)": [8, "#40e070"],
   "Pikachu's thunder (B)": [2, "#ffe040"],
