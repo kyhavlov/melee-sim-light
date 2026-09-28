@@ -59,16 +59,20 @@ const genericProjectiles: Record<string, [number, string]> = {
 // weaves above and below its straight-line item position, and Kirby's
 // Final Cutter beam hits behind and above the ground-riding origin. While
 // their capsule is live it is where the game puts the projectile, so draw
-// the body there.
+// the body there. Without a live capsule the origin is not where the body
+// is either (the held Shadow Ball's item position is frozen at the spawn
+// point for the whole charge while the ball orbits Mewtwo's hands), so
+// these draw nothing until their capsule is live.
 const capsuleAnchored = new Set(["Mewtwo's Shadowball", "Kirby's Cutter beam"]);
 
 function GenericProjectile(props: { item: ItemUpdate; name: string }) {
   const style = createMemo(() => genericProjectiles[props.name]);
+  const anchored = createMemo(() => capsuleAnchored.has(props.name));
   const onCapsule = createMemo(
-    () => capsuleAnchored.has(props.name) && (props.item.hitboxRadius ?? 0) > 0
+    () => anchored() && (props.item.hitboxRadius ?? 0) > 0
   );
   return (
-    <>
+    <Show when={!anchored() || onCapsule()}>
       <circle
         cx={onCapsule() ? props.item.hitboxX : props.item.xPosition}
         cy={onCapsule() ? props.item.hitboxY : props.item.yPosition}
@@ -78,7 +82,7 @@ function GenericProjectile(props: { item: ItemUpdate; name: string }) {
         stroke="black"
         stroke-width={0.3}
       />
-    </>
+    </Show>
   );
 }
 
