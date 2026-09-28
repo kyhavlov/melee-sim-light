@@ -77,9 +77,41 @@ def test_legacy_stadium_patch_establishes_frozen_play(properties_only, monkeypat
     assert game.start["stage"] == 3 and game.start["is_frozen_ps"] is False
     assert "unfrozen-stadium" not in admission.capture_issues(game, raw)
     codes = admission.gecko_codes(raw)
+    assert admission.stadium_transformations(game.start, codes) == \
+        admission.STADIUM_FROZEN
     del codes[0xC21D4578]
     monkeypatch.setattr(admission, "gecko_codes", lambda _raw: codes)
+    # Without the bypass the capture's Common/Preload Stadium Transformations
+    # would have transformed the stage, deterministically.
+    assert admission.stadium_transformations(game.start, codes) == \
+        admission.STADIUM_PRELOADED
+    assert "unfrozen-stadium" not in admission.capture_issues(game, raw)
+    # Without the preload either, the transformation archive streamed from
+    # the disc: nothing in the file says when it arrived.
+    del codes[0xC21D45EC]
+    assert admission.stadium_transformations(game.start, codes) is None
     assert "unfrozen-stadium" in admission.capture_issues(game, raw)
+
+
+@pytest.mark.parametrize("codes,expected", [
+    ({0xC21D45EC: b""}, admission.STADIUM_PRELOADED),
+    ({0xC20165AC: b""}, admission.STADIUM_ONLINE_LOADED),
+    # Online's toggle (IngameCheckIfFrozen): its static byte set is frozen.
+    ({0xC20165AC: b"", 0xC21D457C: bytes.fromhex(
+        "c21d457c000000074800000c4e80002101000000")}, admission.STADIUM_FROZEN),
+    ({0xC20165AC: b"", 0xC21D457C: bytes.fromhex(
+        "c21d457c000000074800000c4e80002100000000")},
+     admission.STADIUM_ONLINE_LOADED),
+    ({}, None),
+    ({0xC21D45EC: b"", 0xC20165AC: b""}, None),
+])
+def test_stadium_patch_set_names_the_transformations(codes, expected):
+    start = {"stage": 3, "is_frozen_ps": False}
+    assert admission.stadium_transformations(start, codes) == expected
+    assert admission.stadium_transformations({"stage": 31}, codes) == \
+        admission.STADIUM_FROZEN
+    assert admission.stadium_transformations(
+        {"stage": 3, "is_frozen_ps": True}, codes) == admission.STADIUM_FROZEN
 
 
 def test_unreviewed_offscreen_body_is_rejected(properties_only, monkeypatch):

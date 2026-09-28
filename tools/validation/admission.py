@@ -78,6 +78,34 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
     return start.get("is_frozen_ps") is True or legacy_frozen
 
 
+# wire.h MSL_STADIUM_*.
+STADIUM_FROZEN, STADIUM_PRELOADED, STADIUM_ONLINE_LOADED = 0, 1, 2
+
+
+def stadium_transformations(start: dict, codes: dict[int, bytes]) -> int | None:
+    """MslCoreMatchConfig.stadium_transformations for this capture, or None
+    for an unfrozen Pokemon Stadium no deterministic patch set owns.
+
+    Frozen is the console toggle, the legacy online bypass (stadium_is_frozen)
+    or Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm at 0x801D457C, whose
+    static byte is the toggle. Unfrozen transformations are deterministic under
+    Common/Preload Stadium Transformations (the choice and the archive read
+    happen on the first frame of each wait) or under Slippi Online 3.18+'s
+    StadiumFileLoad.asm (a synchronous read at the retail decision). Without
+    either, the archive streamed from the disc and the file does not say when
+    it arrived."""
+    if start.get("stage") != 3 or stadium_is_frozen(start, codes):
+        return STADIUM_FROZEN
+    toggle = codes.get(0xC21D457C, b"")
+    if len(toggle) > 16 and toggle[16] != 0:
+        return STADIUM_FROZEN
+    preloaded = 0xC21D45EC in codes
+    online = 0xC20165AC in codes
+    if preloaded != online:
+        return STADIUM_PRELOADED if preloaded else STADIUM_ONLINE_LOADED
+    return None
+
+
 def capture_issues(game, raw: bytes, *, played_on: str | None = None,
                    fnmsubs_profile: str | None = None) -> list[str]:
     """Return property violations without running or consulting simulator output."""
@@ -104,7 +132,7 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
         start.get("damage_ratio", 0) <= 0 or start.get("timer") != 480 or
         start.get("bitfield") not in ([50, 1, 134, 76], [50, 1, 142, 76])):
         issues.append("unsupported-settings")
-    if start.get("stage") == 3 and not stadium_is_frozen(start, codes):
+    if stadium_transformations(start, codes) is None:
         issues.append("unfrozen-stadium")
     players = start["players"]
     if len(players) not in (2, 3, 4) or (len(players) > 2 and not start.get("is_teams")):

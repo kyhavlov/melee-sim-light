@@ -158,6 +158,8 @@ typedef struct ReplayView {
   uint8_t online_fnmsubs_zero;
   uint8_t brawl_offscreen_damage;
   uint8_t freeze_dead_up_fall_physics;
+  // MSL_STADIUM_*, from the capture's gecko list (admission.py).
+  uint8_t stadium_transformations;
   uint8_t whispy_dead_fighter_fix;
   float damage_ratio;
 } ReplayView;
@@ -1111,6 +1113,7 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
   config->online_fnmsubs_zero = replay->online_fnmsubs_zero;
   config->brawl_offscreen_damage = replay->brawl_offscreen_damage;
   config->freeze_dead_up_fall_physics = replay->freeze_dead_up_fall_physics;
+  config->stadium_transformations = replay->stadium_transformations;
   config->whispy_dead_fighter_fix = replay->whispy_dead_fighter_fix;
   config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
   config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
@@ -2427,6 +2430,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "runner_stdin",
       "runner_stdout",
       "fnmsubs_profile",
+      "stadium_transformations",
       NULL,
   };
   PyObject* frames_obj;
@@ -2450,6 +2454,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int runner_stdin = -1;
   int runner_stdout = -1;
   const char* fnmsubs_profile = NULL;
+  int stadium_transformations = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2468,12 +2473,16 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiiz:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiizi:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
-          &runner_stdin, &runner_stdout, &fnmsubs_profile)) {
+          &runner_stdin, &runner_stdout, &fnmsubs_profile, &stadium_transformations)) {
+    return NULL;
+  }
+  if (stadium_transformations < 0 || stadium_transformations > 2) {
+    PyErr_SetString(PyExc_ValueError, "stadium_transformations must be 0, 1 or 2");
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2496,6 +2505,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   if (parse_start(start_obj, &replay) != 0 || parse_metadata(metadata_obj, &replay) != 0) {
     goto done;
   }
+  replay.stadium_transformations = (uint8_t)stadium_transformations;
 
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;

@@ -9,8 +9,8 @@ Ganondorf, Yoshi, Bowser, Ness, Link, Young Link, Mewtwo, Mr. Game & Watch, Roy,
 singles, three-player teams, and doubles on Final Destination, Battlefield, Fountain of
 Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64. UCF is enabled by default.
 The core also runs unfrozen Pokemon Stadium (`MslCoreMatchConfig.stadium_transformations`) for
-the two Slippi patch sets that make its transformations deterministic; the replay lane
-(`tools/replay`) selects it from a recording's gecko list, and the public API keeps the stage frozen.
+the two Slippi patch sets that make its transformations deterministic; admission selects it from a
+recording's gecko list, and the public API keeps the stage frozen.
 
 Correctness comes from gameplay-relevant source completion: port the relevant decomp call graphs,
 persistent state, tables, callback ownership, and scheduler order. Organize implementation by
