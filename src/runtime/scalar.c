@@ -162,7 +162,13 @@ static const MslCoreStageSpec stage_specs[] = {
       "/GrPs.dat",
       &grPs_803E1334,
       0,
-      1U << 5,
+      // Map 5's per-frame proc (grStadium_801D1604) is not render-only:
+      // Ground_801C2FE0 refreshes joint 4's collision each frame, and
+      // mpIsland_8005AE1C rebuilds the island list in reverse every time.
+      // The CPU follower's recovery AI (ftCo_800A4038) walks that list in
+      // order, so Nana's target ledge depends on the frame's parity. Keep it
+      // scheduled.
+      0,
       { { -40.0F, 32.0F, 0.0F }, { 40.0F, 32.0F, 0.0F },
         { 70.0F, 7.0F, 0.0F }, { -70.0F, 7.0F, 0.0F } },
       { { -40.0F, 32.0F, 0.0F }, { -40.0F, 5.0F, 0.0F },
