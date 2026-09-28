@@ -27,7 +27,9 @@
 void JObjInfoInit(void);
 HSD_JObjInfo hsdJObj = { JObjInfoInit };
 
-static HSD_ClassInfo* default_class;
+// Set only around a load (ftParts interpolation trees); Matches stepped on
+// other threads must keep allocating plain JObjs meanwhile.
+static _Thread_local HSD_ClassInfo* default_class;
 static HSD_SList* ufc_callbacks;
 static void (*dptcl_callback)(int, int lo, int hi, HSD_JObj* jobj);
 static void (*jsound_callback)(s32);
