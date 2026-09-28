@@ -34,7 +34,6 @@ const kirbyCopyAliases: Record<string, string> = {
   "Kirby copy Pichu's Thunder (B)": "Pichu's thunder (B)",
   "Kirby copy Bowser's Flame (B)": "Bowser's flame",
   "Kirby copy Mr. Game & Watch's Sausage (B)": "Sausage",
-  "Kirby copy Sheik's Needle (ground) (B)": "Needle",
   "Yoshi's Tongue?? (B)": "Kirby's Yoshi egg",
 };
 
@@ -51,7 +50,6 @@ const genericProjectiles: Record<string, [number, string]> = {
   "Sausage": [1.5, "#d08040"],
   "Toad": [4, "#ff80c0"],
   "Toad's spore": [1, "#ffc0e0"],
-  "Needle": [0.8, "#c0c0c0"],
   "Kirby's Yoshi egg": [6, "#c0f0a0"],
   "Kirby's Cutter beam": [3, "#f0f0f0"],
   "Kirby's Hammer": [3, "#c08040"],
