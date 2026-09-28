@@ -179,7 +179,7 @@ state rather than viewer-side approximations. Missing `stage` data is allowed.
 Items are optional. Omit `items` when a trace has no item data.
 
 ```json
-{"encoding":"sparse-delta-v1","keyframeInterval":60,"fields":["alive","typeId","state","owner","x","y","vx","vy","facing","damage","timer","spawnId","misc0","misc1","misc2"],"rows":[]}
+{"encoding":"sparse-delta-v1","keyframeInterval":60,"fields":["alive","typeId","state","owner","x","y","vx","vy","facing","damage","timer","spawnId","misc0","misc1","misc2","hitboxX","hitboxY","hitboxRadius"],"rows":[]}
 ```
 
 - `encoding`: exactly `"sparse-delta-v1"`.
@@ -204,6 +204,10 @@ Items are optional. Omit `items` when a trace has no item data.
 - `spawnId`: stable spawn id when available.
 - `misc0`, `misc1`, `misc2`: item-type-specific small values. Prefer promoting
   these to named fields when they become stable viewer/debug concepts.
+- `hitboxX`, `hitboxY`, `hitboxRadius`: the item's first live hit capsule in
+  world space (Bowser's flames, Yoshi's landing stars, Sheik's Vanish smoke).
+  `hitboxRadius` is `0` when the item has no active hitbox; readers treat a
+  missing column as `0`.
 
 An item reader reconstructs each slot by carrying the previous decoded item row
 forward and applying changed fields. A delta row with `alive = 0` closes that

@@ -44,6 +44,9 @@ const ITEM_FIELDS = [
   "misc0",
   "misc1",
   "misc2",
+  "hitboxX",
+  "hitboxY",
+  "hitboxRadius",
 ];
 
 const HURTBOX_STATES = ["vulnerable", "invulnerable", "intangible"];
@@ -433,6 +436,13 @@ function decodeItems(items, frameCount) {
       peachTurnipFace: Number(row[lookup.misc1] || 0),
       isChargeShotLaunched: false,
       chargeShotChargeLevel: Number(row[lookup.misc2] || 0),
+      ...(lookup.hitboxRadius !== undefined && Number(row[lookup.hitboxRadius] || 0) > 0
+        ? {
+            hitboxX: Number(row[lookup.hitboxX] || 0),
+            hitboxY: Number(row[lookup.hitboxY] || 0),
+            hitboxRadius: Number(row[lookup.hitboxRadius] || 0),
+          }
+        : {}),
     }));
   }
   return out;
@@ -487,6 +497,9 @@ function itemRowFromViewer(item) {
     Number(item.samusMissileType || 0),
     Number(item.peachTurnipFace || 0),
     Number(item.chargeShotChargeLevel || 0),
+    roundNumber(Number(item.hitboxX || 0)),
+    roundNumber(Number(item.hitboxY || 0)),
+    roundNumber(Number(item.hitboxRadius || 0)),
   ];
 }
 
