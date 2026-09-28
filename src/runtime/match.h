@@ -30,6 +30,7 @@ typedef struct MslCoreMatchRules {
     bool ucf_shield_drop_084_enabled;
     u32 frame_count;
     bool ended;
+    s32 max_frame;
     u8 respawn_reservation_timer[6];
     s8 respawn_reservation_character[6];
     MslCoreUcfPadBuffer ucf_pad[4];
@@ -56,6 +57,7 @@ bool msl_core_uses_online_fnmsubs_zero(void);
 bool msl_core_has_brawl_offscreen_damage(void);
 bool msl_core_freezes_dead_up_fall_physics(void);
 void msl_core_advance_match_frame(void);
+void msl_core_resolve_match_outcome(void);
 void msl_core_apply_team_stock_steal(void);
 bool msl_core_match_is_over(void);
 

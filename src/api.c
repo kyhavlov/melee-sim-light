@@ -10,14 +10,13 @@
 enum {
   MSL_BATCH_LIMIT = 16384,
   MSL_SAVE_MAGIC = 0x31564E45,
-  MSL_SAVE_VERSION = 1,
+  MSL_SAVE_VERSION = 2,
 };
 
 typedef struct MslSaveHeader {
   uint32_t magic;
   uint32_t version;
   uint32_t payload_size;
-  int32_t max_frame;
   uint8_t viewpoint_player;
   uint8_t _reserved[3];
 } MslSaveHeader;
@@ -28,7 +27,6 @@ struct MslBatch {
   MslCoreMatchConfig* configs;
   MslCoreInput* inputs;
   uint8_t* viewpoint_players;
-  int32_t* max_frames;
   uint32_t size;
 };
 
@@ -41,7 +39,7 @@ _Static_assert(sizeof(MslInput) == 32, "MslInput layout");
 _Static_assert(sizeof(MslItem) == 48, "MslItem layout");
 _Static_assert(sizeof(MslObservation) == 1208, "MslObservation layout");
 _Static_assert(sizeof(MslTerminal) == 16, "MslTerminal layout");
-_Static_assert(sizeof(MslSaveHeader) == 20, "MslSaveHeader layout");
+_Static_assert(sizeof(MslSaveHeader) == 16, "MslSaveHeader layout");
 
 static MslResult public_result(MslCoreResult result) { return (MslResult)result; }
 
@@ -317,9 +315,7 @@ MslResult msl_batch_create(const char* data_root, uint32_t batch_size, MslBatch*
   batch->configs = calloc(batch_size, sizeof(*batch->configs));
   batch->inputs = calloc(batch_size, sizeof(*batch->inputs));
   batch->viewpoint_players = calloc(batch_size, sizeof(*batch->viewpoint_players));
-  batch->max_frames = calloc(batch_size, sizeof(*batch->max_frames));
-  if (batch->configs == NULL || batch->inputs == NULL || batch->viewpoint_players == NULL ||
-      batch->max_frames == NULL) {
+  if (batch->configs == NULL || batch->inputs == NULL || batch->viewpoint_players == NULL) {
     msl_batch_destroy(batch);
     return MSL_OUT_OF_MEMORY;
   }
@@ -343,7 +339,6 @@ void msl_batch_destroy(MslBatch* batch) {
   }
   msl_core_batch_destroy(batch->runtime);
   release_game_data(batch->game_data);
-  free(batch->max_frames);
   free(batch->viewpoint_players);
   free(batch->inputs);
   free(batch->configs);
@@ -375,7 +370,10 @@ MslResult msl_batch_reset(MslBatch* batch, const MslMatchConfig configs[],
     if (reset_mask == NULL || reset_mask[env] != 0) {
       memset(&batch->inputs[env], 0, sizeof(batch->inputs[env]));
       batch->viewpoint_players[env] = configs[env].viewpoint_player;
-      batch->max_frames[env] = configs[env].max_frame;
+      result = msl_core_batch_set_max_frame(batch->runtime, env, configs[env].max_frame);
+      if (result != MSL_CORE_OK) {
+        return public_result(result);
+      }
     }
   }
   // Slippi's first published row (-123) is after the first gameplay tick.
@@ -402,9 +400,8 @@ MslResult msl_batch_observe(const MslBatch* batch, MslObservation observations[]
   if (result != MSL_CORE_OK) {
     return public_result(result);
   }
-  return public_result(msl_core_batch_write_terminals(batch->runtime, terminals,
-                                                      sizeof(terminals[0]), batch->max_frames,
-                                                      sizeof(batch->max_frames[0]), NULL, 0));
+  return public_result(msl_core_batch_write_terminal(batch->runtime, terminals,
+                                                     sizeof(terminals[0]), -1, NULL, 0));
 }
 
 MslResult msl_batch_step_masked(MslBatch* batch, const MslInput inputs[],
@@ -443,7 +440,6 @@ MslResult msl_batch_copy(MslBatch* destination, const MslBatch* source,
   for (index = 0; index < count; ++index) {
     destination->viewpoint_players[destination_indices[index]] =
         source->viewpoint_players[source_indices[index]];
-    destination->max_frames[destination_indices[index]] = source->max_frames[source_indices[index]];
   }
   return MSL_OK;
 }
@@ -487,7 +483,6 @@ MslResult msl_batch_save(const MslBatch* batch, uint32_t env_index, void* buffer
   header.magic = MSL_SAVE_MAGIC;
   header.version = MSL_SAVE_VERSION;
   header.payload_size = (uint32_t)(required_size - sizeof(header));
-  header.max_frame = batch->max_frames[env_index];
   header.viewpoint_player = batch->viewpoint_players[env_index];
   memcpy(buffer, &header, sizeof(header));
   result = msl_core_batch_save_match(batch->runtime, env_index, (uint8_t*)buffer + sizeof(header),
@@ -519,7 +514,6 @@ MslResult msl_batch_restore(MslBatch* batch, uint32_t env_index, const void* buf
   if (result != MSL_CORE_OK) {
     return public_result(result);
   }
-  batch->max_frames[env_index] = header.max_frame;
   batch->viewpoint_players[env_index] = header.viewpoint_player;
   return MSL_OK;
 }

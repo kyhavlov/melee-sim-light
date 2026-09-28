@@ -22,7 +22,7 @@
 #endif
 
 enum {
-    MSL_SAVESTATE_VERSION = 4,
+    MSL_SAVESTATE_VERSION = 5,
 };
 
 typedef struct MslSavestateHeader {

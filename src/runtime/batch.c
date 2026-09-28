@@ -292,6 +292,21 @@ MslCoreResult msl_core_batch_reset_matches(
     return MSL_CORE_OK;
 }
 
+MslCoreResult msl_core_batch_set_max_frame(
+    MslCoreBatch* batch, uint32_t match_index, int32_t max_frame)
+{
+    MslCoreMatchRules* rules;
+    if (batch == NULL || match_index >= batch->match_count) {
+        return MSL_CORE_INVALID_ARGUMENT;
+    }
+    if (!batch->initialized[match_index]) {
+        return MSL_CORE_INVALID_STATE;
+    }
+    rules = &batch->matches[match_index].rules;
+    rules->max_frame = max_frame;
+    return MSL_CORE_OK;
+}
+
 MslCoreResult msl_core_batch_step_matches(
     MslCoreBatch* batch, const MslCoreInput* inputs, size_t input_stride,
     const uint8_t* match_mask, size_t mask_stride)

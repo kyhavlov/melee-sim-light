@@ -43,7 +43,6 @@ static _Thread_local MslCoreMatchRules* msl_bound_match_rules;
 #define msl_ucf_shield_drop_084_enabled \
     (msl_bound_match_rules->ucf_shield_drop_084_enabled)
 #define msl_match_frame_count (msl_bound_match_rules->frame_count)
-#define msl_match_ended (msl_bound_match_rules->ended)
 #define msl_respawn_reservation_timer                                         \
     (msl_bound_match_rules->respawn_reservation_timer)
 #define msl_respawn_reservation_character                                     \
@@ -97,6 +96,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                int ucf_shield_drop_084_enabled)
 {
     memset(rules, 0, sizeof(*rules));
+    rules->max_frame = -1;
     msl_core_bind_match_rules(rules);
     msl_is_teams = is_teams;
     msl_friendly_fire = friendly_fire != 0;
@@ -663,22 +663,6 @@ void gm_80167320(int slot, bool subchar)
     }
 
     if (Player_GetStocks(slot) == 0) {
-        unsigned int alive_sides = 0;
-        int other;
-
-        // The source does not create another fighter on the final stock.
-        // Standard stock elimination counts surviving players or teams.
-        // refs/melee/src/melee/gm/gm_16AE.c::{gm_GetFFAOutcome,
-        //     gm_GetTeamBattleOutcome}
-        for (other = 0; other < 6; ++other) {
-            if (Player_GetPlayerSlotType(other) != Gm_PKind_NA &&
-                Player_GetStocks(other) > 0)
-            {
-                int side = msl_is_teams ? Player_GetTeam(other) : other;
-                alive_sides |= 1U << side;
-            }
-        }
-        msl_match_ended = (alive_sides & (alive_sides - 1)) == 0;
         return;
     }
 
@@ -697,7 +681,28 @@ void gm_80167320(int slot, bool subchar)
     Player_80032070(slot, subchar);
 }
 
-bool msl_core_match_is_over(void) { return msl_match_ended; }
+// fn_8016CFE0 checks gm_GetMatchOutcome before the next gameplay pass.
+// Publish that decision after the complete preceding pass so same-frame KOs
+// include every port, and the terminal observation needs no extra tick.
+void msl_core_resolve_match_outcome(void)
+{
+    unsigned int alive_sides = 0;
+    int slot;
+
+    // gm_GetFFAOutcome / gm_GetTeamBattleOutcome: at most one surviving side,
+    // including simultaneous elimination of all sides (no surviving winner).
+    for (slot = 0; slot < 6; ++slot) {
+        if (Player_GetPlayerSlotType(slot) != Gm_PKind_NA &&
+            Player_GetStocks(slot) > 0)
+        {
+            int side = msl_is_teams ? Player_GetTeam(slot) : slot;
+            alive_sides |= 1U << side;
+        }
+    }
+    msl_bound_match_rules->ended |= (alive_sides & (alive_sides - 1)) == 0;
+}
+
+bool msl_core_match_is_over(void) { return msl_bound_match_rules->ended; }
 
 // Source respawn calls these to reset HUD presentation state. They do not
 // publish any fighter, item, stage-collision, or match-rule gameplay data in

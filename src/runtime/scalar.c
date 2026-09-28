@@ -2565,6 +2565,7 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
     // source match owner advances it only after those processes have run.
     msl_core_advance_match_frame();
     match->random_seed = *seed_ptr;
+    msl_core_resolve_match_outcome();
 #ifdef MSL_SUBSYSTEM_PROFILE
     msl_profile_add(MSL_PROFILE_FINISH,
                          msl_profile_cycles() - finish_started);
@@ -2579,6 +2580,11 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
 #ifdef MSL_SUBSYSTEM_PROFILE
     uint64_t started = msl_profile_cycles();
 #endif
+    if (match != NULL && (match->rules.ended ||
+        (match->rules.max_frame >= 0 && match->frame_id >= match->rules.max_frame)))
+    {
+        return 0;
+    }
     if (msl_core_match_step_prepare(match, input, frame_seed, stage_events) !=
         0)
     {

@@ -44,7 +44,7 @@ stocks and UCF enabled. Callers only override fields they need:
 | --- | --- | --- | --- |
 | `stage` | `uint32_t` | `MSL_STAGE_*` | stage id |
 | `random_seed` | `uint32_t` | any `uint32_t` | deterministic reset seed |
-| `max_frame` | `int32_t` | `-1` or nonnegative | optional episode cutoff |
+| `max_frame` | `int32_t` | negative disables | absolute replay-frame cutoff; `28800` is eight minutes after startup |
 | `damage_ratio` | `float` | positive | global damage ratio |
 | `num_players` | `uint8_t` | `2`, `3`, or `4` | active source players |
 | `is_teams` | `uint8_t` | `0` or `1` | nonzero for teams |

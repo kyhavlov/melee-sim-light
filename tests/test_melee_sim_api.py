@@ -500,3 +500,87 @@ def test_game_data_is_shared_across_batches_and_forks(monkeypatch, tmp_path) -> 
             os._exit(code)
     _, status = os.waitpid(pid, 0)
     assert os.waitstatus_to_exitcode(status) == 0
+
+
+def test_stockout_latches_after_all_ports_and_freezes(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    # Symmetric simultaneous KOs, then staggered KOs in both port orders.
+    with msl.EnvBatch(3, length=1, action_format="raw") as env:
+        env.configure_match(stocks=1, seed=1, players=(
+            msl.PlayerConfig(msl.Character.FOX), msl.PlayerConfig(msl.Character.FOX)))
+        env.reset_all()
+        first_stockout = {}
+        for tick in range(500):
+            env.reset_cursor()
+            pads = env.raw_action_view[0]["players"]
+            pads["main_x"] = 0
+            pads["main_x"][:, 0] = -80
+            pads["main_x"][:, 1] = 80
+            if tick < 123:
+                pads["main_x"] = 0
+            elif tick < 143:
+                pads["main_x"][1, 1] = 0
+                pads["main_x"][2, 0] = 0
+            env.step()
+            for lane in range(3):
+                stocks = env.current_frame[lane]["slots"]["stocks"][:2]
+                if np.any(stocks == 0) and lane not in first_stockout:
+                    assert env.terminal_at(0)[lane]["done"]
+                    assert env.terminal_at(0)[lane]["match_ended"]
+                    first_stockout[lane] = env.current_frame[lane].copy()
+            if len(first_stockout) == 3:
+                break
+        assert len(first_stockout) == 3
+        assert first_stockout[0]["slots"]["stocks"][:2].tolist() == [0, 0]
+        assert first_stockout[1]["slots"]["stocks"][:2].tolist() == [0, 1]
+        assert first_stockout[2]["slots"]["stocks"][:2].tolist() == [1, 0]
+        frozen = env.current_frame.copy()
+        snapshot = env.save(1)
+        for _ in range(80):
+            env.reset_cursor()
+            env.step()
+        assert env.current_frame.tobytes() == frozen.tobytes()
+        env.restore(0, snapshot)
+        env.reset_cursor()
+        env.step()
+        assert env.current_frame[0].tobytes() == frozen[1].tobytes()
+        assert env.terminal_at(0)[0]["match_ended"]
+
+
+def test_frame_cutoff_and_restore(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(3, length=1) as env:
+        env.configure_matches([
+            msl.MatchConfig(max_frame=60),
+            msl.MatchConfig(max_frame=0),
+            msl.MatchConfig(),
+        ])
+        env.reset_all()
+        for _ in range(123):
+            env.reset_cursor()
+            env.step()
+        assert env.current_frame["frame_id"].tolist() == [0, 0, 0]
+        assert env.terminal_at(0)["done"].tolist() == [0, 1, 0]
+        assert env.terminal_at(0)["match_ended"].tolist() == [0, 0, 0]
+        for _ in range(10):
+            env.reset_cursor()
+            env.step(np.array([0, 1, 1], dtype=np.uint8))
+        assert env.current_frame["frame_id"].tolist() == [0, 0, 10]
+        for _ in range(59):
+            env.reset_cursor()
+            env.step()
+        assert not env.terminal_at(0)[0]["done"]
+        snapshot = env.save(0)
+        env.reset_cursor()
+        env.step()
+        assert env.current_frame["frame_id"].tolist() == [60, 0, 70]
+        assert env.terminal_at(0)["done"].tolist() == [1, 1, 0]
+        assert env.terminal_at(0)["match_ended"].tolist() == [0, 0, 0]
+        assert env.terminal_at(0)["max_frame_reached"].tolist() == [1, 1, 0]
+        final = env.current_frame[0].copy()
+        env.restore(2, snapshot)
+        env.reset_cursor()
+        env.step()
+        assert env.current_frame[0].tobytes() == final.tobytes()
+        assert env.current_frame[2].tobytes() == final.tobytes()
+        assert env.terminal_at(0)[2]["max_frame_reached"]

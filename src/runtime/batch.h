@@ -31,6 +31,8 @@ uint32_t msl_core_batch_match_count(const MslCoreBatch* batch);
 MslCoreResult msl_core_batch_reset_matches(
     MslCoreBatch* batch, const MslCoreMatchConfig* configs,
     size_t config_stride, const uint8_t* match_mask, size_t mask_stride);
+MslCoreResult msl_core_batch_set_max_frame(
+    MslCoreBatch* batch, uint32_t match_index, int32_t max_frame);
 MslCoreResult msl_core_batch_step_matches(
     MslCoreBatch* batch, const MslCoreInput* inputs, size_t input_stride,
     const uint8_t* match_mask, size_t mask_stride);

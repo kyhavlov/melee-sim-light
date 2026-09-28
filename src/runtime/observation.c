@@ -540,7 +540,9 @@ void msl_core_match_write_terminal(const MslCoreMatch* match,
         }
     }
     alive_teams = (uint8_t) __builtin_popcount((unsigned int) team_mask);
-    max_reached = max_frame_id >= 0 && match->frame_id >= max_frame_id;
+    max_reached = (match->rules.max_frame >= 0 &&
+                   match->frame_id >= match->rules.max_frame) ||
+                  (max_frame_id >= 0 && match->frame_id >= max_frame_id);
     out[offsetof(MslCoreTerminal, done)] = match->rules.ended || max_reached;
     out[offsetof(MslCoreTerminal, match_ended)] = match->rules.ended != 0;
     out[offsetof(MslCoreTerminal, stockout)] = stockout;
