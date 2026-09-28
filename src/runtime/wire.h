@@ -141,8 +141,28 @@ typedef struct MslCoreMatchConfig {
     uint8_t stage_event_streams;
     // Online/Core/WhispyBlowDirFix excludes death animations from the vote.
     uint8_t whispy_dead_fighter_fix;
+    // Pokemon Stadium's transformations, named by the patch set that owns
+    // them (MSL_STADIUM_*). Zero keeps the stage frozen, which every other
+    // stage ignores. The two unfrozen patch sets decide and load differently
+    // and are not interchangeable.
+    uint8_t stadium_transformations;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
+
+enum {
+    // Frozen: External/Frozen PS/Core/FreezePokemon.asm, the online toggle
+    // (Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm), or the legacy
+    // online bypass at 0x801D4578.
+    MSL_STADIUM_FROZEN = 0,
+    // Common/Preload Stadium Transformations: the next transformation is
+    // chosen and read on the first frame of each wait, and the timer's end
+    // publishes the already-read archive in the same frame.
+    MSL_STADIUM_PRELOADED = 1,
+    // Slippi Online 3.18+: the retail decision at the timer's end, with
+    // Online/Core/Hacks/Stadium/{StadiumFileLoad,GrPsxIsValid}.asm reading
+    // the archive synchronously in place of the DVD.
+    MSL_STADIUM_ONLINE_LOADED = 2,
+};
 
 // Native validation workers keep immutable GameData alive across jobs. The
 // frame count gives each job an explicit boundary without closing the stream;
@@ -352,9 +372,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 63,
+_Static_assert(sizeof(MslCoreMatchConfig) == 64,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 119,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 120,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");

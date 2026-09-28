@@ -193,6 +193,27 @@ HSD_Archive* lbDvd_8001819C(const char* basename)
     return msl_host_archive_find(basename);
 }
 
+int msl_host_file_exists(const char* basename)
+{
+    char path[1024];
+    FILE* file;
+#ifdef MSL_CORE_NATIVE
+    if (raw_file_find(basename) != NULL) {
+        return 1;
+    }
+    if (msl_core_file_context()->sealed) {
+        return 0;
+    }
+#endif
+    make_path(path, sizeof(path), basename);
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        return 0;
+    }
+    fclose(file);
+    return 1;
+}
+
 HSD_Archive* msl_host_archive_find(const char* basename)
 {
 #ifdef MSL_CORE_NATIVE

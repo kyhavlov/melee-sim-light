@@ -15,6 +15,7 @@
 #include "ft/ftlib.h"
 #include "gr/grdatfiles.h"
 #include "gr/grizumi.h"
+#include "gr/grpstadium.h"
 #include "gr/ground.h"
 #include "gr/types.h"
 #include "it/inlines.h"
@@ -25,6 +26,7 @@
 #include "lb/lbarchive.h"
 #include "lb/lbspdisplay.h"
 #include "mp/mpcoll.h"
+#include "mp/mpisland.h"
 #include "mp/mplib.h"
 #include "mp/types.h"
 #include "pl/player.h"
@@ -426,6 +428,13 @@ static void configure_headless_ground_schedule(
     MslCoreMatch* match, const MslCoreStageSpec* spec)
 {
     int i;
+    // An unfrozen Stadium keeps every ground on its source schedule: the
+    // transformations scale and animate the layout grounds, whose collision
+    // follows their joints, and add grounds of their own mid-match.
+    // refs/melee/src/melee/gr/grpstadium.c::grStadium_801D4548
+    if (match->config.stadium_transformations != MSL_STADIUM_FROZEN) {
+        return;
+    }
     for (i = 0; i < MSL_CORE_STAGE_GROUND_CAPACITY; ++i) {
         Ground* gp;
         uint16_t map_bit;
@@ -663,6 +672,15 @@ static int validate_config(MslCoreMatchConfig* config)
         fprintf(stderr,
                 "current core supports the six legal stage ids "
                 "2,3,8,28,31,32\n");
+        return -1;
+    }
+    if (config->stadium_transformations > MSL_STADIUM_ONLINE_LOADED ||
+        (config->stadium_transformations != MSL_STADIUM_FROZEN &&
+         config->stage_id != MSL_CORE_STAGE_POKEMON_STADIUM))
+    {
+        fprintf(stderr, "stadium_transformations is 0 (frozen), 1 "
+                        "(preloaded) or 2 (online-loaded), and nonzero only "
+                        "on Pokemon Stadium\n");
         return -1;
     }
     if (config->num_players != 0 &&
@@ -1032,6 +1050,7 @@ static int match_construct(MslCoreMatch* match,
     uint32_t ics_count = 0;
     uint32_t peach_count = 0;
     u32 runtime_item_count;
+    u32 stadium_transforms;
 #endif
 
     match->random.value = 1;
@@ -1041,6 +1060,18 @@ static int match_construct(MslCoreMatch* match,
     match->config = *config;
     if (validate_config(&match->config) != 0) {
         return -1;
+    }
+    if (match->config.stadium_transformations != MSL_STADIUM_FROZEN) {
+        for (i = 0; i < MSL_STADIUM_TRANSFORMATION_ARCHIVES; ++i) {
+            if (msl_host_archive_find(
+                    msl_stadium_transformation_archives[i]) == NULL)
+            {
+                fprintf(stderr, "unfrozen Pokemon Stadium needs %s in the "
+                                "extracted game data; re-extract it\n",
+                        msl_stadium_transformation_archives[i]);
+                return -1;
+            }
+        }
     }
 #ifdef MSL_CORE_NATIVE
     msl_reloc_begin_match(match);
@@ -1414,6 +1445,14 @@ static int match_construct(MslCoreMatch* match,
     // Retail allocates all of that lazily; the sealed arena reserves it here
     // for every Kirby in the match.
     // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_SpecialN_800EFB4C
+    // An unfrozen Pokemon Stadium adds its transformations' grounds in play
+    // (see the island reserve below). Its per-pool terms are about twice the
+    // extra peak its fifty measured games (36 online, 14 console) reached
+    // over frozen ones: AObjs +11, FObjs +21, IDs +30, GObjs +19, procs +47,
+    // Vecs +25. JObjs are bounded by the data: fire's 26-joint layout beside
+    // home's while they swap, plus the camera-quake model, stays under 35.
+    stadium_transforms =
+        match->config.stadium_transformations != MSL_STADIUM_FROZEN ? 1 : 0;
     HSD_ObjAllocEnsureFree(&fighter_x2040_alloc_data, 4 * kirby_count);
     {
         MslSourceMatchState* state = msl_core_source_match_state();
@@ -1427,7 +1466,7 @@ static int match_construct(MslCoreMatch* match,
     }
     HSD_ObjAllocEnsureFree(HSD_AObjGetAllocData(),
                            128 + 64 * samus_count + 64 * mewtwo_count +
-                               64 * kirby_count);
+                               64 * kirby_count + 32 * stadium_transforms);
     // Article animation loads a whole joint graph in a single frame, so the
     // FObj bound is the sum of the concurrent per-fighter bursts. Every port
     // can contribute its own, and bursts from different fighters overlap, so
@@ -1461,13 +1500,15 @@ static int match_construct(MslCoreMatch* match,
     HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(),
                            256 + 128 * ness_count + 256 * samus_count +
                                32 * link_count + 32 * peach_count +
-                               192 * mewtwo_count + 256 * kirby_count);
+                               192 * mewtwo_count + 256 * kirby_count +
+                               64 * stadium_transforms);
     // Costume-hat loaders publish every descriptor key against fighter parts;
     // those IDs remain after a hat is replaced. Bound all preloaded costume
     // and accessory trees per Kirby, in addition to transient hat/item IDs.
     // ftKirby/ftkirby.c::{ftKb_SpecialN_800EF0E4,ftKb_SpecialN_800EF438}
     HSD_ObjAllocEnsureFree(HSD_IDGetAllocData(),
-                           128 + 32 * kirby_count + kirby_hat_ids);
+                           128 + 32 * kirby_count + kirby_hat_ids +
+                               64 * stadium_transforms);
     // Link and Young Link carry four RObjs each against two for every other
     // supported fighter, so four Link ports land on exactly 16 live RObjs and
     // filled the former flat 16-slot reserve to the last slot. Nothing is live
@@ -1482,14 +1523,15 @@ static int match_construct(MslCoreMatch* match,
     HSD_ObjAllocEnsureFree(&gobj_alloc_data,
                            128 + 64 * samus_count + 32 * link_count +
                                32 * sheik_count + 64 * ics_count +
-                               32 * kirby_count);
+                               32 * kirby_count + 32 * stadium_transforms);
     // Every live item GObj schedules a proc, and Ness's steered PK Thunder
     // plus PK Fire pillars keep the most item GObjs alive at once: an
     // hour-long four-Ness chaos soak peaked at 365 live procs against the
     // former flat 256, aborting in HSD_GObj_SetupProc. Two Ness beside two
     // Pikachu measured 267, so one Ness already leaves the flat figure thin.
     // tests/melee_core/pool_chaos_soak.c
-    HSD_ObjAllocEnsureFree(&gobjproc_alloc_data, 256 + 64 * ness_count);
+    HSD_ObjAllocEnsureFree(&gobjproc_alloc_data,
+                           256 + 64 * ness_count + 96 * stadium_transforms);
     // The reached Peach article graph consumes twelve temporary matrix-pool
     // slots. The resulting fifteen-item bound rounds to the established
     // 256-slot small-object reserve.
@@ -1507,7 +1549,7 @@ static int match_construct(MslCoreMatch* match,
     // refs/melee/src/sysdolphin/baselib/mtx.c::{HSD_VecAlloc,HSD_VecFree}
     HSD_ObjAllocEnsureFree(HSD_VecGetAllocData(),
                            match->fighter_pose.joint_count + 128 +
-                               96 * kirby_count);
+                               96 * kirby_count + 64 * stadium_transforms);
     // Retain dev's full source item reserve and the incoming per-tether link
     // reserves. Shy Guys are a separate stage-owned producer; grStory_801E3418
     // admits one wave of at most five while no prior wave remains alive.
@@ -1533,7 +1575,21 @@ static int match_construct(MslCoreMatch* match,
     // PlPe.dat turnip graph has 17 joints (it_802BD4AC -> Item_802680CC).
     msl_class_reserve_pieces(
         sizeof(HSD_JObj), 128 + 128 * match->config.num_players +
-                              (peach_count != 0 ? 17 * runtime_item_count : 0));
+                              (peach_count != 0 ? 17 * runtime_item_count : 0) +
+                              64 * stadium_transforms);
+
+    // An unfrozen Pokemon Stadium builds each transformation's ground in play:
+    // its joint tree and animation objects, a GObj and procs, and the
+    // collision islands of the joints it adds; two layouts are live at once
+    // while one sinks and the next rises. Its islands come from the source
+    // free list before any allocation, so the list is stocked with one per
+    // collision line, which bounds the islands any joint set can form. The
+    // object pools take their per-stage terms in the reserves above.
+    // refs/melee/src/melee/gr/grpstadium.c::grStadium_801D4548
+    // refs/melee/src/melee/mp/mpisland.c::mpIsland_8005B004
+    if (stadium_transforms) {
+        msl_mpisland_reserve(stage_info.coll_data->line_count);
+    }
 
     // This Match's source allocation pools are complete. Shared DAT graphs
     // are sealed once, after GameData has preloaded the supported domain;
@@ -1718,6 +1774,22 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         {
             return -1;
         }
+    }
+    // Pokemon Stadium's transformation archives, read and translated once
+    // (grdatfiles.c::msl_grdatfiles_prepare_archive). An extraction that
+    // predates them still loads; only an unfrozen Stadium match is refused.
+    for (i = 0; i < MSL_STADIUM_TRANSFORMATION_ARCHIVES; ++i) {
+        if (!msl_host_file_exists(msl_stadium_transformation_archives[i])) {
+            return 0;
+        }
+    }
+    for (i = 0; i < MSL_STADIUM_TRANSFORMATION_ARCHIVES; ++i) {
+        HSD_Archive* archive =
+            lbArchive_LoadArchive(msl_stadium_transformation_archives[i]);
+        if (archive == NULL) {
+            return -1;
+        }
+        msl_grdatfiles_prepare_archive(archive);
     }
     return 0;
 }
@@ -2599,6 +2671,27 @@ int msl_core_match_step(MslCoreMatch* match, const MslCoreInput* input,
                          msl_profile_cycles() - started);
 #endif
     return msl_core_match_step_finish(match, frame_seed);
+}
+
+int msl_core_stadium_state(const MslCoreMatch* match, int* phase, int* kind)
+{
+    Ground_GObj* gobj;
+    Ground* gp;
+
+    *phase = 0;
+    *kind = 5;
+    if (match->config.stage_id != MSL_CORE_STAGE_POKEMON_STADIUM) {
+        return 0;
+    }
+    msl_core_bind_match((MslCoreMatch*) match);
+    gobj = Ground_801C2BA4(2);
+    if (gobj == NULL || (gp = (Ground*) gobj->user_data) == NULL) {
+        return 0;
+    }
+    // Recording/Stages/SendStadiumInfo.asm reports these two halfwords.
+    *phase = gp->u.stadium.xDC;
+    *kind = gp->u.stadium.xDE;
+    return 1;
 }
 
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match)

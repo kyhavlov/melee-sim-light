@@ -150,6 +150,10 @@ HSD_GObjEvent msl_core_match_scheduler_invoke_owner(MslCoreMatch* match,
                                                     HSD_GObjEvent owner);
 int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed);
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match);
+// Pokemon Stadium's transformation phase and kind (the main ground's xDC and
+// xDE), the pair Slippi 3.18+ records as a stadium_transformation event.
+// Returns 0 on any other stage.
+int msl_core_stadium_state(const MslCoreMatch* match, int* phase, int* kind);
 int msl_core_write_items_into_zeroed(
     const MslCoreMatch* match, MslCoreItem items[MSL_CORE_MAX_ITEMS]);
 

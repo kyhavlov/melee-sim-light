@@ -192,6 +192,36 @@ UnkArchiveStruct* grDatFiles_801C6478(void* data, s32 length)
     return arc;
 }
 
+#ifdef MSL_CORE_HOSTED
+// Pokemon Stadium's transformation archives. Retail reads one into a DVD
+// buffer when it is needed and parses it into a fresh heap archive
+// (grStadium_801D42B8 -> grDatFiles_801C6478, or Slippi's synchronous
+// StadiumFileLoad). A hosted match cannot read or allocate after GameData
+// seals, so GameData reads and translates all four once, and a load takes a
+// slot pointing at the shared archive. Slot word unk8 = 2 marks it
+// GameData-owned: grAnime_801C65B0 frees only words 0 and 1, so releasing the
+// slot clears it and nothing else, exactly as retail's release leaves no
+// trace in gameplay state.
+// refs/melee/src/melee/gr/{grpstadium.c::grStadium_801D42B8,
+//   grdatfiles.c::grDatFiles_801C6478,granime.c::grAnime_801C65B0}
+// refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/StadiumFileLoad.asm
+void msl_grdatfiles_prepare_archive(HSD_Archive* archive)
+{
+    grDatFiles_801C6228(HSD_ArchiveGetPublicAddress(archive, "map_head"));
+}
+
+UnkArchiveStruct* msl_grdatfiles_publish_archive(HSD_Archive* archive)
+{
+    UnkArchiveStruct* arc = grDatFiles_801C62B4();
+    HSD_ASSERT(290, arc);
+    arc->unk0 = archive;
+    arc->unk4 = HSD_ArchiveGetPublicAddress(archive, "map_head");
+    arc->unk8 = 2;
+    grDatFiles_801C6228(arc->unk4);
+    return arc;
+}
+#endif
+
 static UnkBgmStruct grDatFiles_803E07E4 = {
     0, -1, -1, 0, 0, 0, 0, 0, { 0 },
 };

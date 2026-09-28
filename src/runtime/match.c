@@ -117,6 +117,11 @@ bool msl_whispy_ignores_dead_fighters(void)
     return msl_core_active_match()->config.whispy_dead_fighter_fix != 0;
 }
 
+int msl_stadium_transformations(void)
+{
+    return msl_core_active_match()->config.stadium_transformations;
+}
+
 bool msl_core_uses_online_fnmsubs_zero(void)
 {
     return msl_online_fnmsubs_zero;

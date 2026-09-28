@@ -33,4 +33,8 @@ def test_configured_raw_data_profile_is_valid() -> None:
         manifest = validate_raw_dir(path, verify_hashes=False)
     except DataError as exc:
         pytest.fail(str(exc))
-    assert len(manifest["files"]) == 299
+    # 299 through GrPs.dat, plus Pokemon Stadium's four transformation
+    # archives (GrPs1-4.dat).
+    assert len(manifest["files"]) == 303
+    assert {"GrPs1.dat", "GrPs2.dat", "GrPs3.dat", "GrPs4.dat"} <= {
+        record["name"] for record in manifest["files"]}

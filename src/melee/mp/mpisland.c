@@ -21,6 +21,22 @@ static mp_UnkStruct0* alloc_island(void)
 #endif
 }
 
+#ifdef MSL_CORE_HOSTED
+// mpIsland_8005B004 takes a free island from its list before it allocates
+// one. A stage that adds joint collision mid-match (unfrozen Pokemon
+// Stadium) needs its islands before the Match arena seals; stocking the
+// free list leaves every island's contents to the source code.
+void msl_mpisland_reserve(int count)
+{
+    while (count-- > 0) {
+        mp_UnkStruct0* island = alloc_island();
+        HSD_ASSERT(0x3E, island);
+        island->next = mpIsland_80458E88.x20;
+        mpIsland_80458E88.x20 = island;
+    }
+}
+#endif
+
 /* 3B73E8 */ mpIsland_Palette mpIsland_TerrainPalette = { {
     { mp_Terrain_Rock, { 0x80, 0x60, 0x60, 0xFF } },
     { mp_Terrain_Grass, { 0x40, 0xFF, 0x40, 0xFF } },

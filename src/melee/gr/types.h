@@ -807,6 +807,13 @@ struct grStadium_GroundVars {
     /* +4 gp+E2   */ s16 xE2;
     /* +4 gp+E4   */ HSD_GObj* xE4;
     /* +4 gp+E8   */ HSD_GObj* xE8;
+#ifdef MSL_CORE_HOSTED
+    // Common/Preload Stadium Transformations stores its choice and its
+    // read-once flag in the unused tail of the stage GObj's data
+    // (Transformation.s: TransformationID at 0xEC, isLoaded at 0xF0).
+    /* +4 gp+EC   */ s32 xEC_preloaded_kind;
+    /* +4 gp+F0   */ u8 xF0_preloaded;
+#endif
 };
 
 /// Specific to the Pokemon Stadium jumbotron

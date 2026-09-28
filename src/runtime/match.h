@@ -54,6 +54,9 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
 bool msl_whispy_ignores_dead_fighters(void);
 bool msl_core_uses_online_fnmsubs_zero(void);
 bool msl_core_has_brawl_offscreen_damage(void);
+// MSL_STADIUM_* for this match; MSL_STADIUM_FROZEN everywhere but an unfrozen
+// Pokemon Stadium.
+int msl_stadium_transformations(void);
 bool msl_core_freezes_dead_up_fall_physics(void);
 void msl_core_advance_match_frame(void);
 void msl_core_apply_team_stock_steal(void);

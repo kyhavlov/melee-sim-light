@@ -33,6 +33,9 @@ typedef struct MslFileContext {
 } MslFileContext;
 
 void msl_host_set_data_root(const char* path);
+// Whether the extracted game data has this file (before GameData seals, the
+// disk; after, the cache).
+int msl_host_file_exists(const char* basename);
 HSD_Archive* msl_host_archive_find(const char* basename);
 void msl_host_archive_store(const char* basename, HSD_Archive* archive);
 void msl_host_finish_initialization(void);

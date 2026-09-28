@@ -13,6 +13,14 @@ typedef enum {
     PsType_Display = 1,
 } StadiumGrType;
 
+#ifdef MSL_CORE_HOSTED
+enum { MSL_STADIUM_TRANSFORMATION_ARCHIVES = 4 };
+// grpstadium.c's datfiles: GrPs1-4.dat, the fire, grass, water and rock
+// transformations' archives.
+extern char* datfiles[];
+#define msl_stadium_transformation_archives datfiles
+#endif
+
 /* 1D1018 */ void grStadium_OnDemoInit(int);
 /* 1D101C */ void grStadium_OnInit(void);
 /* 1D10C8 */ void grStadium_OnLoad(void);
