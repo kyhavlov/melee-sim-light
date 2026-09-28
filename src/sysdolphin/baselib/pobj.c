@@ -29,7 +29,9 @@ static void PObjInfoInit(void);
 
 HSD_PObjInfo hsdPObj = { PObjInfoInit };
 
-static HSD_PObjInfo* default_class = NULL;
+// Set only around fighter costume loads; Matches stepped on other threads
+// must keep allocating plain PObjs meanwhile.
+static _Thread_local HSD_PObjInfo* default_class = NULL;
 
 static f32 (*vertex_buffer)[3] = NULL;
 static f32 (*normal_buffer)[3] = NULL;
