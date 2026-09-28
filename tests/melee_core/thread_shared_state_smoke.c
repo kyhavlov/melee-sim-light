@@ -11,8 +11,14 @@
 // and refilled GameData's fighter part flags. A Fighter_Create on another
 // thread meanwhile counted the wrong skeleton nodes and failed the filtered
 // JObj load's node-count assert.
+//
+// archive symbols: every Match reset reloads ItCo's symbol table into
+// GameData's item pointers through lbArchive_80017040, which stored NULL
+// before each lookup. it_8027870C on another thread meanwhile read the NULL
+// table and crashed on its first field.
 #include "ft/forward.h"
 #include "ft/ftparts.h"
+#include "it/it_3F14.h"
 #include "runtime/scalar.h"
 
 #include <baselib/jobj.h>
@@ -150,6 +156,20 @@ static void* part_flag_reader(void* arg)
     return NULL;
 }
 
+static void* archive_symbol_reader(void* arg)
+{
+    Worker* worker = arg;
+    int ok = worker_begin(worker);
+    it_804D6D20_t* expected = it_804D6D20;
+    while (ok && !stop) {
+        worker->wrong +=
+            __atomic_load_n(&it_804D6D20, __ATOMIC_RELAXED) != expected;
+        ++worker->runs;
+    }
+    worker_end(worker);
+    return NULL;
+}
+
 static int run_case(const char* name, void* (*writer)(void*),
                     void* (*reader)(void*))
 {
@@ -202,5 +222,6 @@ int main(int argc, char** argv)
     game_data = &data;
     ok = run_case("default class", interp_loader, spline_loader);
     ok &= run_case("part flags", match_resetter, part_flag_reader);
+    ok &= run_case("archive symbols", match_resetter, archive_symbol_reader);
     return ok ? 0 : 1;
 }
