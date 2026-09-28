@@ -49,7 +49,7 @@ def test_native_preprocessor_writes_packed_benchmark_case(tmp_path: Path) -> Non
         "<8sIIII", output.read_bytes()[:24]
     )
     assert magic == b"MSLRPB03"
-    assert version == 4
+    assert version == 5
     assert input_size == 52
     assert stored_frames == frame_count
     assert output.stat().st_size == header_size + input_size * frame_count
