@@ -5,6 +5,9 @@
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
+#include "it/forward.h"
+#include "it/inlines.h"
+#include "it/types.h"
 #include "lb/types.h"
 #include "runtime/context.h"
 #include "runtime/observation.h"
@@ -308,6 +311,43 @@ static void write_stage(const MslCoreMatch* match, uint8_t* out)
     }
 }
 
+static void write_item_hitboxes(const MslCoreMatch* match, uint8_t* out)
+{
+    Item_GObj* gobj = (Item_GObj*) match->gobj.entities->items;
+    int slot = 0;
+
+    // Same entity-list walk as msl_core_write_items_into_zeroed, so slot i
+    // here describes items[i].
+    while (gobj != NULL && slot < MSL_CORE_MAX_ITEMS) {
+        const Item* ip = GET_ITEM(gobj);
+        uint8_t* hitbox_out = out + (size_t) slot * sizeof(MslViewerItemHitbox);
+        int h;
+
+        if (ip != NULL) {
+            for (h = 0; h < 4; ++h) {
+                const HitCapsule* hit = &ip->x5D4_hitboxes[h].hit;
+                if (hit->state == HitCapsule_Disabled) {
+                    continue;
+                }
+                // it_80272674 fills x4C from the capsule's JObj before the
+                // collision pass; ftColl's item loop tests that capsule at
+                // hit->scale with only the victim side scaled.
+                // refs/melee/src/melee/it/it_2725.c::it_80272674
+                // refs/melee/src/melee/ft/ftcoll.c (x5D4_hitboxes loop)
+                put_f32(hitbox_out, offsetof(MslViewerItemHitbox, x),
+                        hit->x4C.x);
+                put_f32(hitbox_out, offsetof(MslViewerItemHitbox, y),
+                        hit->x4C.y);
+                put_f32(hitbox_out, offsetof(MslViewerItemHitbox, radius),
+                        hit->scale);
+                break;
+            }
+        }
+        slot += 1;
+        gobj = (Item_GObj*) gobj->next;
+    }
+}
+
 void msl_core_match_write_viewer(const MslCoreMatch* match,
                                  MslCoreViewerState* output)
 {
@@ -354,6 +394,8 @@ void msl_core_match_write_viewer(const MslCoreMatch* match,
     memcpy(out + offsetof(MslCoreViewerState, items), compare->items,
            sizeof(compare->items));
     msl_core_canonicalize_production_items(output->items);
+    write_item_hitboxes(match,
+                        out + offsetof(MslCoreViewerState, item_hitboxes));
     write_stage(match, out + offsetof(MslCoreViewerState, stage));
     msl_camera_get_render_transform(&eye, &interest, &fov);
     put_f32(out,

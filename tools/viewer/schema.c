@@ -19,6 +19,7 @@ int main(void)
     VALUE("VIEWER_PLAYER_SIZE", sizeof(MslCoreViewerPlayer));
     VALUE("VIEWER_HITBOX_SIZE", sizeof(MslCoreViewerHitbox));
     VALUE("ITEM_SIZE", sizeof(MslCoreItem));
+    VALUE("VIEWER_ITEM_HITBOX_SIZE", sizeof(MslViewerItemHitbox));
     puts("");
 
     puts("export const matchConfigOffsets = Object.freeze({");
@@ -85,6 +86,7 @@ int main(void)
     FIELD(MslCoreViewerState, stock_count, "stockCount");
     FIELD(MslCoreViewerState, players, "players");
     FIELD(MslCoreViewerState, items, "items");
+    FIELD(MslCoreViewerState, item_hitboxes, "itemHitboxes");
     FIELD(MslCoreViewerState, stage, "stage");
     FIELD(MslCoreViewerState, camera, "camera");
     FIELD(MslCoreViewerState, follower_present, "followerPresent");
@@ -160,6 +162,12 @@ int main(void)
     FIELD(MslCoreItem, misc1, "misc1");
     FIELD(MslCoreItem, misc2, "misc2");
     FIELD(MslCoreItem, misc3, "misc3");
+    puts("});");
+
+    puts("export const viewerItemHitboxOffsets = Object.freeze({");
+    FIELD(MslViewerItemHitbox, x, "x");
+    FIELD(MslViewerItemHitbox, y, "y");
+    FIELD(MslViewerItemHitbox, radius, "radius");
     puts("});");
 
     puts("export const viewerStageOffsets = Object.freeze({");
