@@ -219,6 +219,7 @@ NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/public_api_smoke.c \
 	$(ROOT)/tests/melee_core/context_smoke.c \
 	$(ROOT)/tests/melee_core/thread_shared_state_smoke.c \
+	$(ROOT)/tests/melee_core/shared_write_audit.c \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
 	$(ROOT)/tests/melee_core/gameplay_parts_smoke.c \
 	$(ROOT)/tests/melee_core/article_pool_smoke.c \
@@ -265,6 +266,7 @@ NATIVE_SCHEDULER_SMOKE := $(NATIVE_BUILD)/scheduler-smoke
 NATIVE_SCALAR_API_SMOKE := $(NATIVE_BUILD)/scalar-api-smoke
 NATIVE_CONTEXT_SMOKE := $(NATIVE_BUILD)/context-smoke
 NATIVE_THREAD_SHARED_STATE_SMOKE := $(NATIVE_BUILD)/thread-shared-state-smoke
+NATIVE_SHARED_WRITE_AUDIT := $(NATIVE_BUILD)/shared-write-audit
 NATIVE_BATCH_API_SMOKE := $(NATIVE_BUILD)/batch-api-smoke
 NATIVE_PUBLIC_API_SMOKE := $(NATIVE_BUILD)/public-api-smoke
 NATIVE_GAMEPLAY_PARTS_SMOKE := $(NATIVE_BUILD)/gameplay-parts-smoke
@@ -753,6 +755,8 @@ $(eval $(call link_native_smoke,$(NATIVE_SCALAR_API_SMOKE),$(NATIVE_OBJ_DIR)/tes
 $(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/context_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_THREAD_SHARED_STATE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/thread_shared_state_smoke.o))
 $(NATIVE_THREAD_SHARED_STATE_SMOKE): LDLIBS += -pthread
+$(eval $(call link_native_smoke,$(NATIVE_SHARED_WRITE_AUDIT),$(NATIVE_OBJ_DIR)/tests/melee_core/shared_write_audit.o))
+$(NATIVE_SHARED_WRITE_AUDIT): LDLIBS += -Wl,-z,now
 $(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/public_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))

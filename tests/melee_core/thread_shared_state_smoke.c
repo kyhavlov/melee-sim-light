@@ -12,6 +12,11 @@
 // thread meanwhile counted the wrong skeleton nodes and failed the filtered
 // JObj load's node-count assert.
 //
+// PObj default class: fighter setup selects ftPObj as the default PObj class
+// around its costume loads, the same process-wide pattern as the JObj class;
+// HSD_PObjGetDefaultClass on another thread meanwhile saw ftPObj (or, reading
+// it twice, NULL).
+//
 // archive symbols: every Match reset reloads ItCo's symbol table into
 // GameData's item pointers through lbArchive_80017040, which stored NULL
 // before each lookup. it_8027870C on another thread meanwhile read the NULL
@@ -22,6 +27,7 @@
 #include "runtime/scalar.h"
 
 #include <baselib/jobj.h>
+#include <baselib/pobj.h>
 #include <baselib/spline.h>
 
 #include <pthread.h>
@@ -107,6 +113,31 @@ static void* spline_loader(void* arg)
             ++worker->wrong;
         }
         HSD_JObjRemoveAll(jobj);
+        ++worker->runs;
+    }
+    worker_end(worker);
+    return NULL;
+}
+
+static void* pobj_class_setter(void* arg)
+{
+    Worker* worker = arg;
+    int ok = worker_begin(worker);
+    while (ok && !stop) {
+        ftPartsPObjSetDefaultClass();
+        ftPartsPObjClearDefaultClass();
+        ++worker->runs;
+    }
+    worker_end(worker);
+    return NULL;
+}
+
+static void* pobj_class_reader(void* arg)
+{
+    Worker* worker = arg;
+    int ok = worker_begin(worker);
+    while (ok && !stop) {
+        worker->wrong += HSD_PObjGetDefaultClass() != &hsdPObj;
         ++worker->runs;
     }
     worker_end(worker);
@@ -221,6 +252,7 @@ int main(int argc, char** argv)
     }
     game_data = &data;
     ok = run_case("default class", interp_loader, spline_loader);
+    ok &= run_case("pobj default class", pobj_class_setter, pobj_class_reader);
     ok &= run_case("part flags", match_resetter, part_flag_reader);
     ok &= run_case("archive symbols", match_resetter, archive_symbol_reader);
     return ok ? 0 : 1;
