@@ -117,6 +117,11 @@ bool msl_whispy_ignores_dead_fighters(void)
     return msl_core_active_match()->config.whispy_dead_fighter_fix != 0;
 }
 
+int msl_wobble_prevention(void)
+{
+    return msl_core_active_match()->config.wobble_prevention;
+}
+
 int msl_stadium_transformations(void)
 {
     return msl_core_active_match()->config.stadium_transformations;
@@ -295,8 +300,16 @@ void msl_ucf_apply_pad_buffer(Fighter* fp)
     }
 }
 
+static bool msl_ucf_absent(int code)
+{
+    return (msl_core_active_match()->config.ucf_codes_absent & code) != 0;
+}
+
 void msl_ucf_apply_dashback(Fighter* fp)
 {
+    if (msl_ucf_absent(MSL_UCF_ABSENT_DASHBACK)) {
+        return;
+    }
     // UCF 0.84 wants the stick in the new facing direction; UCF 0.8's
     // Logic/UCF DB.asm tests its magnitude alone (lfs 0x620; fabs), so a
     // flick back against the turn also qualifies there. The 0.8 code set
@@ -342,6 +355,11 @@ bool msl_ucf_damagefall_wiggle_check(const Fighter* fp)
 {
     u8 hold_time = fp->x670_timer_lstick_tilt_x;
     float last_stick_x;
+
+    if (msl_ucf_absent(MSL_UCF_ABSENT_TUMBLE)) {
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c
+        return hold_time < p_ftCommonData->x214;
+    }
 
     // Direct C translation of refs/ucf/src/tumble/tumble.cpp, injected at
     // ftCo_DamageFall_IASA+0xCC (0x800908F4). Vanilla already accepts a
@@ -401,6 +419,9 @@ static float msl_ucf_08_rim_lane(float value)
 
 bool msl_ucf_suppress_spotdodge(const Fighter* fp)
 {
+    if (msl_ucf_absent(MSL_UCF_ABSENT_SHIELD_DROP)) {
+        return false;
+    }
     // The common Escape owner calls this at both vanilla spot-dodge entry
     // sites; the gecko hooks ftCo_80099894+0x10 and, when it suppresses,
     // unwinds to the caller's `li r3, 0` so the check reports no dodge.

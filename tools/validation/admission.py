@@ -87,6 +87,34 @@ def neutral_spawn(codes: dict[int, bytes]) -> bool:
     return 0xC216E510 in codes
 
 
+def ucf_codes_absent(codes: dict[int, bytes]) -> int:
+    """The UCF injections a capture's list lacks (MslCoreMatchConfig
+    .ucf_codes_absent: 1 tumble at 0x800908F4, 2 dashback at 0x800C9A44,
+    4 shield drop at 0x800998A4). A capture with no list reports none."""
+    if not codes:
+        return 0
+    return ((0 if 0xC20908F4 in codes else 1) |
+            (0 if 0xC20C9A44 in codes else 2) |
+            (0 if 0xC20998A4 in codes else 4))
+
+
+# wire.h MSL_WOBBLE_PREVENTION_*.
+WOBBLE_PREVENTION_NONE, WOBBLE_PREVENTION_2021, WOBBLE_PREVENTION = 0, 1, 2
+
+
+def wobble_prevention(codes: dict[int, bytes]) -> int:
+    """Which PreventWobbling the capture ran (MslCoreMatchConfig
+    .wobble_prevention): the 2021 version injects its init at 0x800DA9DC,
+    the later one at 0x800DB880 and 0x800DBBD4; both check at 0x8008F090."""
+    if 0xC208F090 not in codes:
+        return WOBBLE_PREVENTION_NONE
+    if 0xC20DA9DC in codes:
+        return WOBBLE_PREVENTION_2021
+    if 0xC20DB880 in codes and 0xC20DBBD4 in codes:
+        return WOBBLE_PREVENTION
+    return WOBBLE_PREVENTION_NONE
+
+
 # wire.h MSL_STADIUM_*.
 STADIUM_FROZEN, STADIUM_PRELOADED, STADIUM_ONLINE_LOADED = 0, 1, 2
 

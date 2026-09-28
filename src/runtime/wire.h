@@ -154,6 +154,14 @@ typedef struct MslCoreMatchConfig {
     // refs/melee/src/melee/gm/gmvs.c::getSpawnPoint
     // refs/melee/src/melee/gr/stage.c::Stage_80224E64
     uint8_t retail_spawns;
+    // Slippi's PreventWobbling, which breaks an Ice Climbers grab after
+    // repeated hits from the grabber's partner (MSL_WOBBLE_PREVENTION_*).
+    // Zero is the unmodified game.
+    uint8_t wobble_prevention;
+    // UCF injections the capture's code list lacks (MSL_UCF_ABSENT_*): the
+    // UCF 0.74 toggle set has no tumble fix, and an unmodified game has none
+    // of them. Zero keeps every UCF routine the other flags select.
+    uint8_t ucf_codes_absent;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
 
@@ -170,6 +178,29 @@ enum {
     // Online/Core/Hacks/Stadium/{StadiumFileLoad,GrPsxIsValid}.asm reading
     // the archive synchronously in place of the DVD.
     MSL_STADIUM_ONLINE_LOADED = 2,
+};
+
+enum {
+    // UCF Tumble.asm (0x800908F4): the tumble wiggle's one-frame swing test.
+    MSL_UCF_ABSENT_TUMBLE = 1 << 0,
+    // UCF dashback (0x800C9A44).
+    MSL_UCF_ABSENT_DASHBACK = 1 << 1,
+    // UCF shield drop (0x800998A4).
+    MSL_UCF_ABSENT_SHIELD_DROP = 1 << 2,
+};
+
+enum {
+    MSL_WOBBLE_PREVENTION_NONE = 0,
+    // The first version (External/PreventWobbling/{1,2}.asm, until October
+    // 2022): the third distinct hit from Nana, or one of her items, breaks
+    // Popo's grab. Its init replaces the lfs of 0.0f at 0x800DA9DC in
+    // fn_800DA8E4, so the victim's CapturePulled starts at, and blends over,
+    // the grab timer instead of frame 0.
+    MSL_WOBBLE_PREVENTION_2021 = 1,
+    // Init Wobble Count / Wobble Check: the fourth distinct hit breaks the
+    // grab in singles and releases Nana too; the count is reset when the
+    // victim enters CaptureWait.
+    MSL_WOBBLE_PREVENTION = 2,
 };
 
 // Native validation workers keep immutable GameData alive across jobs. The
@@ -380,9 +411,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 65,
+_Static_assert(sizeof(MslCoreMatchConfig) == 67,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 121,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 123,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");

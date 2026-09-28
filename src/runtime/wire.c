@@ -46,6 +46,10 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, stadium_transformations)];
     config->retail_spawns =
         wire[offsetof(MslCoreMatchConfig, retail_spawns)];
+    config->wobble_prevention =
+        wire[offsetof(MslCoreMatchConfig, wobble_prevention)];
+    config->ucf_codes_absent =
+        wire[offsetof(MslCoreMatchConfig, ucf_codes_absent)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),
            sizeof(config->players));
 }

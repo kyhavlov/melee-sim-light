@@ -162,6 +162,10 @@ typedef struct ReplayView {
   uint8_t stadium_transformations;
   // No NeutralSpawn gecko in the capture (admission.py::neutral_spawn).
   uint8_t retail_spawns;
+  // MSL_WOBBLE_PREVENTION_*, from the capture's gecko list (admission.py).
+  uint8_t wobble_prevention;
+  // MSL_UCF_ABSENT_*, from the capture's gecko list (admission.py).
+  uint8_t ucf_codes_absent;
   uint8_t whispy_dead_fighter_fix;
   float damage_ratio;
 } ReplayView;
@@ -1117,6 +1121,8 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
   config->freeze_dead_up_fall_physics = replay->freeze_dead_up_fall_physics;
   config->stadium_transformations = replay->stadium_transformations;
   config->retail_spawns = replay->retail_spawns;
+  config->wobble_prevention = replay->wobble_prevention;
+  config->ucf_codes_absent = replay->ucf_codes_absent;
   config->whispy_dead_fighter_fix = replay->whispy_dead_fighter_fix;
   config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
   config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
@@ -2435,6 +2441,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "fnmsubs_profile",
       "stadium_transformations",
       "retail_spawns",
+      "wobble_prevention",
+      "ucf_codes_absent",
       NULL,
   };
   PyObject* frames_obj;
@@ -2460,6 +2468,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   const char* fnmsubs_profile = NULL;
   int stadium_transformations = 0;
   int retail_spawns = 0;
+  int wobble_prevention = 0;
+  int ucf_codes_absent = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2478,13 +2488,13 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiizip:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiizipii:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &stadium_transformations,
-          &retail_spawns)) {
+          &retail_spawns, &wobble_prevention, &ucf_codes_absent)) {
     return NULL;
   }
   if (stadium_transformations < 0 || stadium_transformations > 2) {
@@ -2513,6 +2523,16 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   replay.stadium_transformations = (uint8_t)stadium_transformations;
   replay.retail_spawns = (uint8_t)retail_spawns;
+  if (wobble_prevention < 0 || wobble_prevention > 2) {
+    PyErr_SetString(PyExc_ValueError, "wobble_prevention must be 0, 1 or 2");
+    goto done;
+  }
+  replay.wobble_prevention = (uint8_t)wobble_prevention;
+  if (ucf_codes_absent < 0 || ucf_codes_absent > 7) {
+    PyErr_SetString(PyExc_ValueError, "ucf_codes_absent must be 0 to 7");
+    goto done;
+  }
+  replay.ucf_codes_absent = (uint8_t)ucf_codes_absent;
 
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
