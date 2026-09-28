@@ -1471,17 +1471,17 @@ block_39:
         // x * e^2 - 3.0 is a double fnmsub (single rounding).
         closest_rsqrt_step1 =
             (lbColl_804D7A18 * closest_rsqrt_estimate) *
-            __builtin_fma(-(f64) closest_dist_sq,
+            msl_ppc_fma(-(f64) closest_dist_sq,
                           closest_rsqrt_estimate * closest_rsqrt_estimate,
                           lbColl_804D7A20);
         closest_rsqrt_step2 =
             (lbColl_804D7A18 * closest_rsqrt_step1) *
-            __builtin_fma(-(f64) closest_dist_sq,
+            msl_ppc_fma(-(f64) closest_dist_sq,
                           closest_rsqrt_step1 * closest_rsqrt_step1,
                           lbColl_804D7A20);
         sp38 = (float) ((f64) closest_dist_sq *
                         ((lbColl_804D7A18 * closest_rsqrt_step2) *
-                         __builtin_fma(
+                         msl_ppc_fma(
                              -(f64) closest_dist_sq,
                              closest_rsqrt_step2 * closest_rsqrt_step2,
                              lbColl_804D7A20)));
@@ -1536,17 +1536,17 @@ block_39:
         // as above.
         local_rsqrt_step1 =
             (lbColl_804D7A18 * local_rsqrt_estimate) *
-            __builtin_fma(-(f64) local_dist_sq,
+            msl_ppc_fma(-(f64) local_dist_sq,
                           local_rsqrt_estimate * local_rsqrt_estimate,
                           lbColl_804D7A20);
         local_rsqrt_step2 =
             (lbColl_804D7A18 * local_rsqrt_step1) *
-            __builtin_fma(-(f64) local_dist_sq,
+            msl_ppc_fma(-(f64) local_dist_sq,
                           local_rsqrt_step1 * local_rsqrt_step1,
                           lbColl_804D7A20);
         sp34 = (float) ((f64) local_dist_sq *
                         ((lbColl_804D7A18 * local_rsqrt_step2) *
-                         __builtin_fma(-(f64) local_dist_sq,
+                         msl_ppc_fma(-(f64) local_dist_sq,
                                        local_rsqrt_step2 * local_rsqrt_step2,
                                        lbColl_804D7A20)));
 #else

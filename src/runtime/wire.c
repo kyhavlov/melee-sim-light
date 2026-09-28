@@ -52,6 +52,8 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, ucf_codes_absent)];
     config->slippi_patches =
         wire[offsetof(MslCoreMatchConfig, slippi_patches)];
+    config->jit_arithmetic =
+        wire[offsetof(MslCoreMatchConfig, jit_arithmetic)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),
            sizeof(config->players));
 }

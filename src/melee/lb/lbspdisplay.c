@@ -255,11 +255,11 @@ void lb_8000FD48(HSD_JObj* jobj, DynamicsDesc* desc, size_t max_count)
                 double xd = (double) dist_sq;
                 double guess = __frsqrte(xd);
                 guess = (.5 * guess) *
-                        __builtin_fma(-xd, guess * guess, 3.0);
+                        msl_ppc_fma(-xd, guess * guess, 3.0);
                 guess = (.5 * guess) *
-                        __builtin_fma(-xd, guess * guess, 3.0);
+                        msl_ppc_fma(-xd, guess * guess, 3.0);
                 guess = (.5 * guess) *
-                        __builtin_fma(-xd, guess * guess, 3.0);
+                        msl_ppc_fma(-xd, guess * guess, 3.0);
 #else
                 double guess = __frsqrte((double) dist_sq);
                 guess = .5 * guess * (3.0 - guess * guess * dist_sq);

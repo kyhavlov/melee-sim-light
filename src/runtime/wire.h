@@ -165,6 +165,10 @@ typedef struct MslCoreMatchConfig {
     // Other single-instruction Slippi patches the capture's list carries
     // (MSL_PATCH_*).
     uint8_t slippi_patches;
+    // How the capturing Dolphin's JIT computed floating point where hosts
+    // differ (MSL_JIT_*). Zero is a host with FMA3, like the retail CPU's
+    // fused multiply-adds.
+    uint8_t jit_arithmetic;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
 
@@ -197,6 +201,14 @@ enum {
     // background think (the bl at 0x8021AAE4), so the background never
     // transforms and never draws random numbers.
     MSL_PATCH_FD_BACKGROUND_FROZEN = 1 << 0,
+};
+
+enum {
+    // Jit64 on a host without FMA3 (older x86 CPUs, and x86 Dolphin under
+    // Rosetta on Apple silicon) runs the double-precision fmadd family as a
+    // rounded multiply and then a rounded add. Single-precision operands give
+    // an exact product either way, so only double-precision sites move.
+    MSL_JIT_NO_HOST_FMA = 1 << 0,
 };
 
 enum {
@@ -421,9 +433,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 68,
+_Static_assert(sizeof(MslCoreMatchConfig) == 69,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 124,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 125,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");

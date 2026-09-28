@@ -122,6 +122,13 @@ bool msl_slippi_patch(int patch)
     return (msl_core_active_match()->config.slippi_patches & patch) != 0;
 }
 
+int msl_core_jit_no_host_fma(void)
+{
+    MslCoreMatch* match = msl_core_try_active_match();
+    return match != NULL &&
+           (match->config.jit_arithmetic & MSL_JIT_NO_HOST_FMA) != 0;
+}
+
 int msl_wobble_prevention(void)
 {
     return msl_core_active_match()->config.wobble_prevention;

@@ -168,6 +168,9 @@ typedef struct ReplayView {
   uint8_t ucf_codes_absent;
   // MSL_PATCH_*, from the capture's gecko list (admission.py).
   uint8_t slippi_patches;
+  // MSL_JIT_*: the capturing Dolphin's host arithmetic (arithmetic
+  // provenance, like the fnmsubs profile).
+  uint8_t jit_arithmetic;
   uint8_t whispy_dead_fighter_fix;
   float damage_ratio;
 } ReplayView;
@@ -1126,6 +1129,7 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
   config->wobble_prevention = replay->wobble_prevention;
   config->ucf_codes_absent = replay->ucf_codes_absent;
   config->slippi_patches = replay->slippi_patches;
+  config->jit_arithmetic = replay->jit_arithmetic;
   config->whispy_dead_fighter_fix = replay->whispy_dead_fighter_fix;
   config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
   config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
@@ -2447,6 +2451,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "wobble_prevention",
       "ucf_codes_absent",
       "slippi_patches",
+      "jit_arithmetic",
       NULL,
   };
   PyObject* frames_obj;
@@ -2475,6 +2480,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int wobble_prevention = 0;
   int ucf_codes_absent = 0;
   int slippi_patches = 0;
+  int jit_arithmetic = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2493,13 +2499,14 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiizipiii:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiizipiiii:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &stadium_transformations,
-          &retail_spawns, &wobble_prevention, &ucf_codes_absent, &slippi_patches)) {
+          &retail_spawns, &wobble_prevention, &ucf_codes_absent, &slippi_patches,
+          &jit_arithmetic)) {
     return NULL;
   }
   if (stadium_transformations < 0 || stadium_transformations > 2) {
@@ -2539,6 +2546,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   replay.ucf_codes_absent = (uint8_t)ucf_codes_absent;
   replay.slippi_patches = (uint8_t)slippi_patches;
+  if (jit_arithmetic < 0 || jit_arithmetic > 1) {
+    PyErr_SetString(PyExc_ValueError, "jit_arithmetic must be 0 or 1");
+    goto done;
+  }
+  replay.jit_arithmetic = (uint8_t)jit_arithmetic;
 
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;

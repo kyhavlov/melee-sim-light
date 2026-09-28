@@ -158,7 +158,8 @@ def stadium_transformations(start: dict, codes: dict[int, bytes]) -> int | None:
 
 
 def capture_issues(game, raw: bytes, *, played_on: str | None = None,
-                   fnmsubs_profile: str | None = None) -> list[str]:
+                   fnmsubs_profile: str | None = None,
+                   jit_arithmetic: str | None = None) -> list[str]:
     """Return property violations without running or consulting simulator output."""
     issues = []
     identity = hashlib.sha256(raw).hexdigest()
@@ -208,6 +209,14 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
     if fnmsubs_profile is not None:
         profiles = json.loads((ROOT / "agent_docs/validation/arithmetic_provenance.json").read_text())
         if not any(r["sha256_slp"] == identity and r["fnmsubs_profile"] == fnmsubs_profile
+                   for r in profiles["captures"]):
+            issues.append("unestablished-arithmetic")
+    # A capture made without host FMA3 is a claim about the recording machine
+    # that the file cannot carry; like the fnmsubs profile, it needs a
+    # reviewed provenance record.
+    if jit_arithmetic not in (None, "fma"):
+        profiles = json.loads((ROOT / "agent_docs/validation/arithmetic_provenance.json").read_text())
+        if not any(r["sha256_slp"] == identity and r.get("jit_arithmetic") == jit_arithmetic
                    for r in profiles["captures"]):
             issues.append("unestablished-arithmetic")
 
@@ -274,8 +283,10 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
 
 
 def require_admissible(game, path: Path, *, played_on: str | None = None,
-                       fnmsubs_profile: str | None = None) -> None:
+                       fnmsubs_profile: str | None = None,
+                       jit_arithmetic: str | None = None) -> None:
     issues = capture_issues(game, path.read_bytes(), played_on=played_on,
-                            fnmsubs_profile=fnmsubs_profile)
+                            fnmsubs_profile=fnmsubs_profile,
+                            jit_arithmetic=jit_arithmetic)
     if issues:
         raise ValueError("ineligible capture: " + ", ".join(issues))
