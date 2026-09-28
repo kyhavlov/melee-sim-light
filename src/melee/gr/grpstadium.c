@@ -43,6 +43,8 @@
 #include <runtime/source_state.h>
 #include <runtime/wire.h>
 extern int msl_stadium_transformations(void);
+static void msl_stadium_show(Ground_GObj* display, int screen, int frames);
+static void msl_stadium_display_step(Ground_GObj* display);
 #endif
 
 typedef struct StadiumParams {
@@ -284,9 +286,18 @@ void grStadium_801D1290(Ground_GObj* gobj)
     //   grStadium_801D2344,grStadium_801D2A60}
     {
         Ground* gp = GET_GROUND(gobj);
-        gp->u.display.xF4 = NULL;
+        // grStadium_801D2278's state, then its first screen (0).
         gp->u.display.xE4 = 1;
-        gp->u.display.xE0 = 0;
+        gp->u.display.xE6 = 1;
+        gp->u.display.xE8 = -1;
+        gp->u.display.xF8_0 = false;
+        gp->u.display.xF8_1 = false;
+        gp->u.display.xF8_2 = false;
+        gp->u.display.xEA = -1;
+        gp->u.display.xEE = 99;
+        gp->u.display.xF2 = 0;
+        gp->u.display.xF4 = NULL;
+        msl_stadium_show(gobj, 0, 0);
         if (msl_stadium_transformations() != MSL_STADIUM_FROZEN) {
             Ground_801C10B8(gobj, fn_801D11E4);
         }
@@ -327,21 +338,7 @@ void grStadium_801D1390(Ground_GObj* gobj)
 #ifndef MSL_CORE_HOSTED
     grStadium_801D2344(gobj);
 #else
-    // grStadium_801D2344's transformation-screen countdown, and the end of
-    // it as it bears on the camera (see grStadium_801D1290): the next screen
-    // takes the subject out of framing. Mode 1 stands for that next screen;
-    // its choice and draws stay headless with the rest of the jumbotron.
-    {
-        Ground* gp = GET_GROUND(gobj);
-        if (gp->u.display.xE4 >= 2 && gp->u.display.xE4 <= 6) {
-            if (gp->u.display.xE0-- < 0) {
-                gp->u.display.xE4 = 1;
-                if (gp->u.display.xF4 != NULL) {
-                    gp->u.display.xF4->x8 = 1;
-                }
-            }
-        }
-    }
+    msl_stadium_display_step(gobj);
 #endif
 }
 
@@ -2150,22 +2147,234 @@ void grStadium_801D435C(Ground_GObj* arg0)
 #ifdef MSL_CORE_HOSTED
 static const int msl_stadium_kinds[] = { 3, 4, 6, 9 };
 
-// grStadium_801D2528 for a transformation screen (modes 2-6), outside
-// training mode: the jumbotron shows it for x28 frames and its camera
-// subject is framed (x8 = 0) meanwhile. The mode's picture bit (xE6) is the
-// only other write, and it is presentation. The retail function also owns
-// every text screen, whose SisLib/language/game-mode dependencies are not
-// part of the headless library; no transformation screen reaches them, and
-// none draws random numbers.
-// refs/melee/src/melee/gr/grpstadium.c::grStadium_801D2528
-static void msl_stadium_show_transformation(Ground_GObj* display, int screen)
+// The jumbotron's screen schedule, headless. The pictures and text are
+// presentation, but choosing the next screen draws random numbers inside
+// the frame (grStadium_801D2A60's HSD_Randf, and HSD_Randi for how long a
+// replay or close-up screen stays up), after the fighters' pre-frame seed
+// and before their damage and item code, so the schedule has to run as the
+// console runs it. Everything here is grStadium_801D2528,
+// grStadium_801D2344 and grStadium_801D2A60 without the rendering calls
+// (grStadium_801D4194, 801D39A0, 801D3A0C, 801D3BBC, 801D3F40 and the SisLib
+// text of screen 17), none of which draws random numbers.
+// refs/melee/src/melee/gr/grpstadium.c::{grStadium_801D2278,
+//   grStadium_801D2528,grStadium_801D2344,grStadium_801D2A60}
+static void msl_stadium_show(Ground_GObj* display, int screen, int frames)
 {
     Ground* gp = GET_GROUND(display);
+    int i;
+    s16 n;
+
+    if (gm_8018841C()) {
+        switch (screen) {
+        case 1:
+        case 9:
+        case 10:
+        case 11:
+        case 12:
+        case 13:
+        case 14:
+        case 15:
+        case 16:
+            screen = 7;
+            break;
+        }
+    }
     gp->u.display.xEA = gp->u.display.xE4;
     gp->u.display.xE4 = screen;
-    gp->u.display.xE0 = yaku->x28;
-    if (gp->u.display.xF4 != NULL) {
-        gp->u.display.xF4->x8 = 0;
+    switch (screen) {
+    case 0:
+    case 10:
+    case 11:
+    case 12:
+    case 13:
+        gp->u.display.xE6 = 0x40;
+        gp->u.display.xF8_0 = false;
+        gp->u.display.xF8_1 = false;
+        if (gp->u.display.xF4 != NULL) {
+            gp->u.display.xF4->x8 = 1;
+        }
+        break;
+    case 1:
+    case 9:
+    case 14:
+        gp->u.display.xE6 = 0x40;
+        gp->u.display.xE0 = screen == 1 ? yaku->x20
+                            : screen == 9 ? yaku->x24
+                                          : yaku->x2C;
+        gp->u.display.xF8_0 = false;
+        gp->u.display.xF8_1 = false;
+        if (gp->u.display.xF4 != NULL) {
+            gp->u.display.xF4->x8 = 1;
+        }
+        break;
+    case 15:
+    case 16:
+        gp->u.display.xE6 = screen == 15 ? 0x20 : 0x80;
+        gp->u.display.xE0 = yaku->x20;
+        if (gp->u.display.xF4 != NULL) {
+            gp->u.display.xF4->x8 = 1;
+        }
+        break;
+    case 7:
+        gp->u.display.xE6 = 0x40;
+        gp->u.display.xE0 = randi_between_2(yaku->x38, yaku->x3C);
+        gp->u.display.xF8_0 = false;
+        gp->u.display.xF8_1 = false;
+        if (gp->u.display.xF4 != NULL) {
+            gp->u.display.xF4->x8 = 1;
+        }
+        break;
+    case 8:
+        gp->u.display.xE6 = 0x40;
+        gp->u.display.xE0 = randi_between(yaku->x30, yaku->x34);
+        n = gp->u.display.xEE++;
+        for (i = 0; gp->u.display.xEE != n; gp->u.display.xEE++) {
+            if (gp->u.display.xEE >= 6) {
+                gp->u.display.xEE = 0;
+                if (++i > 2) {
+                    gp->u.display.xEE = 0;
+                    gp->u.display.xE0 = -1;
+                    break;
+                }
+            }
+            if (Player_GetEntity(gp->u.display.xEE) != NULL) {
+                break;
+            }
+        }
+        gp->u.display.xF8_0 = false;
+        gp->u.display.xF8_1 = false;
+        if (gp->u.display.xF4 != NULL) {
+            gp->u.display.xF4->x8 = 1;
+        }
+        break;
+    case 17:
+        gp->u.display.xE6 = 0x40;
+        gp->u.display.xF8_0 = false;
+        gp->u.display.xF8_1 = false;
+        break;
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+        // A transformation screen frames the jumbotron's camera subject.
+        gp->u.display.xE6 = screen == 2 ? 1
+                            : screen == 3 ? 2
+                            : screen == 4 ? 4
+                            : screen == 5 ? 0x10
+                                          : 8;
+        gp->u.display.xE0 = yaku->x28;
+        if (gp->u.display.xF4 != NULL) {
+            gp->u.display.xF4->x8 = 0;
+        }
+        break;
+    }
+    if (frames != 0) {
+        gp->u.display.xE0 = frames;
+    }
+}
+
+static void msl_stadium_show_transformation(Ground_GObj* display, int screen)
+{
+    msl_stadium_show(display, screen, 0);
+}
+
+static void msl_stadium_next_screen(Ground_GObj* display)
+{
+    Ground* gp = GET_GROUND(display);
+    float val;
+    int screen;
+
+    if (gp->u.display.xF2 >= yaku->x50) {
+        gp->u.display.xF2 = 0;
+        screen = 14;
+    } else {
+        do {
+            val = HSD_Randf() *
+                  (yaku->x48 + yaku->x4A + yaku->x4C + yaku->x4E);
+            val -= yaku->x48;
+            if (val < 0) {
+                screen = 8;
+            } else if ((val -= yaku->x4C) < 0) {
+                screen = 7;
+            } else if ((val -= yaku->x4A) < 0) {
+                screen = 1;
+            } else if ((val -= yaku->x4E) < 0) {
+                screen = 15;
+            } else {
+                screen = 1;
+            }
+        } while (screen == gp->u.display.xE4 || screen == gp->u.display.xEA);
+    }
+    gp->u.display.xF2++;
+    msl_stadium_show(display, screen, 0);
+}
+
+// The close-up's keep-going test. Slippi's Common/PSCameraIndependentMonitor
+// (0x801D24FC) replaces grStadium_801D32D0's camera test with fixed bounds on
+// the followed fighter's position, [-120, 120] x [-20, 80]; that is the
+// only form modelled, and a capture without it keeps the close-up while
+// the fighter is inside those same bounds.
+// refs/slippi-ssbm-asm/Common/PSCameraIndependentMonitor/
+//   PSCameraIndependentMonitor.asm
+static bool msl_stadium_closeup_keeps(Ground* gp)
+{
+    HSD_GObj* player = Player_GetEntity(gp->u.display.xEE);
+    Fighter* fp;
+    if (player == NULL) {
+        return false;
+    }
+    fp = (Fighter*) player->user_data;
+    return !(fp->cur_pos.x < -120.0F || fp->cur_pos.x > 120.0F ||
+             fp->cur_pos.y > 80.0F || fp->cur_pos.y < -20.0F);
+}
+
+static void msl_stadium_display_step(Ground_GObj* display)
+{
+    Ground* gp = GET_GROUND(display);
+    switch (gp->u.display.xE4) {
+    case 1:
+    case 9:
+    case 14:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 15:
+    case 16:
+    case 7:
+        if (gp->u.display.xE0-- < 0) {
+            msl_stadium_next_screen(display);
+        }
+        break;
+    case 8:
+        if (gp->u.display.xE0-- < 0 ||
+            Player_GetEntity(gp->u.display.xEE) == NULL ||
+            Player_8003219C(gp->u.display.xEE))
+        {
+            msl_stadium_next_screen(display);
+            break;
+        }
+        if (Player_GetEntity(gp->u.display.xEE) == NULL ||
+            Player_8003219C(gp->u.display.xEE) ||
+            !msl_stadium_closeup_keeps(gp))
+        {
+            msl_stadium_next_screen(display);
+        }
+        break;
+    }
+}
+
+// The match flow's screens: "Ready" (10) at frame -123 and "GO" (11) at
+// -39 from the countdown overlay (gm_16AE.c::fn_8016B7B4 and fn_8016B7F8),
+// and the ordinary screen (1) when play starts at frame 0 (fn_8016B784).
+// refs/melee/src/melee/gr/grpstadium.c::{grStadium_801D4084,
+//   grStadium_801D4040,grStadium_801D4150}
+void msl_stadium_display_event(int screen)
+{
+    if (stage_info.internal_stage_id == PSTADIUM) {
+        msl_stadium_show(Ground_801C2BA4(PsType_Display), screen, 0);
     }
 }
 
