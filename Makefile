@@ -218,6 +218,7 @@ NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/batch_api_smoke.c \
 	$(ROOT)/tests/melee_core/public_api_smoke.c \
 	$(ROOT)/tests/melee_core/context_smoke.c \
+	$(ROOT)/tests/melee_core/thread_shared_state_smoke.c \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
 	$(ROOT)/tests/melee_core/gameplay_parts_smoke.c \
 	$(ROOT)/tests/melee_core/article_pool_smoke.c \
@@ -263,6 +264,7 @@ NATIVE_MODEL_SMOKE := $(NATIVE_BUILD)/model-animation-smoke
 NATIVE_SCHEDULER_SMOKE := $(NATIVE_BUILD)/scheduler-smoke
 NATIVE_SCALAR_API_SMOKE := $(NATIVE_BUILD)/scalar-api-smoke
 NATIVE_CONTEXT_SMOKE := $(NATIVE_BUILD)/context-smoke
+NATIVE_THREAD_SHARED_STATE_SMOKE := $(NATIVE_BUILD)/thread-shared-state-smoke
 NATIVE_BATCH_API_SMOKE := $(NATIVE_BUILD)/batch-api-smoke
 NATIVE_PUBLIC_API_SMOKE := $(NATIVE_BUILD)/public-api-smoke
 NATIVE_GAMEPLAY_PARTS_SMOKE := $(NATIVE_BUILD)/gameplay-parts-smoke
@@ -749,6 +751,8 @@ $(eval $(call link_native_smoke,$(NATIVE_MODEL_SMOKE),$(NATIVE_OBJ_DIR)/tests/me
 $(eval $(call link_native_smoke,$(NATIVE_SCHEDULER_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scheduler_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_SCALAR_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/context_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_THREAD_SHARED_STATE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/thread_shared_state_smoke.o))
+$(NATIVE_THREAD_SHARED_STATE_SMOKE): LDLIBS += -pthread
 $(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/public_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
@@ -791,7 +795,7 @@ ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE)
 	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)" 32 4 16
 
-native-smoke: fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke kirby-smoke data-check $(NATIVE_BUILD)/cpu-replay-smoke $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
+native-smoke: fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke kirby-smoke data-check $(NATIVE_BUILD)/cpu-replay-smoke $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_THREAD_SHARED_STATE_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
 	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -800,6 +804,7 @@ native-smoke: fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke k
 	@$(TIMEOUT) 5s "$(NATIVE_SCALAR_API_SMOKE)" "$(DATA)" 32 4 16
 	@$(TIMEOUT) 10s "$(NATIVE_BUILD)/cpu-replay-smoke" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_CONTEXT_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 10s "$(NATIVE_THREAD_SHARED_STATE_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_BATCH_API_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_PUBLIC_API_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_GAMEPLAY_PARTS_SMOKE)" "$(DATA)"
