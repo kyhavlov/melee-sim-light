@@ -175,6 +175,16 @@ try {
     "live viewer shield projection did not expose Guard tilt",
   );
 
+  // A flattened skeleton must still publish a full-sized shield.
+  reset({ p1Char: CHAR_GAMEWATCH });
+  let gwShield;
+  for (let index = 0; index < 12; index += 1) {
+    gwShield = step(controllers({ ...neutral(), l: 1, buttons: BUTTONS.L })).players[0].state;
+  }
+  assert(gwShield.isShieldActive);
+  assert(gwShield.shieldRadius > 1 && gwShield.shieldRadius < 20,
+    `Game & Watch shield radius ${gwShield.shieldRadius}`);
+
   reset({ p1Char: CHAR_PEACH, stageId: STAGE_FINAL_DESTINATION, seed: 31 });
   let sawItem = false;
   for (let index = 0; index < 90; index += 1) {

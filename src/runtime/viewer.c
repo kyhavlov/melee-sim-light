@@ -65,10 +65,24 @@ static float joint_uniform_scale(HSD_JObj* joint)
         return 0.0F;
     }
     matrix = HSD_JObjGetMtxPtr(joint);
-    x = matrix[0][0];
-    y = matrix[1][0];
-    z = matrix[2][0];
-    return sqrtf(x * x + y * y + z * z);
+    // Column norms are the per-axis scales. Take the largest: Game & Watch's
+    // skeleton is flattened along one axis (about 0.03), so the first column
+    // alone reported a 0.06-unit shield for him.
+    {
+        float best = 0.0F;
+        int column;
+        for (column = 0; column < 3; ++column) {
+            float norm;
+            x = matrix[0][column];
+            y = matrix[1][column];
+            z = matrix[2][column];
+            norm = sqrtf(x * x + y * y + z * z);
+            if (norm > best) {
+                best = norm;
+            }
+        }
+        return best;
+    }
 }
 
 static void write_hitboxes(const Fighter* fp, uint8_t* player_out)
