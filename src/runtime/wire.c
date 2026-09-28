@@ -44,6 +44,8 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, stage_event_streams)];
     config->stadium_transformations =
         wire[offsetof(MslCoreMatchConfig, stadium_transformations)];
+    config->retail_spawns =
+        wire[offsetof(MslCoreMatchConfig, retail_spawns)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),
            sizeof(config->players));
 }

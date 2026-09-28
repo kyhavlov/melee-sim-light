@@ -78,6 +78,15 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
     return start.get("is_frozen_ps") is True or legacy_frozen
 
 
+def neutral_spawn(codes: dict[int, bytes]) -> bool:
+    """Does the capture place fighters with Slippi's NeutralSpawn
+    (External/NeutralSpawn/NeutralSpawn.asm, injected at 0x8016E510)?
+    Console tournament setups often run without it, and then each fighter
+    enters at its own port's stage spawn point (MslCoreMatchConfig
+    .retail_spawns)."""
+    return 0xC216E510 in codes
+
+
 # wire.h MSL_STADIUM_*.
 STADIUM_FROZEN, STADIUM_PRELOADED, STADIUM_ONLINE_LOADED = 0, 1, 2
 

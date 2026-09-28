@@ -114,6 +114,11 @@ def test_stadium_patch_set_names_the_transformations(codes, expected):
         {"stage": 3, "is_frozen_ps": True}, codes) == admission.STADIUM_FROZEN
 
 
+def test_neutral_spawn_is_read_from_the_code_list():
+    assert admission.neutral_spawn({0xC216E510: b""})
+    assert not admission.neutral_spawn({0xC21D45EC: b""})
+
+
 def test_unreviewed_offscreen_body_is_rejected(properties_only, monkeypatch):
     game, raw = read_game(VALID)
     codes = admission.gecko_codes(raw)

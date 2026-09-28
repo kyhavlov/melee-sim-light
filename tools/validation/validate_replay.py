@@ -23,7 +23,8 @@ from tools.validation.slpz import (
     resolve_replay_path,
     set_native_unorder_events,
 )
-from tools.validation.admission import gecko_codes, require_admissible, stadium_transformations
+from tools.validation.admission import (gecko_codes, neutral_spawn, require_admissible,
+                                        stadium_transformations)
 from tools.validation.suite_io import ReplaySuite, display_path_under_repo, load_suite
 
 
@@ -324,10 +325,11 @@ def validate_one(
         # Pokemon Stadium runs under the patch set its gecko list names. One
         # unfrozen outside both is inadmissible; a diagnostic run keeps it
         # frozen.
+        codes = gecko_codes(peppi_path.read_bytes()) if peppi_path.exists() else {}
         stadium = 0
         if game.start.get("stage") == 3:
-            stadium = stadium_transformations(
-                game.start, gecko_codes(peppi_path.read_bytes())) or 0
+            stadium = stadium_transformations(game.start, codes) or 0
+        retail_spawns = bool(codes) and not neutral_spawn(codes)
         metadata = game.metadata
         if played_on is not None:
             metadata = dict(metadata)
@@ -354,6 +356,7 @@ def validate_one(
             runner_stdin=runner.stdin_fd if runner is not None else -1,
             runner_stdout=runner.stdout_fd if runner is not None else -1,
             stadium_transformations=stadium,
+            retail_spawns=retail_spawns,
         )
     result["admitted"] = not diagnostic
     result["diagnostic"] = diagnostic or signed_zero_equal or frames != 0 or start_frame is not None

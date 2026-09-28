@@ -146,6 +146,14 @@ typedef struct MslCoreMatchConfig {
     // stage ignores. The two unfrozen patch sets decide and load differently
     // and are not interchangeable.
     uint8_t stadium_transformations;
+    // Where fighters enter. Zero is Slippi's NeutralSpawn (the
+    // External/NeutralSpawn gecko at 0x8016E510: spawn point by player order
+    // in singles, by team in 2v2). Nonzero is the retail placement that code
+    // replaces - each player at the stage spawn point of its own port - for
+    // captures made without it (console tournament setups).
+    // refs/melee/src/melee/gm/gmvs.c::getSpawnPoint
+    // refs/melee/src/melee/gr/stage.c::Stage_80224E64
+    uint8_t retail_spawns;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
 
@@ -372,9 +380,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 64,
+_Static_assert(sizeof(MslCoreMatchConfig) == 65,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 120,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 121,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");
