@@ -93,6 +93,34 @@ def test_legacy_stadium_patch_establishes_frozen_play(properties_only, monkeypat
     assert "unfrozen-stadium" in admission.capture_issues(game, raw)
 
 
+def test_ucf_codes_absent_names_each_missing_injection():
+    assert admission.ucf_codes_absent({}) == 0
+    assert admission.ucf_codes_absent({0xC216E510: b""}) == 7
+    assert admission.ucf_codes_absent(
+        {0xC20C9A44: b"", 0xC20998A4: b""}) == 1
+    assert admission.ucf_codes_absent(
+        {0xC20908F4: b"", 0xC20C9A44: b"", 0xC20998A4: b""}) == 0
+
+
+def test_wobble_prevention_version_is_read_from_its_injections():
+    check = {0xC208F090: b""}
+    assert admission.wobble_prevention({}) == admission.WOBBLE_PREVENTION_NONE
+    assert admission.wobble_prevention({**check, 0xC20DA9DC: b""}) ==         admission.WOBBLE_PREVENTION_2021
+    assert admission.wobble_prevention(
+        {**check, 0xC20DB880: b"", 0xC20DBBD4: b""}) ==         admission.WOBBLE_PREVENTION
+    # An init without the check (or half an init) prevents nothing.
+    assert admission.wobble_prevention({0xC20DA9DC: b""}) ==         admission.WOBBLE_PREVENTION_NONE
+    assert admission.wobble_prevention({**check, 0xC20DB880: b""}) ==         admission.WOBBLE_PREVENTION_NONE
+
+
+def test_frozen_fd_background_is_the_nop_at_its_think():
+    nop = bytes.fromhex("0421aae460000000")
+    assert admission.slippi_patches({0x0421AAE4: nop}) ==         admission.PATCH_FD_BACKGROUND_FROZEN
+    assert admission.slippi_patches(
+        {0x0421AAE4: bytes.fromhex("0421aae448000001")}) == 0
+    assert admission.slippi_patches({}) == 0
+
+
 @pytest.mark.parametrize("codes,expected", [
     ({0xC21D45EC: b""}, admission.STADIUM_PRELOADED),
     ({0xC20165AC: b""}, admission.STADIUM_ONLINE_LOADED),
