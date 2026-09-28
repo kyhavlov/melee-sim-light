@@ -1,4 +1,4 @@
-import { createMemo, For, Match, Switch } from "solid-js";
+import { createMemo, For, Match, Show, Switch } from "solid-js";
 import { itemNamesById } from "~/common/ids";
 import {
   HitboxUpdate,
@@ -7,6 +7,7 @@ import {
   NonReactiveState,
 } from "~/common/types";
 import { access } from "~/state/accessor";
+import { showHitboxes } from "~/state/displayStore";
 
 // TODO: characters projectiles
 
@@ -147,6 +148,28 @@ export function Item(props: { item: ItemUpdate }) {
         <LinkArrow item={props.item} />
       </Match>
     </Switch>
+  );
+}
+
+// The item's first live hit capsule from the sim's viewer lane, drawn like
+// fighter hitboxes when the hitbox display is on.
+export function ItemHitbox(props: { item: ItemUpdate }) {
+  const visible = createMemo(
+    () => showHitboxes() && (props.item.hitboxRadius ?? 0) > 0
+  );
+  return (
+    <Show when={visible()}>
+      <circle
+        cx={props.item.hitboxX}
+        cy={props.item.hitboxY}
+        r={props.item.hitboxRadius}
+        fill="#ef4444"
+        fill-opacity={0.22}
+        stroke="#b91c1c"
+        stroke-opacity={0.6}
+        stroke-width={0.4}
+      />
+    </Show>
   );
 }
 

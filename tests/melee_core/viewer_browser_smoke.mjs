@@ -247,6 +247,45 @@ if (production && result.startsWith("PASS|")) {
     expression: `window.dispatchEvent(new KeyboardEvent("keyup", { key: "x", bubbles: true }))`,
   });
 }
+if (production && result.startsWith("PASS|")) {
+  // Item hit capsules follow the same toggle: Bowser's flames must draw
+  // their circles while the overlay is on (it is on from the check above).
+  await call("Runtime.evaluate", {
+    expression: `(() => {
+      const character = document.querySelector("#p1-character");
+      character.value = "5";
+      character.dispatchEvent(new Event("change"));
+      document.querySelector('button[data-stage-id="32"]').click();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+    })()`,
+  });
+  const itemDeadline = Date.now() + 4000;
+  result = "FAIL|item hitboxes did not render";
+  while (Date.now() < itemDeadline) {
+    const response = await call("Runtime.evaluate", {
+      expression: `(() => {
+        const viewer = document.querySelector("slippi-viewer");
+        const root = viewer.shadowRoot || viewer;
+        const frame = window.__mslViewerReplayData?.frames?.[window.__mslViewerFrameCount];
+        return JSON.stringify({
+          flame: frame?.items?.some(item => item.typeId === 100 && item.hitboxRadius > 0),
+          drawn: root.querySelectorAll('circle[stroke="#b91c1c"]').length,
+          enabled: viewer.getShowHitboxes(),
+        });
+      })()`,
+      returnByValue: true,
+    });
+    const state = JSON.parse(response.result?.result?.value || "{}");
+    if (state.flame && state.enabled && state.drawn > 0) {
+      result = "PASS|production viewer item hitboxes";
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  await call("Runtime.evaluate", {
+    expression: `window.dispatchEvent(new KeyboardEvent("keyup", { key: "c", bubbles: true }))`,
+  });
+}
 socket.close();
 signalChromeGroup("SIGTERM");
 await Promise.race([

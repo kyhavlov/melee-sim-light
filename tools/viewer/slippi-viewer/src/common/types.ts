@@ -339,6 +339,10 @@ export interface ItemUpdate {
   /** Mewtwo/Samus */
   readonly chargeShotChargeLevel: number;
   readonly owner: number;
+  /** First live item hit capsule in world space (sim viewer lane); absent when none. */
+  readonly hitboxX?: number;
+  readonly hitboxY?: number;
+  readonly hitboxRadius?: number;
 }
 
 export interface FodPlatforms {
