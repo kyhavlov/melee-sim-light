@@ -12,6 +12,7 @@ enum {
 };
 
 enum {
+    MSL_CORE_ITEM_KIND_BOMBHEI = 6,
     MSL_CORE_ITEM_KIND_MR_SATURN = 7,
     MSL_CORE_ITEM_KIND_FOX_LASER = 54,
     MSL_CORE_ITEM_KIND_FALCO_LASER = 55,
@@ -187,6 +188,16 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
     case MSL_ITEM_KIND_GAMEWATCH_CHEF:
         // x0 is the shared attribute pointer; x4 is the trajectory index.
         return MSL_CORE_ITEM_MISC1;
+    case MSL_CORE_ITEM_KIND_BOMBHEI:
+        // A Bob-omb's xDD8 is its fuse-flash scale direction, first written
+        // (to 1) when the fuse lights; the spawn constructor leaves it
+        // unwritten, so a freshly pulled Bob-omb (Peach's down special)
+        // samples pool residue at xDDB. xDD4, xDE8 and xDEC are written at
+        // spawn and remain gameplay-owned.
+        // refs/melee/src/melee/it/items/itbombhei.c::
+        //   {itBombhei_Logic6_Spawned,it_8027F8E0,it_8027D820}
+        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC2 |
+               MSL_CORE_ITEM_MISC3;
     case MSL_CORE_ITEM_KIND_MR_SATURN:
         // Every xDE4 write in itdosei.c is `= ip->pos`, a copy of the
         // directly compared item position lanes, and the writing Anim
