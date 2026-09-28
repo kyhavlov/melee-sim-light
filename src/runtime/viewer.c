@@ -5,6 +5,7 @@
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
+#include "lb/lb_00B0.h"
 #include "lb/types.h"
 #include "runtime/context.h"
 #include "runtime/observation.h"
@@ -124,17 +125,23 @@ static void write_shield(const Fighter* fp, uint8_t* player_out)
     if (!fp->x221B_b0 || shield->bone == NULL) {
         return;
     }
-    // The common Guard descriptor's bone is a detached shield JObj. Its
-    // translation and HitResult::pos are not a stable world-space render
-    // center: ftCo_800921DC zeros the former and lbColl_80007BCC fills the
-    // latter lazily during collision queries. Mark the center unavailable so
-    // the 2D viewer uses its established per-character model offset.
+    // Publish the collision center the source itself uses: the shield bone's
+    // world transform applied to the descriptor offset, exactly as
+    // lbColl_80007BCC fills HitResult::pos lazily during collision queries.
+    // ftCo_800921DC zeros the bone's local translation at guard start and the
+    // guard tilt animation then moves it, so the world matrix at end of frame
+    // is the rendered and colliding center.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     //   ftCo_80091BC4,ftCo_80091E78,ftCo_800921DC}
     // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-    put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_x), NAN);
-    put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_y), NAN);
-    put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_z), NAN);
+    {
+        Vec3 offset = shield->offset;
+        Vec3 center;
+        lb_8000B1CC(shield->bone, &offset, &center);
+        put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_x), center.x);
+        put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_y), center.y);
+        put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_z), center.z);
+    }
     put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_radius),
             shield->size * joint_uniform_scale(shield->bone));
 

@@ -157,8 +157,14 @@ try {
     }
   }
   assert(sawShield, "live viewer never observed a source shield bubble");
-  assert.equal(neutralShield.shieldX, undefined);
-  assert.equal(neutralShield.shieldY, undefined);
+  // The projection publishes the source collision center (shield bone world
+  // transform + descriptor offset): near the fighter, above the feet.
+  assert(Number.isFinite(neutralShield.shieldX) && Number.isFinite(neutralShield.shieldY),
+    "live viewer shield projection did not expose the shield center");
+  assert(Math.abs(neutralShield.shieldX - neutralShield.xPosition) < 10 &&
+    neutralShield.shieldY > neutralShield.yPosition &&
+    neutralShield.shieldY < neutralShield.yPosition + 30,
+    "live viewer shield center is not near the fighter");
   let tiltedShield = neutralShield;
   for (let index = 0; index < 20; index += 1) {
     const pads = controllers({
@@ -175,7 +181,7 @@ try {
     "live viewer shield projection did not expose Guard tilt",
   );
 
-  // A flattened skeleton must still publish a full-sized shield.
+  // A flattened skeleton must still publish a full-sized, centered shield.
   reset({ p1Char: CHAR_GAMEWATCH });
   let gwShield;
   for (let index = 0; index < 12; index += 1) {
@@ -184,6 +190,7 @@ try {
   assert(gwShield.isShieldActive);
   assert(gwShield.shieldRadius > 1 && gwShield.shieldRadius < 20,
     `Game & Watch shield radius ${gwShield.shieldRadius}`);
+  assert(Number.isFinite(gwShield.shieldX) && Number.isFinite(gwShield.shieldY));
 
   reset({ p1Char: CHAR_PEACH, stageId: STAGE_FINAL_DESTINATION, seed: 31 });
   let sawItem = false;
