@@ -162,6 +162,9 @@ typedef struct MslCoreMatchConfig {
     // UCF 0.74 toggle set has no tumble fix, and an unmodified game has none
     // of them. Zero keeps every UCF routine the other flags select.
     uint8_t ucf_codes_absent;
+    // Other single-instruction Slippi patches the capture's list carries
+    // (MSL_PATCH_*).
+    uint8_t slippi_patches;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
 
@@ -187,6 +190,13 @@ enum {
     MSL_UCF_ABSENT_DASHBACK = 1 << 1,
     // UCF shield drop (0x800998A4).
     MSL_UCF_ABSENT_SHIELD_DROP = 1 << 2,
+};
+
+enum {
+    // External/Frozen All/Core/2.asm: a nop in place of Final Destination's
+    // background think (the bl at 0x8021AAE4), so the background never
+    // transforms and never draws random numbers.
+    MSL_PATCH_FD_BACKGROUND_FROZEN = 1 << 0,
 };
 
 enum {
@@ -411,9 +421,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 67,
+_Static_assert(sizeof(MslCoreMatchConfig) == 68,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 123,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 124,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");

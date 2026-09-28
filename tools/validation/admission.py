@@ -98,6 +98,20 @@ def ucf_codes_absent(codes: dict[int, bytes]) -> int:
             (0 if 0xC20998A4 in codes else 4))
 
 
+# wire.h MSL_PATCH_*.
+PATCH_FD_BACKGROUND_FROZEN = 1 << 0
+
+
+def slippi_patches(codes: dict[int, bytes]) -> int:
+    """Single-instruction Slippi patches the capture ran
+    (MslCoreMatchConfig.slippi_patches): External/Frozen All/Core/2.asm puts
+    a nop at 0x8021AAE4, over Final Destination's background think."""
+    patches = 0
+    if codes.get(0x0421AAE4, b"")[4:8] == bytes.fromhex("60000000"):
+        patches |= PATCH_FD_BACKGROUND_FROZEN
+    return patches
+
+
 # wire.h MSL_WOBBLE_PREVENTION_*.
 WOBBLE_PREVENTION_NONE, WOBBLE_PREVENTION_2021, WOBBLE_PREVENTION = 0, 1, 2
 

@@ -50,6 +50,8 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, wobble_prevention)];
     config->ucf_codes_absent =
         wire[offsetof(MslCoreMatchConfig, ucf_codes_absent)];
+    config->slippi_patches =
+        wire[offsetof(MslCoreMatchConfig, slippi_patches)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),
            sizeof(config->players));
 }

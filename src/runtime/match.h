@@ -59,6 +59,8 @@ bool msl_core_has_brawl_offscreen_damage(void);
 int msl_stadium_transformations(void);
 // MSL_WOBBLE_PREVENTION_* for the active match.
 int msl_wobble_prevention(void);
+// Whether the active match's capture carried an MSL_PATCH_* patch.
+bool msl_slippi_patch(int patch);
 bool msl_core_freezes_dead_up_fall_physics(void);
 void msl_core_advance_match_frame(void);
 void msl_core_apply_team_stock_steal(void);

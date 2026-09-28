@@ -24,8 +24,8 @@ from tools.validation.slpz import (
     set_native_unorder_events,
 )
 from tools.validation.admission import (gecko_codes, neutral_spawn, require_admissible,
-                                        stadium_transformations, ucf_codes_absent,
-                                        wobble_prevention)
+                                        slippi_patches, stadium_transformations,
+                                        ucf_codes_absent, wobble_prevention)
 from tools.validation.suite_io import ReplaySuite, display_path_under_repo, load_suite
 
 
@@ -360,6 +360,7 @@ def validate_one(
             retail_spawns=retail_spawns,
             wobble_prevention=wobble_prevention(codes),
             ucf_codes_absent=ucf_codes_absent(codes),
+            slippi_patches=slippi_patches(codes),
         )
     result["admitted"] = not diagnostic
     result["diagnostic"] = diagnostic or signed_zero_equal or frames != 0 or start_frame is not None

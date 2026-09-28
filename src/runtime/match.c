@@ -117,6 +117,11 @@ bool msl_whispy_ignores_dead_fighters(void)
     return msl_core_active_match()->config.whispy_dead_fighter_fix != 0;
 }
 
+bool msl_slippi_patch(int patch)
+{
+    return (msl_core_active_match()->config.slippi_patches & patch) != 0;
+}
+
 int msl_wobble_prevention(void)
 {
     return msl_core_active_match()->config.wobble_prevention;
