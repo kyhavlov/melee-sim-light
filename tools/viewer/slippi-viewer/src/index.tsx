@@ -2,6 +2,7 @@ import { customElement } from "solid-element";
 import { MiniApp, setReplayPointerWrapper } from "~/components/MiniApp";
 import { jump, pause, setFrameData } from "~/state/replayStore";
 import { Frame } from "~/common/types";
+import { setShowHitboxes, showHitboxes } from "~/state/displayStore";
 
 interface HTMLSlippiViewer extends HTMLElement {
   setReplay(replayFile: File): void;
@@ -10,6 +11,8 @@ interface HTMLSlippiViewer extends HTMLElement {
   setFrame(frame: number): void;
   setFrameData(frameNumber: number, frame: Frame): void;
   pausePlayback(): void;
+  setShowHitboxes(enabled: boolean): void;
+  getShowHitboxes(): boolean;
   spectate(wsUrl: string): void;
   clear(): void;
 }
@@ -39,6 +42,10 @@ customElement("slippi-viewer", { zipsBaseUrl: "/" },
     element.pausePlayback = () => {
       pause();
     };
+    element.setShowHitboxes = (enabled: boolean) => {
+      setShowHitboxes(Boolean(enabled));
+    };
+    element.getShowHitboxes = () => showHitboxes();
     element.spectate = (url: string) => {
       setReplayPointerWrapper({ mode: "spectate", url });
     };
