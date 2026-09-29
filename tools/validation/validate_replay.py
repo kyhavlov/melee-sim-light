@@ -23,7 +23,7 @@ from tools.validation.slpz import (
     resolve_replay_path,
     set_native_unorder_events,
 )
-from tools.validation.admission import require_admissible
+from tools.validation.admission import require_admissible, stadium_is_frozen, gecko_codes
 from tools.validation.suite_io import ReplaySuite, display_path_under_repo, load_suite
 
 
@@ -44,7 +44,7 @@ DEFAULT_OUTPUT_LOCKS = ROOT / "replays/suites/melee_core_output_locks.json"
 
 STAGE_NAMES = {
     2: "Fountain",
-    3: "Frozen Stadium",
+    3: "Pokémon Stadium",
     8: "Yoshi's",
     28: "Dream Land",
     31: "Battlefield",
@@ -329,6 +329,8 @@ def validate_one(
             game.frames,
             game.start,
             metadata,
+            stadium_transformations=(game.start["stage"] == 3 and not stadium_is_frozen(
+                game.start, gecko_codes(peppi_path.read_bytes()))),
             qemu=str(QEMU),
             sysroot=str(SYSROOT),
             binary=str(NATIVE_BINARY if backend == "native" else PPC_BINARY),

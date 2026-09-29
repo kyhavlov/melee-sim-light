@@ -51,14 +51,6 @@
         "tools/validation/native.c::build_match_config"
       ]
     },
-    "unfrozen-stadium": {
-      "description": "Require the recorded frozen toggle or the reviewed legacy 0x801d4578 transformation bypass. A false old toggle alone does not establish unfrozen play.",
-      "sources": [
-        "refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm",
-        "https://github.com/project-slippi/slippi-ssbm-asm/blob/ccb59238b750cdf4cac701832753be119489f7e6/Online/Core/PreventFileAlarms/FreezeStadium.asm",
-        "https://github.com/project-slippi/slippi-ssbm-asm/blob/d95aec7434b7e11011f4735e697e6f531022a184/Recording/SendGameInfo.asm"
-      ]
-    },
     "incomplete-history": {
       "description": "Require normal game-start seed -123, contiguous final frame history and a recorded Game End. Missing metadata.lastFrame is not itself missing gameplay history. No cropped or savestate-injected fixture admission.",
       "sources": [

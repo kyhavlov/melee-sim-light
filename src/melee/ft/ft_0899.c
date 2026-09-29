@@ -1,4 +1,7 @@
 #include "ft_0899.h"
+#ifdef MSL_CORE_NATIVE
+#include "runtime/fighter_pose.h"
+#endif
 
 #include "math.h"
 
@@ -133,6 +136,13 @@ void ft_80089B08(Fighter_GObj* gobj)
                 ik.jobj0->rotate = rot_save0;
                 ik.jobj1->rotate = rot_save1;
                 ik.jobj2->rotate = rot_save2;
+#ifdef MSL_CORE_NATIVE
+                // Keep the IK matrices until the next source root-position
+                // write, which rebuilds them from the restored rotations.
+                msl_fighter_pose_srt_restored(ik.jobj0);
+                msl_fighter_pose_srt_restored(ik.jobj1);
+                msl_fighter_pose_srt_restored(ik.jobj2);
+#endif
             }
             if (fp->x221C_u16_y & 1) {
                 ik.jobj0 =
@@ -168,6 +178,11 @@ void ft_80089B08(Fighter_GObj* gobj)
                 ik.jobj0->rotate = rot_save3;
                 ik.jobj1->rotate = rot_save4;
                 ik.jobj2->rotate = rot_save5;
+#ifdef MSL_CORE_NATIVE
+                msl_fighter_pose_srt_restored(ik.jobj0);
+                msl_fighter_pose_srt_restored(ik.jobj1);
+                msl_fighter_pose_srt_restored(ik.jobj2);
+#endif
             }
         }
         if (fp->x221C_u16_y & 4) {

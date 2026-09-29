@@ -82,6 +82,9 @@ typedef struct MslFighterPoseJoint {
     uint16_t last_table_frame : 11;
 } MslFighterPoseJoint;
 
+#define MSL_FIGHTER_POSE_SRT_RESTORED (UINT32_C(1) << 31)
+void msl_fighter_pose_srt_restored(HSD_JObj* joint);
+
 #define MSL_FIGHTER_POSE_TABLE_FRAME_NONE 0x7FFu
 #ifdef MSL_CORE_WASM
 #define MSL_FIGHTER_POSE_PART_NONE UINT8_MAX

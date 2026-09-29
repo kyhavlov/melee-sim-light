@@ -75,11 +75,11 @@ def test_zero_transform_lcancel_is_still_uninitialized(properties_only):
 def test_legacy_stadium_patch_establishes_frozen_play(properties_only, monkeypatch):
     game, raw = read_game("replays/validation/peach/ScaryFrankPorcupine.slpz")
     assert game.start["stage"] == 3 and game.start["is_frozen_ps"] is False
-    assert "unfrozen-stadium" not in admission.capture_issues(game, raw)
+    assert admission.stadium_is_frozen(game.start, admission.gecko_codes(raw))
     codes = admission.gecko_codes(raw)
     del codes[0xC21D4578]
     monkeypatch.setattr(admission, "gecko_codes", lambda _raw: codes)
-    assert "unfrozen-stadium" in admission.capture_issues(game, raw)
+    assert not admission.stadium_is_frozen(game.start, admission.gecko_codes(raw))
 
 
 def test_unreviewed_offscreen_body_is_rejected(properties_only, monkeypatch):

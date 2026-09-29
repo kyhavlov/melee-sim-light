@@ -81,13 +81,15 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
   if (source == NULL || target == NULL || !supported_stage(source->stage) ||
       (source->num_players < 2 || source->num_players > 4) || !isfinite(source->damage_ratio) ||
       source->damage_ratio <= 0.0F || source->stocks == 0 ||
-      source->viewpoint_player >= source->num_players || source->is_teams > 1 ||
+      source->viewpoint_player >= source->num_players || source->stadium_transformations > 1 ||
+      source->is_teams > 1 ||
       source->friendly_fire > 1 || source->ucf_cardinals > 1) {
     return -1;
   }
 
   memset(target, 0, sizeof(*target));
   target->stage_id = source->stage;
+  target->stadium_transformations = source->stadium_transformations;
   target->frame_id = -124;
   target->frame_pre_random_seed = source->random_seed;
   target->initial_random_seed = source->random_seed;

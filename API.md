@@ -53,6 +53,7 @@ stocks and UCF enabled. Callers only override fields they need:
 | `viewpoint_player` | `uint8_t` | active player index | player placed in observation slot zero |
 | `ucf_cardinals` | `uint8_t` | `0` or `1` | enable the UCF 1.0 cardinal patch |
 | `players[4]` | `MslPlayerConfig[4]` | active entries `< num_players` | per-player configuration |
+| `stadium_transformations` | `uint8_t` | `0` (default) or `1` | enable Pokémon Stadium transformations |
 
 `MslPlayerConfig` uses explicit, unpacked fields. Team and controller port accept their `*_AUTO`
 constant; facing accepts `MSL_FACING_LEFT`, `MSL_FACING_RIGHT`, or `MSL_FACING_AUTO`.

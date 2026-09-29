@@ -55,3 +55,36 @@ Item reserves (`msl_item_reserve_runtime_pools`: the ItCo.dat article bound,
 ItemLink and DynamicBoneTable pools) are 47–59% of that arena. A host running
 `E` environments over `P` forked workers needs roughly
 `300 MB + 10 MB × P + 1.0–1.7 MB × E` for the simulator.
+
+## Stadium transformations: disabled-path comparison
+
+Measured on the same host on 2026-09-27 against `fcc46464`, using its unchanged
+508-replay workload, strict native-release builds, CPU 0, 262,144 timed
+match-frames, eight warmup ticks and 128 history frames. Five alternating pairs
+per batch size; transformations disabled in both builds.
+
+| Resident matches | Base FPS | With Stadium support | Difference |
+|---|---:|---:|---:|
+| 256 | 123,370 | 123,840 | +0.38% |
+| 512 | 120,306 | 120,759 | +0.38% |
+
+No measurable slowdown; the small increase is within run variation. All paired
+digests agree: `f99a65631fc39659` (256), `f43713e454594fe1` (512).
+
+The match remains 63,848 bytes, the public config 52 bytes, and observation plus
+terminal storage 1,224 bytes per history frame. Frozen arena and pool bounds are
+unchanged across the runtime census. Enabled Fox dittos use 2,112 additional
+arena bytes (965,060 versus 962,948). The four immutable transformation archives
+add 1,238,048 bytes to shared GameData/native-DAT arenas per process.
+
+The frozen controller is selected during construction; no transformation flag
+check is added to its frame callback. The slope-IK pose-cache correction also
+applies to frozen matches, so this is a measured cost claim, not a claim of
+identical instruction counts.
+
+Native and release validation pass 518 replays / 4,771,887 frames, including
+50,187 frames covering all four transformations and recorded stage events.
+The Stadium lifecycle smoke covers 80,000 frames, all phases, copy/save/restore,
+mode-changing resets and sealed allocation pools. Raw measurements are under
+`reports/triage/stadium_transformations_20260927/` (`perf.json`, `perf-*.log`,
+`census-*.log`, `final-gate.log`, `release-gate.log`, `lifecycle-final.log`).

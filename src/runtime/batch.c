@@ -84,7 +84,7 @@ static int valid_config(const MslCoreMatchConfig* config)
     if (config == NULL || !supported_stage(config->stage_id) ||
         (config->num_players < 2 || config->num_players > 4) ||
         !isfinite(config->match_damage_ratio) ||
-        config->match_damage_ratio < 0.0F)
+        config->match_damage_ratio < 0.0F || config->stadium_transformations > 1)
     {
         return 0;
     }

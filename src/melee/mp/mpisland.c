@@ -21,6 +21,20 @@ static mp_UnkStruct0* alloc_island(void)
 #endif
 }
 
+#ifdef MSL_CORE_NATIVE
+void msl_mp_island_reserve_dynamic(void)
+{
+    int i;
+    // A rotated collision line can become an independent floor or ceiling.
+    // 8005B004 recycles these nodes through x20 as classifications change.
+    for (i = 0; i < mpLib_8004D164()->dynamic_count; ++i) {
+        mp_UnkStruct0* island = alloc_island();
+        island->next = mpIsland_80458E88.x20;
+        mpIsland_80458E88.x20 = island;
+    }
+}
+#endif
+
 /* 3B73E8 */ mpIsland_Palette mpIsland_TerrainPalette = { {
     { mp_Terrain_Rock, { 0x80, 0x60, 0x60, 0xFF } },
     { mp_Terrain_Grass, { 0x40, 0xFF, 0x40, 0xFF } },

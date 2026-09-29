@@ -18,6 +18,8 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
     config->match_damage_ratio = msl_core_get_lef32(
         wire + offsetof(MslCoreMatchConfig, match_damage_ratio));
     config->num_players = wire[offsetof(MslCoreMatchConfig, num_players)];
+    config->stadium_transformations =
+        wire[offsetof(MslCoreMatchConfig, stadium_transformations)];
     config->is_teams = wire[offsetof(MslCoreMatchConfig, is_teams)];
     config->friendly_fire = wire[offsetof(MslCoreMatchConfig, friendly_fire)];
     config->stock_count = wire[offsetof(MslCoreMatchConfig, stock_count)];

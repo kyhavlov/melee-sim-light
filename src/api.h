@@ -125,6 +125,7 @@ typedef struct MslMatchConfig {
   uint8_t viewpoint_player;
   uint8_t ucf_cardinals;
   MslPlayerConfig players[MSL_MAX_PLAYERS];
+  uint8_t stadium_transformations;
 } MslMatchConfig;
 
 typedef struct MslInputPlayer {

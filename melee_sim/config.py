@@ -71,3 +71,4 @@ class MatchConfig:
     friendly_fire: bool = False
     viewpoint_player: int = 0
     ucf_cardinals_1_0_enabled: bool = True
+    stadium_transformations: bool = False

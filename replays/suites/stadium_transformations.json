@@ -1,0 +1,79 @@
+{
+  "name": "stadium_transformations",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/stadium_transformations/HummingDismalCat.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Fox",
+        "2": "Peach"
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/auto-fox-2025-10_Game_20251018T045526.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Dr. Mario",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/gm-fox-2025-12_Game_20251201T224155.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Mario",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/gm-fox-2026-03_Game_20260327T132708.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Mario",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/gm-fox-2026-04_Game_20260421T205457.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Mario",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/gm-sheik-2026-03_Game_20260318T233300.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Dr. Mario",
+        "2": "Sheik"
+      }
+    }
+  ]
+}

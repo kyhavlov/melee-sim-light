@@ -5,6 +5,9 @@
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
+#include "gr/ground.h"
+#include "mp/mplib.h"
+#include "mp/types.h"
 #include "lb/types.h"
 #include "runtime/context.h"
 #include "runtime/observation.h"
@@ -297,6 +300,49 @@ static void write_stage(const MslCoreMatch* match, uint8_t* out)
                     1;
             }
         }
+    } else if (match->config.stage_id == MSL_STAGE_POKEMON_STADIUM &&
+               match->config.stadium_transformations) {
+        const Ground* controller = Ground_801C2BA4(2)->user_data;
+        const MapCollData* map = mpLib_8004D164();
+        const CollLine* lines = mpGetGroundCollLine();
+        const CollVtx* vertices = mpGetGroundCollVtx();
+        const CollJoint* joints = mpGetGroundCollJoint();
+        uint8_t active[MSL_VIEWER_COLLISION_LINES] = { 0 };
+        unsigned count = 0;
+        out[offsetof(MslCoreViewerStage, stadium_state)] = controller->u.stadium.xDC;
+        out[offsetof(MslCoreViewerStage, stadium_type)] = controller->u.stadium.xDE;
+        HSD_ASSERT(312, map->line_count <= MSL_VIEWER_COLLISION_LINES);
+        // mpCheckFloor and the wall/ceiling queries visit active joint ranges.
+        // Shared vertices and leftover dynamic line flags do not imply membership.
+        for (i = 0; i < map->joint_count; ++i) {
+            const MapJoint* joint = joints[i].inner;
+            const int starts[] = { joint->floor_start, joint->ceiling_start,
+                joint->right_wall_start, joint->left_wall_start, joint->dynamic_start };
+            const int counts[] = { joint->floor_count, joint->ceiling_count,
+                joint->right_wall_count, joint->left_wall_count, joint->dynamic_count };
+            int range, line;
+            if (!(joints[i].flags & CollJoint_Enabled)) continue;
+            for (range = 0; range < 5; ++range)
+                for (line = 0; line < counts[range]; ++line)
+                    active[starts[range] + line] = 1;
+        }
+        for (i = 0; i < map->line_count; ++i) {
+            uint8_t* destination;
+            const CollVtx* a;
+            const CollVtx* b;
+            if (!active[i] ||
+                !mpLib_80054ED8(i) || (lines[i].flags & LINE_FLAG_EMPTY)) continue;
+            HSD_ASSERT(312, count < MSL_VIEWER_COLLISION_LINES);
+            destination = out + offsetof(MslCoreViewerStage, collision_lines) +
+                          count++ * 4 * sizeof(float);
+            a = &vertices[lines[i].x0->v0_idx];
+            b = &vertices[lines[i].x0->v1_idx];
+            put_f32(destination, 0, a->pos.x);
+            put_f32(destination, 4, a->pos.y);
+            put_f32(destination, 8, b->pos.x);
+            put_f32(destination, 12, b->pos.y);
+        }
+        put_u16(out, offsetof(MslCoreViewerStage, collision_line_count), count);
     } else if (match->config.stage_id == MSL_CORE_STAGE_YOSHIS_STORY) {
         float x;
         float y;

@@ -23,7 +23,8 @@ class VectorPoolTest(unittest.TestCase):
         digest = hashlib.sha256()
         with msl.EnvBatch(batch_size=2, length=128, num_players=4, action_format='raw') as env:
             # Explicit directions keep the captured workload independent of AUTO.
-            env.match_config_view[:] = fixture['config']
+            # The new Stadium flag occupies zeroed padding in this recorded ABI.
+            env.match_config_view[:] = fixture['config'].view(env.match_config_view.dtype)
             env.reset_all()
             for frame, action in enumerate(fixture['inputs']):
                 env.current_action_frame[:] = action

@@ -104,8 +104,6 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
         start.get("damage_ratio", 0) <= 0 or start.get("timer") != 480 or
         start.get("bitfield") not in ([50, 1, 134, 76], [50, 1, 142, 76])):
         issues.append("unsupported-settings")
-    if start.get("stage") == 3 and not stadium_is_frozen(start, codes):
-        issues.append("unfrozen-stadium")
     players = start["players"]
     if len(players) not in (2, 3, 4) or (len(players) > 2 and not start.get("is_teams")):
         issues.append("unsupported-settings")

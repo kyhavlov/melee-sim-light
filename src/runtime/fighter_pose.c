@@ -305,6 +305,13 @@ bool msl_fighter_pose_set_mtx_dirty(HSD_JObj* root)
     return true;
 }
 
+void msl_fighter_pose_srt_restored(HSD_JObj* joint)
+{
+    MslFighterPoseJoint* node = pose_joint(joint);
+    HSD_ASSERT(149, node != NULL);
+    node->flags |= MSL_FIGHTER_POSE_SRT_RESTORED;
+}
+
 void msl_fighter_pose_set_root_position(HSD_JObj* root, const Vec3* position)
 {
     MslFighterPoseJoint* root_node = pose_joint(root);
@@ -338,8 +345,10 @@ void msl_fighter_pose_set_root_position(HSD_JObj* root, const Vec3* position)
             continue;
         }
         if (joint->robj != NULL || (joint->flags & JOBJ_JOINT) != 0 ||
-            (joint->flags & JOBJ_MTX_INDEP_SRT))
+            (joint->flags & JOBJ_MTX_INDEP_SRT) ||
+            ((node - 1)->flags & MSL_FIGHTER_POSE_SRT_RESTORED))
         {
+            (node - 1)->flags &= ~MSL_FIGHTER_POSE_SRT_RESTORED;
             HSD_JObjSetMtxDirty(joint);
             continue;
         }

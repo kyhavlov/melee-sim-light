@@ -46,6 +46,7 @@ int main(void)
           "ucfShieldDrop084Enabled");
     FIELD(MslCoreMatchConfig, stage_event_streams, "stageEventStreams");
     FIELD(MslCoreMatchConfig, whispy_dead_fighter_fix, "whispyDeadFighterFix");
+    FIELD(MslCoreMatchConfig, stadium_transformations, "stadiumTransformations");
     FIELD(MslCoreMatchConfig, players, "players");
     puts("});");
 
@@ -168,6 +169,10 @@ int main(void)
     FIELD(MslCoreViewerStage, randall_exists, "randallExists");
     FIELD(MslCoreViewerStage, randall_x, "randallX");
     FIELD(MslCoreViewerStage, randall_y, "randallY");
+    FIELD(MslCoreViewerStage, stadium_state, "stadiumState");
+    FIELD(MslCoreViewerStage, stadium_type, "stadiumType");
+    FIELD(MslCoreViewerStage, collision_line_count, "collisionLineCount");
+    FIELD(MslCoreViewerStage, collision_lines, "collisionLines");
     puts("});");
 
     puts("export const viewerCameraOffsets = Object.freeze({");

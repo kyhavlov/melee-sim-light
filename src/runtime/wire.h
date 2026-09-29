@@ -142,6 +142,7 @@ typedef struct MslCoreMatchConfig {
     // Online/Core/WhispyBlowDirFix excludes death animations from the vote.
     uint8_t whispy_dead_fighter_fix;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
+    uint8_t stadium_transformations;
 } MslCoreMatchConfig;
 
 // Native validation workers keep immutable GameData alive across jobs. The
@@ -161,7 +162,8 @@ typedef struct MslCoreCompare {
     uint32_t stage_id;
     uint8_t num_players;
     uint8_t is_teams;
-    uint8_t _pad0[2];
+    uint8_t stadium_state;
+    uint8_t stadium_type;
     uint8_t team_id[MSL_CORE_MAX_PLAYERS];
     uint8_t char_id[MSL_CORE_MAX_PLAYERS];
     float pos_x[MSL_CORE_MAX_PLAYERS];
@@ -302,6 +304,8 @@ typedef struct MslCoreViewerPlayer {
     MslCoreViewerHitbox hitboxes[MSL_CORE_MAX_HITBOXES];
 } MslCoreViewerPlayer;
 
+enum { MSL_VIEWER_COLLISION_LINES = 256 };
+
 typedef struct MslCoreViewerStage {
     // Source actor order is 0=right and 1=left, matching Slippi's FoD event
     // protocol and the existing viewer adapter.
@@ -311,6 +315,10 @@ typedef struct MslCoreViewerStage {
     uint8_t _pad0;
     float randall_x;
     float randall_y;
+    uint8_t stadium_state;
+    uint8_t stadium_type;
+    uint16_t collision_line_count;
+    float collision_lines[MSL_VIEWER_COLLISION_LINES][4];
 } MslCoreViewerStage;
 
 typedef struct MslCoreViewerCamera {
@@ -352,9 +360,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 63,
+_Static_assert(sizeof(MslCoreMatchConfig) == 64,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 119,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 120,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");
@@ -370,11 +378,11 @@ _Static_assert(sizeof(MslCoreViewerHitbox) == 24,
                "MslCoreViewerHitbox wire size");
 _Static_assert(sizeof(MslCoreViewerPlayer) == 192,
                "MslCoreViewerPlayer wire size");
-_Static_assert(sizeof(MslCoreViewerStage) == 20,
+_Static_assert(sizeof(MslCoreViewerStage) == 4120,
                "MslCoreViewerStage wire size");
 _Static_assert(sizeof(MslCoreViewerCamera) == 28,
                "MslCoreViewerCamera wire size");
-_Static_assert(sizeof(MslCoreViewerState) == 2332,
+_Static_assert(sizeof(MslCoreViewerState) == 6432,
                "MslCoreViewerState wire size");
 
 static inline uint16_t msl_core_get_le16(const void* ptr)

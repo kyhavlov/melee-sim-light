@@ -14,6 +14,8 @@
 #include "ft/ftdevice.h"
 #include "ft/ftlib.h"
 #include "gr/grdatfiles.h"
+#include "gr/granime.h"
+#include "gr/grpstadium.h"
 #include "gr/grizumi.h"
 #include "gr/ground.h"
 #include "gr/types.h"
@@ -25,6 +27,7 @@
 #include "lb/lbarchive.h"
 #include "lb/lbspdisplay.h"
 #include "mp/mpcoll.h"
+#include "mp/mpisland.h"
 #include "mp/mplib.h"
 #include "mp/types.h"
 #include "pl/player.h"
@@ -438,7 +441,9 @@ static void configure_headless_ground_schedule(
         if ((spec->runtime_animation_mask & map_bit) == 0) {
             msl_ground_use_headless_epoch_proc(gp->gobj);
         }
-        if ((spec->static_stage_proc_mask & map_bit) != 0) {
+        if ((spec->static_stage_proc_mask & map_bit) != 0 &&
+            !(spec->external_id == MSL_CORE_STAGE_POKEMON_STADIUM &&
+              match->config.stadium_transformations)) {
             msl_ground_remove_priority4_procs(gp->gobj);
         } else {
             msl_ground_remove_null_post_proc(gp->gobj);
@@ -659,6 +664,9 @@ static int validate_config(MslCoreMatchConfig* config)
 {
     int i;
 
+    if (config->stadium_transformations > 1) {
+        return -1;
+    }
     if (stage_spec(config->stage_id) == NULL) {
         fprintf(stderr,
                 "current core supports the six legal stage ids "
@@ -1220,6 +1228,28 @@ static int match_construct(MslCoreMatch* match,
     Ground_801C1E94();
     spec->source->OnInit();
     spec->source->OnLoad();
+#ifdef MSL_CORE_NATIVE
+    if (spec->external_id == MSL_CORE_STAGE_POKEMON_STADIUM &&
+        match->config.stadium_transformations) {
+        static const int map_ids[] = { 3, 4, 9, 6 };
+        static const char* archives[] = {
+            "GrPs1.dat", "GrPs2.dat", "GrPs3.dat", "GrPs4.dat"
+        };
+        int transformation;
+        // Reach every actor's archive and allocation classes before sealing;
+        // gameplay reuses the released objects when the source spawns it.
+        msl_mp_island_reserve_dynamic();
+        for (transformation = 0; transformation < 4; ++transformation) {
+            HSD_GObj* actor;
+            UnkArchiveStruct* archive;
+            grDatFiles_801C6038((void*) archives[transformation], 1, 0);
+            archive = grDatFiles_801C6330(map_ids[transformation]);
+            actor = grStadium_801D10F8(map_ids[transformation]);
+            Ground_801C4A08(actor);
+            grAnime_801C65B0(archive);
+        }
+    }
+#endif
     configure_headless_ground_schedule(match, spec);
     // refs/melee/src/melee/gm/gm_16AE.c::fn_8016DCC0 and fn_8016E730.
     // Keep the source owners intact: Player_InitAllPlayers also initializes
@@ -1572,6 +1602,7 @@ static int preload_match_configuration(MslCoreGameData* game_data,
     memset(&config, 0, sizeof(config));
     memset(&previous_input, 0, sizeof(previous_input));
     config.stage_id = stage_id;
+    config.stadium_transformations = stage_id == MSL_CORE_STAGE_POKEMON_STADIUM;
     config.frame_id = -123;
     config.frame_pre_random_seed = 1;
     config.initial_random_seed = 1;
@@ -2092,6 +2123,12 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
                       match->config.stage_id);
     out[offsetof(MslCoreCompare, num_players)] = match->config.num_players;
     out[offsetof(MslCoreCompare, is_teams)] = match->config.is_teams ? 1 : 0;
+    if (match->config.stage_id == MSL_CORE_STAGE_POKEMON_STADIUM &&
+        match->config.stadium_transformations) {
+        const Ground* controller = Ground_801C2BA4(2)->user_data;
+        out[offsetof(MslCoreCompare, stadium_state)] = controller->u.stadium.xDC;
+        out[offsetof(MslCoreCompare, stadium_type)] = controller->u.stadium.xDE;
+    }
     // MslCoreCompare represents all four controller slots. Slots without a
     // source Fighter GObj use the validation contract's inactive/dead value.
     for (i = match->config.num_players; i < MSL_CORE_MAX_PLAYERS; ++i) {

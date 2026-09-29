@@ -4265,6 +4265,60 @@
       }
     },
     {
+      "replay": "replays/validation/stadium_transformations/HummingDismalCat.slpz",
+      "expected": {
+        "native": {
+          "frames": 6803,
+          "actual_output_fingerprint": "8b0f454c7e9fc324"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/auto-fox-2025-10_Game_20251018T045526.slpz",
+      "expected": {
+        "native": {
+          "frames": 8181,
+          "actual_output_fingerprint": "967049e1a44cd48c"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/gm-fox-2025-12_Game_20251201T224155.slpz",
+      "expected": {
+        "native": {
+          "frames": 6372,
+          "actual_output_fingerprint": "8b33bf6a33559c09"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/gm-fox-2026-03_Game_20260327T132708.slpz",
+      "expected": {
+        "native": {
+          "frames": 7369,
+          "actual_output_fingerprint": "1e4b72bd4e9b87d5"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/gm-fox-2026-04_Game_20260421T205457.slpz",
+      "expected": {
+        "native": {
+          "frames": 7224,
+          "actual_output_fingerprint": "9746ad1894451f7b"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/stadium_transformations/gm-sheik-2026-03_Game_20260318T233300.slpz",
+      "expected": {
+        "native": {
+          "frames": 14238,
+          "actual_output_fingerprint": "60516b5c0c4e467c"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/yoshi/2025-11_Game_20251121T135559.slpz",
       "expected": {
         "native": {
