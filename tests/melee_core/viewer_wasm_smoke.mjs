@@ -26,7 +26,7 @@ import {
   viewerFrameFromState,
   viewerSettingsFromState,
 } from "../../tools/viewer/live/viewer_adapter.js";
-import { replayDataToMslTrace } from "../../tools/viewer/msltrace1.js";
+import { replayDataToMslTrace, mslTraceToReplayData } from "../../tools/viewer/msltrace1.js";
 
 const neutral = () => ({
   buttons: 0,
@@ -112,10 +112,13 @@ try {
   reset({ stageId: STAGE_POKEMON_STADIUM, stadiumTransformations: true });
   const stadiumTypes = new Set();
   const stadiumGeometry = new Set();
+  const stadiumFrames = [];
   for (let tick = 0; tick < 80000 && stadiumTypes.size < 5; tick += 1) {
     sim.step(controllers());
     if (tick % 31 === 0) {
-      const stage = frame().stage;
+      const current = frame();
+      stadiumFrames.push(current);
+      const stage = current.stage;
       stadiumTypes.add(stage.stadiumType);
       stadiumGeometry.add(JSON.stringify(stage.collisionLines));
       assert(stage.collisionLines.length > 0);
@@ -125,9 +128,31 @@ try {
   assert.deepEqual([...stadiumTypes].sort((a, b) => a - b), [3, 4, 5, 6, 9]);
   assert(stadiumGeometry.size > 5);
   assert.equal(viewerSettingsFromState(sim.viewerView()).isFrozenStadium, false);
+  const stadiumTrace = replayDataToMslTrace({
+    replayData: { settings: viewerSettingsFromState(sim.viewerView()), frames: stadiumFrames },
+    frameCount: stadiumFrames.length - 1,
+  });
+  const restoredStadium = mslTraceToReplayData(JSON.parse(JSON.stringify(stadiumTrace)));
+  assert.equal(restoredStadium.settings.isFrozenStadium, false);
+  assert(stadiumTrace.stage.rows.length < stadiumFrames.length, "unchanged geometry should stay sparse");
+  for (const [index, current] of stadiumFrames.entries()) {
+    const restored = restoredStadium.frames[index].stage;
+    assert.equal(restored.stadiumType, current.stage.stadiumType);
+    assert.equal(restored.stadiumState, current.stage.stadiumState);
+    assert.deepEqual(restored.collisionLines, current.stage.collisionLines);
+  }
   reset({ stageId: STAGE_POKEMON_STADIUM });
   assert.equal(frame().stage.collisionLines, undefined);
   assert.equal(viewerSettingsFromState(sim.viewerView()).isFrozenStadium, true);
+  const frozenTrace = replayDataToMslTrace({
+    replayData: { settings: viewerSettingsFromState(sim.viewerView()), frames: [frame()] },
+    frameCount: 0,
+  });
+  assert.deepEqual(frozenTrace.stage.fields, ["randallExists", "randallX", "randallY"]);
+  delete frozenTrace.match.stadiumTransformations;
+  const restoredFrozen = mslTraceToReplayData(JSON.parse(JSON.stringify(frozenTrace)));
+  assert.equal(restoredFrozen.settings.isFrozenStadium, true);
+  assert.equal(restoredFrozen.frames[0].stage.collisionLines, undefined);
 
   reset({ stageId: STAGE_FOUNTAIN_OF_DREAMS });
   const fountain = step();
