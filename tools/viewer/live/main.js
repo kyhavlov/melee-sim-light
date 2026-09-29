@@ -410,7 +410,6 @@ async function main() {
           simFrameId: 0,
           randomSeed: seed,
           stageId: selectedStage.id,
-          stadiumTransformations: selectedStage.stadiumTransformations,
           playerCharacters: selectedCharacterIds.map((charId) => ({
             internalId: charId,
             label: characterLabel(charId),

@@ -6,6 +6,7 @@ const KEYFRAME_INTERVAL = 60;
 const INPUT_FIELDS = ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"];
 const FRAME_FIELDS = ["frame", "randomSeed", "players"];
 const STAGE_FIELDS = ["randallExists", "randallX", "randallY"];
+const STADIUM_FIELDS = ["stadiumType", "stadiumState", "collisionLines"];
 const PLAYER_FIELDS = [
   "charId",
   "actionId",
@@ -99,7 +100,9 @@ function changedFields(previous, current) {
   }
   const changes = [];
   for (let idx = 0; idx < current.length; idx += 1) {
-    if (current[idx] !== previous[idx]) {
+    if (current[idx] !== previous[idx] &&
+        (!Array.isArray(current[idx]) ||
+         JSON.stringify(current[idx]) !== JSON.stringify(previous[idx]))) {
       changes.push([idx, current[idx]]);
     }
   }
@@ -189,7 +192,7 @@ function viewerSettings(trace) {
     isTeams: Boolean(match.isTeams),
     stageId,
     isPal: false,
-    isFrozenStadium: stageId === 3,
+    isFrozenStadium: stageId === 3 && !match.stadiumTransformations,
     platform: "dolphin",
     consoleNickname: "melee-sim-light",
     timerType: "counting down",
@@ -293,6 +296,9 @@ function stageObject(frameNumber, row, lookup) {
   const randallExists = Boolean(Number(row?.[lookup.randallExists] || 0));
   return {
     frameNumber,
+    stadiumType: row?.[lookup.stadiumType],
+    stadiumState: row?.[lookup.stadiumState],
+    collisionLines: row?.[lookup.collisionLines] ?? undefined,
     randall: randallExists
       ? {
           exists: true,
@@ -490,13 +496,18 @@ function itemRowFromViewer(item) {
   ];
 }
 
-function stageRowFromViewer(stage) {
+function stageRowFromViewer(stage, stadiumTransformations) {
   const randall = stage?.randall;
-  return [
+  const row = [
     randall?.exists ? 1 : 0,
     roundNumber(Number(randall?.x || 0)),
     roundNumber(Number(randall?.y || 0)),
   ];
+  if (stadiumTransformations) {
+    row.push(stage?.stadiumType ?? 5, stage?.stadiumState ?? 0,
+      stage?.collisionLines ?? null);
+  }
+  return row;
 }
 
 function encodeInputStreams(inputTrace, frameTotal, numPlayers) {
@@ -583,11 +594,11 @@ function encodeItemRows(replayData, frameTotal) {
   return rows;
 }
 
-function encodeStageRows(replayData, frameTotal) {
+function encodeStageRows(replayData, frameTotal, stadiumTransformations) {
   const rows = [];
   let previous = null;
   for (let frame = 0; frame < frameTotal; frame += 1) {
-    const row = stageRowFromViewer(replayData.frames[frame]?.stage);
+    const row = stageRowFromViewer(replayData.frames[frame]?.stage, stadiumTransformations);
     const isKeyframe = frame === 0 || frame % KEYFRAME_INTERVAL === 0;
     const changes = changedFields(previous, row);
     if (isKeyframe || previous === null) {
@@ -616,6 +627,7 @@ export function replayDataToMslTrace({
     throw new Error("No trace frames are available.");
   }
   const settings = replayData.settings;
+  const stadiumTransformations = settings.stageId === 3 && settings.isFrozenStadium === false;
   const playerSettings = settings.playerSettings || [];
   const numPlayers = Number(settings.characterUiPlacesCount || playerSettings.length || 2);
   const firstFrame = replayData.frames[0];
@@ -636,6 +648,7 @@ export function replayDataToMslTrace({
     createdAt: new Date().toISOString(),
     match: {
       stageId: Number(settings.stageId || 0),
+      stadiumTransformations,
       numPlayers,
       isTeams: Boolean(settings.isTeams),
       players: matchPlayers,
@@ -663,8 +676,8 @@ export function replayDataToMslTrace({
     stage: {
       encoding: SPARSE_DELTA_ENCODING,
       keyframeInterval: KEYFRAME_INTERVAL,
-      fields: STAGE_FIELDS,
-      rows: encodeStageRows(replayData, frameTotal),
+      fields: stadiumTransformations ? [...STAGE_FIELDS, ...STADIUM_FIELDS] : STAGE_FIELDS,
+      rows: encodeStageRows(replayData, frameTotal, stadiumTransformations),
     },
     items: {
       encoding: SPARSE_DELTA_ENCODING,

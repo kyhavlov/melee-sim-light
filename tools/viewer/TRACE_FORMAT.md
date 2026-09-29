@@ -46,6 +46,7 @@ not understand.
 ```
 
 - `stageId`: public MSL stage id. Use the constants in `src/ids.h`.
+- `stadiumTransformations`: optional boolean, default `false`; enables unfrozen Stadium.
 - `numPlayers`: number of active players in the trace.
 - `isTeams`: whether team display/ownership is active.
 - `players`: active players in row order. Frame player arrays use this order.
@@ -173,6 +174,10 @@ state rather than viewer-side approximations. Missing `stage` data is allowed.
   position for this frame.
 - `randallX`, `randallY`: Randall center from the same generated `MSLSTG01`
   platform transform consumed by collision.
+- `stadiumType`, `stadiumState`: optional Slippi transformation type and phase.
+- `collisionLines`: optional array of `[x1, y1, x2, y2]` world-space collision
+  segments for the current Stadium geometry. A delta replaces the whole array;
+  omit unchanged geometry. `null` means no geometry was recorded for this frame.
 
 ## Items
 
