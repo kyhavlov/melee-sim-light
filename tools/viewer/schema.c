@@ -20,6 +20,7 @@ int main(void)
     VALUE("VIEWER_HITBOX_SIZE", sizeof(MslCoreViewerHitbox));
     VALUE("ITEM_SIZE", sizeof(MslCoreItem));
     VALUE("UCF_SHIELD_DROP_084", MSL_UCF_SHIELD_DROP_084);
+    VALUE("STADIUM_TRANSFORMATIONS", MSL_STAGE_STADIUM_TRANSFORMATIONS);
     puts("");
 
     puts("export const matchConfigOffsets = Object.freeze({");
@@ -44,7 +45,7 @@ int main(void)
     FIELD(MslCoreMatchConfig, ucf_shield_drop_extended_enabled,
           "ucfShieldDropExtendedEnabled");
     FIELD(MslCoreMatchConfig, ucf_shield_drop_profile, "ucfShieldDropProfile");
-    FIELD(MslCoreMatchConfig, stage_event_streams, "stageEventStreams");
+    FIELD(MslCoreMatchConfig, stage_flags, "stageFlags");
     FIELD(MslCoreMatchConfig, whispy_dead_fighter_fix, "whispyDeadFighterFix");
     FIELD(MslCoreMatchConfig, players, "players");
     puts("});");
@@ -170,6 +171,10 @@ int main(void)
     FIELD(MslCoreViewerStage, randall_exists, "randallExists");
     FIELD(MslCoreViewerStage, randall_x, "randallX");
     FIELD(MslCoreViewerStage, randall_y, "randallY");
+    FIELD(MslCoreViewerStage, stadium_state, "stadiumState");
+    FIELD(MslCoreViewerStage, stadium_type, "stadiumType");
+    FIELD(MslCoreViewerStage, collision_line_count, "collisionLineCount");
+    FIELD(MslCoreViewerStage, collision_lines, "collisionLines");
     puts("});");
 
     puts("export const viewerCameraOffsets = Object.freeze({");

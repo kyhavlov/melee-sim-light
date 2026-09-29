@@ -549,7 +549,11 @@ def _resolve_data_dir(data_dir: str | os.PathLike[str] | None) -> Path:
     value = data_dir if data_dir is not None else os.environ.get("MSL_DATA_DIR", "data")
     path = Path(value).expanduser().resolve()
     raw = _raw_data_dir(path)
-    if not (raw / "manifest.json").is_file():
+    from tools.data.raw import STADIUM_ARCHIVES
+
+    if not (raw / "manifest.json").is_file() or any(
+        not (raw / name).is_file() for name in STADIUM_ARCHIVES
+    ):
         raise FileNotFoundError(
             f"melee_sim data directory is incomplete: {path}\n"
             "Run `python -m melee_sim.extract_data --iso /path/to/SSBM.iso`."
@@ -601,6 +605,7 @@ def _write_match_config(
     row["ucf_cardinals"] = bool(config.ucf_cardinals_1_0_enabled)
     if config.allow_wobbling is not None:
         row["allow_wobbling"] = 1 if config.allow_wobbling else 2
+    row["stadium_transformations"] = bool(config.stadium_transformations)
     for index, player in enumerate(players):
         team = -1 if player.team_id is None else int(player.team_id)
         facing = 0 if player.facing is None else (1 if player.facing else -1)

@@ -43,8 +43,10 @@ the number of reconstructed snaps. The original input events are preserved.
 ## Exactness
 
 The converter compares the [gameplay projection](../../agent_docs/VALIDATION.md)
-and verifies stored fighter state on replays that already contain it. For older Ice Climbers recordings,
-the converter also tries split multiply-add arithmetic if the default run differs.
+and verifies stored fighter state on replays that already contain it.
+Pokémon Stadium follows the recorded freeze setting and verifies transformation events.
+For older Ice Climbers recordings, the converter also tries split multiply-add
+arithmetic if the default run differs.
 It uses that run only if every compared field matches exactly, and records
 `jit_arithmetic: split-fma` in the manifest.
 Regeneration also requires an exact match when a known recording platform

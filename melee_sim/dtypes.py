@@ -120,7 +120,7 @@ def match_config_dtype() -> np.dtype:
             ("ucf_cardinals", "u1"),
             ("players", match_player_config_dtype(), (MAX_PLAYERS,)),
             ("allow_wobbling", "u1"),
-            ("_pad0", "u1"),
+            ("stadium_transformations", "u1"),
         ],
         align=False,
     )

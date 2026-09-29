@@ -139,6 +139,9 @@ typedef struct ReplayView {
   Primitive fod_platform_height;
   const struct ArrowArray* dreamland_whispy_list;
   Primitive dreamland_whispy_direction;
+  const struct ArrowArray* stadium_list;
+  Primitive stadium_state;
+  Primitive stadium_type;
   ReplayPlayer players[MSL_CORE_MAX_PLAYERS];
   // Peppi emits a parallel ports.P{n}.follower child for Ice Climbers
   // players. Only its post lanes participate in comparison: Nana takes no
@@ -170,6 +173,7 @@ typedef struct ReplayView {
   uint8_t stock_share_rng;
   uint8_t recorded_follower_inputs;
   uint8_t whispy_dead_fighter_fix;
+  uint8_t stadium_transformations;
   float damage_ratio;
 } ReplayView;
 
@@ -255,6 +259,8 @@ typedef struct StreamState {
   MslCoreInput previous;
   uint8_t signed_zero_equal;
   uint8_t relaxed_floats;
+  uint8_t stadium_state;
+  uint8_t stadium_type;
   MslCoreItem previous_expected_items[MSL_CORE_MAX_ITEMS];
   MslCoreItem previous_actual_items[MSL_CORE_MAX_ITEMS];
   NeedleAnchor previous_needle_anchors[MSL_CORE_MAX_ITEMS];
@@ -902,6 +908,20 @@ static int load_stage_events(ArrowNode frames, ReplayView* replay, char* error, 
     }
     replay->dreamland_whispy_list = list.array;
   }
+  if (replay->stadium_transformations) {
+    present = node_child_optional(frames, "stadium_transformation", &list, error, error_size);
+    if (present <= 0) return present;
+    if (list.schema->format == NULL || strcmp(list.schema->format, "+l") != 0 ||
+        list.array->n_buffers < 2 || list.array->buffers[1] == NULL ||
+        list.schema->n_children != 1 || list.array->n_children != 1 ||
+        node_child(list, "stadium_transformation", &values, error, error_size) != 0 ||
+        primitive_child(values, "event", "S", &replay->stadium_state, error, error_size) != 0 ||
+        primitive_child(values, "type", "S", &replay->stadium_type, error, error_size) != 0) {
+      snprintf(error, error_size, "unsupported Arrow Stadium transformation list");
+      return -1;
+    }
+    replay->stadium_list = list.array;
+  }
   return 0;
 }
 
@@ -1184,8 +1204,10 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
              ? MSL_UCF_SHIELD_DROP_084_LEGACY_SPOTDODGE
              : MSL_UCF_SHIELD_DROP_084)
       : MSL_UCF_SHIELD_DROP_08;
-  config->stage_event_streams = (replay->fod_platform_list != NULL ? 1U : 0U) |
-                                (replay->dreamland_whispy_list != NULL ? 2U : 0U);
+  config->stage_flags =
+      (replay->fod_platform_list != NULL ? MSL_STAGE_FOD_PLATFORM_EVENTS : 0) |
+      (replay->dreamland_whispy_list != NULL ? MSL_STAGE_WHISPY_EVENTS : 0) |
+      (replay->stadium_transformations ? MSL_STAGE_STADIUM_TRANSFORMATIONS : 0);
   for (i = 0; i < replay->num_players; ++i) {
     const ReplayPlayer* player = &replay->players[i];
     int64_t player_raw = rows->player_raw[i][0];
@@ -1479,6 +1501,8 @@ static const FieldSpec compare_fields[] = {
     SPEC("frame_id", frame_id, 1, FIELD_I32),
     SPEC("frame_pre_random_seed", frame_pre_random_seed, 1, FIELD_U32),
     SPEC("stage_id", stage_id, 1, FIELD_U32),
+    SPEC("stadium_state", stadium_state, 1, FIELD_U8),
+    SPEC("stadium_type", stadium_type, 1, FIELD_U8),
     SPEC("num_players", num_players, 1, FIELD_U8),
     SPEC("is_teams", is_teams, 1, FIELD_U8),
     SPEC("team_id", team_id, MSL_CORE_MAX_PLAYERS, FIELD_U8),
@@ -2058,12 +2082,19 @@ static int compare_row(StreamState* state, int64_t logical_pos, const MslCoreCom
   size_t field_i;
   int64_t mismatch_before = result->mismatch_count;
   build_expected(replay, rows, logical_pos, &expected);
+  expected.stadium_state = state->stadium_state;
+  expected.stadium_type = state->stadium_type;
   for (field_i = 0; field_i < sizeof(compare_fields) / sizeof(compare_fields[0]); ++field_i) {
     const FieldSpec* spec = &compare_fields[field_i];
     const uint8_t* expected_bytes = (const uint8_t*)(const void*)&expected + spec->offset;
     const uint8_t* actual_bytes = (const uint8_t*)(const void*)actual + spec->offset;
     size_t width = field_width((FieldKind)spec->kind);
     int element;
+    if (replay->stadium_list == NULL &&
+        (spec->offset == offsetof(MslCoreCompare, stadium_state) ||
+         spec->offset == offsetof(MslCoreCompare, stadium_type))) {
+      continue;
+    }
     for (element = 0; element < spec->count; ++element) {
       int player = -1;
       if (spec->count == MSL_CORE_MAX_PLAYERS) {
@@ -2446,6 +2477,18 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
       if (logical_pos > state->process_end_pos) {
         snprintf(error, error_size, "core runner produced too many rows");
         return -1;
+      }
+      const ReplayView* replay = state->replay;
+      if (replay->stadium_list != NULL) {
+        int64_t raw = state->rows->raw[logical_pos];
+        int64_t count = list_count(replay->stadium_list, raw);
+        // Carry the last event from finalized rows only. An earlier raw row
+        // can belong to a speculative future frame that rollback discarded.
+        if (count > 0) {
+          int64_t index = list_range_start(replay->stadium_list, raw) + count - 1;
+          state->stadium_state = get_u16(&replay->stadium_state, index);
+          state->stadium_type = get_u16(&replay->stadium_type, index);
+        }
       }
       if (state->regeneration != NULL && state->result.first_mismatch_frame == INT64_MIN) {
         msl_capture_replay_frame(state, logical_pos);
@@ -3002,6 +3045,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "frame_start_rng",
       "stock_share_rng",
       "recorded_follower_inputs",
+      "stadium_transformations",
       NULL,
   };
   PyObject* frames_obj;
@@ -3037,6 +3081,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int frame_start_rng = 0;
   int stock_share_rng = 0;
   int recorded_follower_inputs = 0;
+  int stadium_transformations = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -3055,7 +3100,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiiziiy#y#piippp:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiziiy#y#piipppp:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
@@ -3063,7 +3108,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &slippi_patches,
           &jit_arithmetic, &stored_expected, &stored_expected_size,
           &regenerate_slp, &regenerate_size, &relaxed_floats, &whispy_dead_fighter_fix,
-          &finalized_through, &frame_start_rng, &stock_share_rng, &recorded_follower_inputs)) {
+          &finalized_through, &frame_start_rng, &stock_share_rng, &recorded_follower_inputs,
+          &stadium_transformations)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -3075,6 +3121,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     return NULL;
   }
   memset(&replay, 0, sizeof(replay));
+  replay.stadium_transformations = stadium_transformations;
   memset(&rows, 0, sizeof(rows));
   memset(&state, 0, sizeof(state));
   if (relaxed_floats && regenerate_size == 0) {
@@ -3201,6 +3248,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
 
   state.replay = &replay;
   state.rows = &rows;
+  state.stadium_type = 5; // Neutral Stadium before the first recorded event.
   state.compare_start_pos = compare_start;
   state.process_end_pos = compare_start + compare_count - 1;
   // A freshly constructed source match is at the start of Slippi's first
@@ -3264,6 +3312,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
       "slippi_patches",
       "jit_arithmetic",
       "whispy_dead_fighter_fix",
+      "stadium_transformations",
       NULL,
   };
   PyObject* frames_obj;
@@ -3275,6 +3324,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   int slippi_patches = 0;
   int jit_arithmetic = 0;
   int whispy_dead_fighter_fix = -1;
+  int stadium_transformations = 0;
   int ucf_cardinals_1_0_enabled = 1;
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
@@ -3293,15 +3343,16 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppppziii:write_benchmark_case", keywords,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppppziiip:write_benchmark_case", keywords,
                                    &frames_obj, &start_obj, &metadata_obj, &output_path,
                                    &ucf_cardinals_1_0_enabled, &ucf_shield_sdi_enabled,
                                    &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
                                    &ucf_shield_drop_084_enabled, &fnmsubs_profile, &slippi_patches,
-                                   &jit_arithmetic, &whispy_dead_fighter_fix)) {
+                                   &jit_arithmetic, &whispy_dead_fighter_fix, &stadium_transformations)) {
     return NULL;
   }
   memset(&replay, 0, sizeof(replay));
+  replay.stadium_transformations = stadium_transformations;
   memset(&rows, 0, sizeof(rows));
   if (parse_start(start_obj, &replay) != 0 || parse_metadata(metadata_obj, &replay) != 0) {
     goto done;
@@ -3369,7 +3420,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
 
   // The benchmark is an ordinary free-running workload: the replay supplies
   // controller inputs, not per-frame Slippi RNG or moving-stage authority.
-  header.config.stage_event_streams = 0;
+  header.config.stage_flags &= MSL_STAGE_STADIUM_TRANSFORMATIONS;
   memcpy(header.magic, msl_core_benchmark_case_magic, sizeof(header.magic));
   header.version = MSL_CORE_BENCHMARK_CASE_VERSION;
   header.header_size = sizeof(header);

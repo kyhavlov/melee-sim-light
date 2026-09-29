@@ -13,6 +13,7 @@ from .raw import (
     MANIFEST_VERSION,
     SUPPORTED_CHARACTERS,
     SUPPORTED_STAGES,
+    STADIUM_ARCHIVES,
     data_root,
     sha256_file,
     validate_raw_dir,
@@ -98,6 +99,7 @@ REQUIRED_FILES = {
     "GrNBa.dat",
     "GrIz.dat",
     "GrPs.dat",
+    *STADIUM_ARCHIVES,
     "GrSt.dat",
     "GrOp.dat",
 }

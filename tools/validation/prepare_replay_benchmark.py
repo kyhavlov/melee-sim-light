@@ -18,11 +18,11 @@ from tools.validation.validate_replay import (
     load_suite_cases,
     ReplayCase,
 )
-from tools.validation.admission import gecko_codes, require_admissible, slippi_patches, whispy_patch
+from tools.validation.admission import gecko_codes, require_admissible, slippi_patches, stadium_is_frozen, whispy_patch
 from tools.validation.slpz import replay_path_for_peppi
 
 
-FORMAT_VERSION = 6
+FORMAT_VERSION = 7
 # Export semantics can change without changing the tape layout.
 CACHE_VERSION = 9
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
@@ -64,7 +64,7 @@ def _cached_frame_count(path: Path) -> int | None:
     except (OSError, struct.error):
         return None
     if (
-        magic != b"MSLRPB06"
+        magic != b"MSLRPB07"
         or version != FORMAT_VERSION
         or header_size < 24
         or input_size != 52
@@ -119,6 +119,8 @@ def prepare(args: argparse.Namespace) -> None:
                         metadata["playedOn"] = case.played_on
                     frame_count = native.write_benchmark_case(
                         game.frames, game.start, metadata, str(temporary),
+                        stadium_transformations=(game.start["stage"] == 3 and not stadium_is_frozen(
+                            game.start, codes)),
                         ucf_cardinals_1_0_enabled=case.ucf_cardinals_1_0_enabled,
                         ucf_shield_sdi_enabled=case.ucf_shield_sdi_enabled,
                         ucf_sdi_enabled=case.ucf_sdi_enabled,

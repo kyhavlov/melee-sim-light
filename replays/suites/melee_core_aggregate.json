@@ -26,6 +26,7 @@
     "legacy_arithmetic.json",
     "roy.json",
     "pichu.json",
-    "kirby.json"
+    "kirby.json",
+    "stadium_transformations.json"
   ]
 }

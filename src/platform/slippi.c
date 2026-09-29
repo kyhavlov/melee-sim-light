@@ -56,7 +56,7 @@ bool msl_slippi_fod_platform_height(u8 platform, f32 source_height,
                                     f32* height, bool* changed)
 {
     u8 bit;
-    if ((msl_bound_slippi_state->stage_event_streams & 1) == 0 ||
+    if ((msl_bound_slippi_state->stage_event_streams & MSL_STAGE_FOD_PLATFORM_EVENTS) == 0 ||
         platform >= 2)
     {
         return false;
@@ -80,7 +80,7 @@ bool msl_slippi_fod_platform_height(u8 platform, f32 source_height,
 
 bool msl_slippi_dreamland_whispy_direction(u8* direction)
 {
-    if ((msl_bound_slippi_state->stage_event_streams & 2) == 0) {
+    if ((msl_bound_slippi_state->stage_event_streams & MSL_STAGE_WHISPY_EVENTS) == 0) {
         return false;
     }
     *direction = msl_bound_slippi_state->dreamland_whispy_direction;

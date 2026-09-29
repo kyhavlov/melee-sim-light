@@ -91,12 +91,13 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
       source->damage_ratio <= 0.0F || source->stocks == 0 ||
       source->viewpoint_player >= source->num_players || source->is_teams > 1 ||
       source->friendly_fire > 1 || source->ucf_cardinals > 1 ||
-      source->allow_wobbling > MSL_WOBBLING_PREVENT) {
+      source->allow_wobbling > MSL_WOBBLING_PREVENT || source->stadium_transformations > 1) {
     return -1;
   }
 
   memset(target, 0, sizeof(*target));
   target->stage_id = source->stage;
+  target->stage_flags = source->stadium_transformations ? MSL_STAGE_STADIUM_TRANSFORMATIONS : 0;
   target->frame_id = -124;
   target->frame_pre_random_seed = source->random_seed;
   target->initial_random_seed = source->random_seed;

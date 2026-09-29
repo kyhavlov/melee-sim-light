@@ -91,7 +91,7 @@ def test_melee_core_aggregate_filters_pending_characters_without_losing_inventor
     )
 
     assert suite.name == "melee_core_aggregate"
-    assert len(suite.replays) == 526
+    assert len(suite.replays) == 532
     assert len(cases) == 79
     assert all("Peach" not in case.characters for case in cases)
 
@@ -100,7 +100,7 @@ def test_suite_replay_execution_metadata_reaches_native_validator(
     monkeypatch, tmp_path: Path
 ) -> None:
     original_metadata = {"source": "legacy-capture"}
-    game = SimpleNamespace(frames=object(), start={}, metadata=original_metadata)
+    game = SimpleNamespace(frames=object(), start={"stage": 32}, metadata=original_metadata)
     captured: dict[str, object] = {}
 
     @contextmanager

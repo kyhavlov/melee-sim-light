@@ -39,6 +39,7 @@ SUPPORTED_CHARACTERS = (
     "link",
     "clink",
 )
+STADIUM_ARCHIVES = ("GrPs1.dat", "GrPs2.dat", "GrPs3.dat", "GrPs4.dat")
 SUPPORTED_STAGES = ("grnla", "grnba", "griz", "grps", "grst", "grop")
 
 
@@ -121,7 +122,7 @@ def validate_raw_dir(
             raise DataError(f"malformed game-data file record: {record!r}")
         indexed[name] = record
 
-    missing = sorted(set(required) - indexed.keys())
+    missing = sorted((set(required) | set(STADIUM_ARCHIVES)) - indexed.keys())
     if missing:
         raise DataError("missing required game-data files: " + ", ".join(missing))
     for name, record in indexed.items():

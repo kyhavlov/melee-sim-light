@@ -72,3 +72,4 @@ class MatchConfig:
     viewpoint_player: int = 0
     ucf_cardinals_1_0_enabled: bool = True
     allow_wobbling: bool | None = None
+    stadium_transformations: bool = False

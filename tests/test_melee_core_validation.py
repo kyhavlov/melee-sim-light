@@ -105,6 +105,26 @@ def test_vanilla_magnifier_uses_leader_visibility() -> None:
     assert result["admitted"] is False
 
 
+def test_stadium_validation_ignores_speculative_transition(monkeypatch) -> None:
+    if not NATIVE.is_file() or not NATIVE_BINARY.is_file():
+        pytest.skip("native core validation artifacts are unavailable")
+    replay = ROOT / "replays/validation/stadium_transformations/HummingDismalCat.slpz"
+    read_slippi = validate_replay._read_slippi
+
+    def read_with_rollback(*args):
+        game = read_slippi(*args)
+        events = game.frames.field("stadium_transformation")
+        change = next(i for i, event in enumerate(events) if event.as_py())
+        frames = pa.concat_arrays([game.frames[:change - 2], game.frames.slice(change, 1),
+                                   game.frames[change - 2:]])
+        return SimpleNamespace(frames=frames, start=game.start, metadata=game.metadata, end=game.end)
+
+    monkeypatch.setattr(validate_replay, "_read_slippi", read_with_rollback)
+    result = validate_one(load_native(), replay, frames=0, start_frame=None,
+                          timeout=20.0, backend="native")
+    assert result["pass"], result["details"]
+
+
 @pytest.mark.parametrize("replay,frame_count", [
     pytest.param("dk/diamond-diamond-33b572328d41bb20873121a4.slpz", 8869, id="squatrv"),
     pytest.param("icies/master-diamond-bf25cf805e23959b754c2c71.slpz", 12375, id="dashback"),

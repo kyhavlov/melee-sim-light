@@ -181,7 +181,7 @@ int main(int argc, char** argv)
     // Replay events change the source actor at the callback epilogue. The
     // observation must publish that frame's value, and retain it on frames
     // without a new event, just as libmelee retains its last 0x40 payload.
-    config.stage_event_streams = 2;
+    config.stage_flags = MSL_STAGE_WHISPY_EVENTS;
     if (msl_core_match_reset(&matches[0], &game_data, &config, &input) != 0 ||
         !whispy_is(&matches[0], MSL_WHISPY_NONE))
         goto fail;
@@ -217,7 +217,7 @@ int main(int argc, char** argv)
     if (msl_core_match_step(&matches[0], &input, 1, &events) != 0 ||
         !whispy_is(&matches[0], MSL_WHISPY_RIGHT))
         goto fail;
-    config.stage_event_streams = 0;
+    config.stage_flags = 0;
     config.stage_id = MSL_STAGE_FINAL_DESTINATION;
     if (msl_core_match_reset(&matches[0], &game_data, &config, &input) != 0 ||
         !whispy_is(&matches[0], MSL_WHISPY_NONE))

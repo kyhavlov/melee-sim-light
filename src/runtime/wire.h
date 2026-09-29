@@ -139,16 +139,20 @@ typedef struct MslCoreMatchConfig {
     // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Shield Drop Extended.asm
     uint8_t ucf_shield_drop_extended_enabled;
     uint8_t ucf_shield_drop_profile; // MSL_UCF_SHIELD_DROP_*.
-    // Bit 0: Slippi 3.18+ FoD platform events; bit 1: Dream Land Whispy
-    // direction events. A present stream is authoritative even on frames with
-    // no event, where the last published value remains active.
-    uint8_t stage_event_streams;
+    uint8_t stage_flags; // MSL_STAGE_* capabilities.
     // Online/Core/WhispyBlowDirFix excludes death animations from the vote.
     uint8_t whispy_dead_fighter_fix;
     // Capabilities from the replay code list and initial frame.
     uint8_t replay_flags;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
+
+enum {
+    // A recorded stream carries its last value across frames with no event.
+    MSL_STAGE_FOD_PLATFORM_EVENTS = 1 << 0,
+    MSL_STAGE_WHISPY_EVENTS = 1 << 1,
+    MSL_STAGE_STADIUM_TRANSFORMATIONS = 1 << 2,
+};
 
 enum {
     // External/Frozen All/Core/2.asm: nop the call at 0x8021AAE4.
@@ -202,7 +206,8 @@ typedef struct MslCoreCompare {
     uint32_t stage_id;
     uint8_t num_players;
     uint8_t is_teams;
-    uint8_t _pad0[2];
+    uint8_t stadium_state;
+    uint8_t stadium_type;
     uint8_t team_id[MSL_CORE_MAX_PLAYERS];
     uint8_t char_id[MSL_CORE_MAX_PLAYERS];
     float pos_x[MSL_CORE_MAX_PLAYERS];
@@ -348,6 +353,8 @@ typedef struct MslCoreViewerPlayer {
     MslCoreViewerHitbox hitboxes[MSL_CORE_MAX_HITBOXES];
 } MslCoreViewerPlayer;
 
+enum { MSL_VIEWER_COLLISION_LINES = 256 };
+
 typedef struct MslCoreViewerStage {
     // Source actor order is 0=right and 1=left, matching Slippi's FoD event
     // protocol and the existing viewer adapter.
@@ -357,6 +364,10 @@ typedef struct MslCoreViewerStage {
     uint8_t _pad0;
     float randall_x;
     float randall_y;
+    uint8_t stadium_state;
+    uint8_t stadium_type;
+    uint16_t collision_line_count;
+    float collision_lines[MSL_VIEWER_COLLISION_LINES][4];
 } MslCoreViewerStage;
 
 typedef struct MslCoreViewerCamera {
@@ -419,11 +430,11 @@ _Static_assert(sizeof(MslCoreViewerHitbox) == 24,
                "MslCoreViewerHitbox wire size");
 _Static_assert(sizeof(MslCoreViewerPlayer) == 192,
                "MslCoreViewerPlayer wire size");
-_Static_assert(sizeof(MslCoreViewerStage) == 20,
+_Static_assert(sizeof(MslCoreViewerStage) == 4120,
                "MslCoreViewerStage wire size");
 _Static_assert(sizeof(MslCoreViewerCamera) == 28,
                "MslCoreViewerCamera wire size");
-_Static_assert(sizeof(MslCoreViewerState) == 2332,
+_Static_assert(sizeof(MslCoreViewerState) == 6432,
                "MslCoreViewerState wire size");
 
 static inline uint16_t msl_core_get_le16(const void* ptr)

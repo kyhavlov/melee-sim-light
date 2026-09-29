@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 enum {
-  MSL_CORE_BENCHMARK_CASE_VERSION = 6,
+  MSL_CORE_BENCHMARK_CASE_VERSION = 7,
 };
 
 #pragma pack(push, 1)
@@ -23,7 +23,7 @@ typedef struct MslCoreBenchmarkCaseHeader {
 #pragma pack(pop)
 
 static const uint8_t msl_core_benchmark_case_magic[8] = {
-    'M', 'S', 'L', 'R', 'P', 'B', '0', '6',
+    'M', 'S', 'L', 'R', 'P', 'B', '0', '7',
 };
 
 _Static_assert(sizeof(MslCoreBenchmarkCaseHeader) == 24 + sizeof(MslCoreMatchConfig),

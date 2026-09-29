@@ -40,8 +40,8 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, ucf_shield_drop_profile)];
     config->whispy_dead_fighter_fix =
         wire[offsetof(MslCoreMatchConfig, whispy_dead_fighter_fix)];
-    config->stage_event_streams =
-        wire[offsetof(MslCoreMatchConfig, stage_event_streams)];
+    config->stage_flags =
+        wire[offsetof(MslCoreMatchConfig, stage_flags)];
     config->replay_flags = wire[offsetof(MslCoreMatchConfig, replay_flags)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),
            sizeof(config->players));

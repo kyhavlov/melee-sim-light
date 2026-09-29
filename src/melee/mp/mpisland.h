@@ -23,5 +23,7 @@
 /* 05B334 */ void mpIsland_8005B334(int arg0, int arg1, int arg2, bool arg3);
 mp_UnkStruct0* msl_mp_floor_islands(void);
 
+void msl_mp_island_reserve_dynamic(void);
+
 extern mpIsland_Palette mpIsland_TerrainPalette;
 #endif

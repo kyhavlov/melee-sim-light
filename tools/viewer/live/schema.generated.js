@@ -3,11 +3,12 @@ export const MATCH_CONFIG_SIZE = 68;
 export const MATCH_CONFIG_PLAYER_SIZE = 8;
 export const INPUT_SIZE = 52;
 export const INPUT_PLAYER_SIZE = 13;
-export const VIEWER_STATE_SIZE = 2332;
+export const VIEWER_STATE_SIZE = 6432;
 export const VIEWER_PLAYER_SIZE = 192;
 export const VIEWER_HITBOX_SIZE = 24;
 export const ITEM_SIZE = 48;
 export const UCF_SHIELD_DROP_084 = 1;
+export const STADIUM_TRANSFORMATIONS = 4;
 
 export const matchConfigOffsets = Object.freeze({
   stageId: 0,
@@ -28,7 +29,7 @@ export const matchConfigOffsets = Object.freeze({
   ucfSdiEnabled: 30,
   ucfShieldDropExtendedEnabled: 31,
   ucfShieldDropProfile: 32,
-  stageEventStreams: 33,
+  stageFlags: 33,
   whispyDeadFighterFix: 34,
   players: 36,
 });
@@ -68,9 +69,9 @@ export const viewerOffsets = Object.freeze({
   players: 24,
   items: 792,
   stage: 1512,
-  camera: 1532,
-  followerPresent: 1560,
-  followers: 1564,
+  camera: 5632,
+  followerPresent: 5660,
+  followers: 5664,
 });
 export const viewerPlayerOffsets = Object.freeze({
   charId: 0,
@@ -147,6 +148,10 @@ export const viewerStageOffsets = Object.freeze({
   randallExists: 10,
   randallX: 12,
   randallY: 16,
+  stadiumState: 20,
+  stadiumType: 21,
+  collisionLineCount: 22,
+  collisionLines: 24,
 });
 export const viewerCameraOffsets = Object.freeze({
   eyeX: 0,

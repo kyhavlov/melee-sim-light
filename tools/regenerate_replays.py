@@ -31,6 +31,7 @@ from tools.validation.admission import (
     is_ucf_08,
     replay_events,
     slippi_patches,
+    stadium_is_frozen,
     whispy_patch,
 )
 from tools.validation.deflate_zip import DeflateZipFile, deflate_member
@@ -257,6 +258,7 @@ def _regenerate_replay(name, raw, native, pool, timeout, relaxed_floats,
             data_dir=str(pool.data_dir),
             timeout=timeout,
             native=True,
+            stadium_transformations=(game.start["stage"] == 3 and not stadium_is_frozen(game.start, codes)),
             ucf_cardinals_1_0_enabled=not legacy,
             ucf_shield_sdi_enabled=not legacy,
             ucf_sdi_enabled=not legacy,

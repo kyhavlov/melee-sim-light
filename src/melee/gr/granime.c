@@ -93,6 +93,7 @@ void grAnime_801C65B0(UnkArchiveStruct* arg0)
     if (arg0 == NULL) {
         return;
     }
+#ifndef MSL_CORE_NATIVE
     if ((uintptr_t) arg0->unk0 != -1U) {
         if (arg0->unk8 == 0) {
             lbArchive_80016EFC(arg0->unk0);
@@ -100,6 +101,7 @@ void grAnime_801C65B0(UnkArchiveStruct* arg0)
             lbHeap_80015CA8(0, arg0->unk0);
         }
     }
+#endif
     memzero(arg0, sizeof(*arg0));
 }
 

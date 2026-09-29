@@ -40,6 +40,7 @@
 #ifdef MSL_CORE_HOSTED
 #include <runtime/context.h>
 #include <runtime/match.h>
+#include <runtime/scalar.h>
 #include <runtime/source_state.h>
 #include <runtime/wire.h>
 #endif
@@ -121,12 +122,7 @@ static StageCallbacks grPs_803E126C[] = {
     {
         grStadium_801D1570,
         grStadium_801D15FC,
-#ifdef MSL_CORE_HOSTED
-        // Map 2 runs this adjacent priority-4 refresh on frozen Stadium.
-        NULL,
-#else
         grStadium_801D1604,
-#endif
         grStadium_801D1624,
         0,
     },
@@ -215,6 +211,15 @@ bool grStadium_801D10F0(void)
     return false;
 }
 
+#ifdef MSL_CORE_HOSTED
+static void msl_stadium_frozen_update(Ground_GObj* gobj)
+{
+    lb_800115F4();
+    // Map 2 has no collision joints. Frozen map 5 owns static joint 4.
+    msl_ground_refresh_static_joint(2, 5, 4);
+}
+#endif
+
 /**
  * Creates a specific sub-type of Ground_GObj for Pokemon Stadium
  * (e.g. id=1 for the jumbotron display)
@@ -241,6 +246,18 @@ Ground_GObj* grStadium_801D10F8(StadiumGrType id)
             cb->callback0(gobj);
         }
         if (cb->callback2 != NULL) {
+#ifdef MSL_CORE_HOSTED
+            if (!(msl_core_active_match()->config.stage_flags & MSL_STAGE_STADIUM_TRANSFORMATIONS)) {
+                if (id == 2) {
+                    HSD_GObj_SetupProc(gobj, msl_stadium_frozen_update, 4);
+                    return gobj;
+                }
+                if (id == 5) {
+                    // The frozen controller refreshes this joint in source order.
+                    return gobj;
+                }
+            }
+#endif
             HSD_GObj_SetupProc(gobj, cb->callback2, 4);
         }
     } else {
@@ -345,11 +362,7 @@ void grStadium_801D13E0(Ground_GObj* gobj)
         gr->u.stadium.xCC = HSD_MemAlloc(0x50000);
     }
 #else
-    // Frozen Stadium's hosted owner disables the transformation loader in
-    // grStadium_801D1518. Its 320 KiB DVD scratch buffer is therefore never
-    // read by gameplay and must not be replicated in every environment.
-    // refs/melee/src/melee/gr/grpstadium.c::{grStadium_801D1518,
-    //   grStadium_801D2344}
+    // Hosted transformations read immutable preloaded archives, not DVD scratch.
 #endif
     gr->u.stadium.xC4_b1 = false;
     gr->u.stadium.xD0 = NULL;
@@ -387,13 +400,7 @@ void grStadium_801D1520(Ground_GObj* gobj)
         grStadium_801D4548(gobj);
     }
     lb_800115F4();
-#ifdef MSL_CORE_HOSTED
-    // Map 2 has no collision joints. Map 5 owns joint 4 (grPs_803E1248)
-    // and its transforms are static on the frozen stage.
-    msl_ground_refresh_static_joint(2, 5, 4);
-#else
     Ground_801C2FE0(gobj);
-#endif
 }
 
 void grStadium_801D156C(Ground_GObj* gobj) {}
@@ -2045,8 +2052,10 @@ bool grStadium_801D42B8(void)
     if (gp->u.stadium.xC4_b1) {
         return false;
     }
+#ifndef MSL_CORE_HOSTED
     gp->u.stadium.xD0 =
         grDatFiles_801C6478(gp->u.stadium.xCC, gp->u.stadium.xC8);
+#endif
     return true;
 }
 #pragma pop
@@ -2150,12 +2159,6 @@ void grStadium_801D435C(Ground_GObj* arg0)
 
 void grStadium_801D4548(Ground_GObj* gobj)
 {
-#ifdef MSL_CORE_HOSTED
-    // External/Frozen PS/Core/FreezePokemon.asm replaces the transformation
-    // decision at retail 0x801D45FC with a branch to 0x801D4FD8.
-    (void) gobj;
-    return;
-#else
     s32 sp6C;
     s32 sp68;
     s32 sp64;
@@ -2268,8 +2271,15 @@ void grStadium_801D4548(Ground_GObj* gobj)
             gp = GET_GROUND(map_gobj);
             HSD_ASSERT(0x99B, gp);
             gp->u.stadium.xC4_b1 = true;
+#ifdef MSL_CORE_HOSTED
+            // Online/Core/Hacks/Stadium/{StadiumFileLoad,GrPsxIsValid}.asm
+            grDatFiles_801C6038(datfiles[var_r29], 1, 0);
+            gp->u.stadium.xD0 = grDatFiles_801C6330(var_r4);
+            gp->u.stadium.xC4_b1 = false;
+#else
             lbFile_80016580(datfiles[var_r29], (u32) gp->u.stadium.xCC,
                             (void*) &gp->u.stadium.xC8, fn_801D4220, NULL);
+#endif
             temp_r31->u.stadium.xDC = 1;
             return;
         }
@@ -2281,7 +2291,7 @@ void grStadium_801D4548(Ground_GObj* gobj)
         }
         break;
     case 2:
-        temp_r31->u.display.xD8 = NULL;
+        temp_r31->u.stadium.xD8 = 0;
         temp_r3_6 = Ground_801C2BA4(1);
         if (temp_r3_6 != NULL) {
             temp_r0_2 = temp_r31->u.stadium.xDE;
@@ -2305,7 +2315,7 @@ void grStadium_801D4548(Ground_GObj* gobj)
         temp_r31->u.stadium.xDC = 3;
         return;
     case 3:
-        if (++temp_r31->u.stadium.xD8 > yaku->x10) {
+        if (temp_r31->u.stadium.xD8++ > yaku->x10) {
             temp_r6 = GET_GROUND(temp_r31->u.stadium.xE4);
             temp_r6->u.stadium.xC4_b1 = true;
             temp_r31->u.stadium.xDC = 4;
@@ -2398,7 +2408,6 @@ void grStadium_801D4548(Ground_GObj* gobj)
         temp_r31->u.stadium.xDC = 0;
         break;
     }
-#endif
 }
 
 /**

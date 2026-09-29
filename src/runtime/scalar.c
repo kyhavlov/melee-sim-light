@@ -14,6 +14,7 @@
 #include "ft/ftdevice.h"
 #include "ft/ftdynamics.h"
 #include "ft/ftlib.h"
+#include "gr/granime.h"
 #include "gr/grdatfiles.h"
 #include "gr/grizumi.h"
 #include "gr/ground.h"
@@ -27,6 +28,7 @@
 #include "lb/lbarchive.h"
 #include "lb/lbspdisplay.h"
 #include "mp/mpcoll.h"
+#include "mp/mpisland.h"
 #include "mp/mplib.h"
 #include "mp/types.h"
 #include "pl/player.h"
@@ -113,6 +115,9 @@ typedef struct MslCoreStageSpec {
 
 #ifdef MSL_CORE_NATIVE
 static int preload_supported_game_data(MslCoreGameData* game_data);
+static int preload_match_configuration(MslCoreGameData* game_data,
+                                       uint8_t stage_id, uint8_t char_id,
+                                       uint8_t opponent_id, uint8_t stage_flags);
 #endif
 
 static uint64_t fingerprint_game_data(const MslCoreGameData* game_data)
@@ -880,6 +885,13 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     }
     msl_core_bind_game_data(game_data);
     msl_ft_data_bind_motion_programs();
+    // Append the optional Stadium archives after the standard shared data.
+    if (preload_match_configuration(game_data, MSL_CORE_STAGE_POKEMON_STADIUM,
+                                    MSL_CORE_CHAR_FOX, MSL_CORE_CHAR_FOX,
+                                    MSL_STAGE_STADIUM_TRANSFORMATIONS) != 0)
+    {
+        return -1;
+    }
     game_data->fingerprint = fingerprint_game_data(game_data);
     msl_core_bind_game_data(game_data);
     msl_host_finish_initialization();
@@ -1162,7 +1174,8 @@ static int match_construct(MslCoreMatch* match,
                               match->config.ucf_shield_drop_extended_enabled,
                               match->config.ucf_shield_drop_profile);
     msl_camera_state_init(&match->camera);
-    msl_slippi_state_init(&match->slippi, match->config.stage_event_streams);
+    msl_slippi_state_init(&match->slippi, match->config.stage_flags &
+                         (MSL_STAGE_FOD_PLATFORM_EVENTS | MSL_STAGE_WHISPY_EVENTS));
 
     msl_effect_match_init(&game_data->effects, &match->effects);
     // Standard versus creates the source camera owner before stage/fighters.
@@ -1244,6 +1257,28 @@ static int match_construct(MslCoreMatch* match,
     Ground_801C1E94();
     spec->source->OnInit();
     spec->source->OnLoad();
+#ifdef MSL_CORE_NATIVE
+    if (spec->external_id == MSL_CORE_STAGE_POKEMON_STADIUM &&
+        (match->config.stage_flags & MSL_STAGE_STADIUM_TRANSFORMATIONS)) {
+        static const int map_ids[] = { 3, 4, 9, 6 };
+        static const char* archives[] = {
+            "GrPs1.dat", "GrPs2.dat", "GrPs3.dat", "GrPs4.dat"
+        };
+        int transformation;
+        // Reach every actor's archive and allocation classes before sealing;
+        // gameplay reuses the released objects when the source spawns it.
+        msl_mp_island_reserve_dynamic();
+        for (transformation = 0; transformation < 4; ++transformation) {
+            HSD_GObj* actor;
+            UnkArchiveStruct* archive;
+            grDatFiles_801C6038((void*) archives[transformation], 1, 0);
+            archive = grDatFiles_801C6330(map_ids[transformation]);
+            actor = grStadium_801D10F8(map_ids[transformation]);
+            Ground_801C4A08(actor);
+            grAnime_801C65B0(archive);
+        }
+    }
+#endif
     configure_headless_ground_schedule(match, spec);
     // refs/melee/src/melee/gm/gm_16AE.c::fn_8016DCC0 and fn_8016E730.
     // Player_InitAllPlayers initializes each slot's statistics state.
@@ -1592,7 +1627,7 @@ static int match_construct(MslCoreMatch* match,
 #ifdef MSL_CORE_NATIVE
 static int preload_match_configuration(MslCoreGameData* game_data,
                                        uint8_t stage_id, uint8_t char_id,
-                                       uint8_t opponent_id)
+                                       uint8_t opponent_id, uint8_t stage_flags)
 {
     MslCoreMatch* match;
     MslCoreMatchConfig config;
@@ -1606,6 +1641,7 @@ static int preload_match_configuration(MslCoreGameData* game_data,
     memset(&config, 0, sizeof(config));
     memset(&previous_input, 0, sizeof(previous_input));
     config.stage_id = stage_id;
+    config.stage_flags = stage_flags;
     config.frame_id = -123;
     config.frame_pre_random_seed = 1;
     config.initial_random_seed = 1;
@@ -1723,7 +1759,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
     for (i = 0; i < sizeof(characters) / sizeof(characters[0]); ++i) {
         if (preload_match_configuration(game_data,
                                         MSL_CORE_STAGE_FINAL_DESTINATION,
-                                        characters[i], characters[i]) != 0)
+                                        characters[i], characters[i], 0) != 0)
         {
             return -1;
         }
@@ -1738,7 +1774,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         if (preload_match_configuration(game_data,
                                         MSL_CORE_STAGE_FINAL_DESTINATION,
                                         MSL_CHARACTER_KIRBY,
-                                        characters[i]) != 0)
+                                        characters[i], 0) != 0)
         {
             return -1;
         }
@@ -1748,7 +1784,7 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
             continue;
         }
         if (preload_match_configuration(game_data, stage_specs[i].external_id,
-                                        MSL_CORE_CHAR_FOX, MSL_CORE_CHAR_FOX) != 0)
+                                        MSL_CORE_CHAR_FOX, MSL_CORE_CHAR_FOX, 0) != 0)
         {
             return -1;
         }
@@ -2142,6 +2178,12 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
                       match->config.stage_id);
     out[offsetof(MslCoreCompare, num_players)] = match->config.num_players;
     out[offsetof(MslCoreCompare, is_teams)] = match->config.is_teams ? 1 : 0;
+    if (match->config.stage_id == MSL_CORE_STAGE_POKEMON_STADIUM &&
+        (match->config.stage_flags & MSL_STAGE_STADIUM_TRANSFORMATIONS)) {
+        const Ground* controller = Ground_801C2BA4(2)->user_data;
+        out[offsetof(MslCoreCompare, stadium_state)] = controller->u.stadium.xDC;
+        out[offsetof(MslCoreCompare, stadium_type)] = controller->u.stadium.xDE;
+    }
     // MslCoreCompare represents all four controller slots. Slots without a
     // source Fighter GObj use the validation contract's inactive/dead value.
     for (i = match->config.num_players; i < MSL_CORE_MAX_PLAYERS; ++i) {
