@@ -348,6 +348,9 @@ export interface FodPlatforms {
 }
 
 export interface StageState {
+  readonly stadiumType?: number;
+  readonly stadiumState?: number;
+  readonly collisionLines?: readonly (readonly number[])[];
   readonly frameNumber: number;
   readonly fodLeftPlatformHeight: number;
   readonly fodRightPlatformHeight: number;

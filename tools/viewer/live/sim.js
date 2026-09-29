@@ -123,6 +123,7 @@ export class MslWasmSim {
     seed = 1,
     stocks = 4,
     stageId = STAGE_FINAL_DESTINATION,
+    stadiumTransformations = false,
   } = {}) {
     this.displayFrame = 0;
     this.module.HEAPU8.fill(0, this.configPtr, this.configPtr + MATCH_CONFIG_SIZE);
@@ -136,6 +137,7 @@ export class MslWasmSim {
     this.io.setFloat32(base + matchConfigOffsets.damageRatio, 1.0, true);
     this.io.setUint8(base + matchConfigOffsets.numPlayers, 2);
     this.io.setUint8(base + matchConfigOffsets.stockCount, stocks);
+    this.io.setUint8(base + matchConfigOffsets.stadiumTransformations, Number(stadiumTransformations));
     this.io.setUint8(base + matchConfigOffsets.onlineFnmsubsZero, 1);
     this.io.setUint8(base + matchConfigOffsets.brawlOffscreenDamage, 1);
     this.io.setUint8(base + matchConfigOffsets.freezeDeadUpFallPhysics, 1);

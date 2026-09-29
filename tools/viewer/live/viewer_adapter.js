@@ -130,7 +130,7 @@ export function viewerSettingsFromState(state) {
     isTeams: Boolean(u8(state, viewerOffsets.isTeams)),
     stageId,
     isPal: false,
-    isFrozenStadium: stageId === 3,
+    isFrozenStadium: stageId === 3 && !u8(state, viewerOffsets.stage + viewerStageOffsets.stadiumType),
     platform: "dolphin",
     consoleNickname: "melee-sim-light-browser",
     timerType: "counting down",
@@ -302,6 +302,14 @@ export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
     items,
     stage: {
       frameNumber,
+      stadiumType: u8(state, stage + viewerStageOffsets.stadiumType),
+      stadiumState: u8(state, stage + viewerStageOffsets.stadiumState),
+      collisionLines: u8(state, stage + viewerStageOffsets.stadiumType)
+        ? Array.from({ length: u16(state, stage + viewerStageOffsets.collisionLineCount) }, (_, i) => {
+            const off = stage + viewerStageOffsets.collisionLines + i * 16;
+            return [f32(state, off), f32(state, off + 4), f32(state, off + 8), f32(state, off + 12)];
+          })
+        : undefined,
       fodLeftPlatformHeight: u8(state, stage + viewerStageOffsets.fodValid + 1)
         ? f32(state, stage + viewerStageOffsets.fodHeight + 4)
         : undefined,

@@ -437,15 +437,24 @@ function PokemonStadium() {
     [-230, -111],
     [230, 180],
   ];
+  const collisionLines = () => access("currentFrame").stage.collisionLines;
   return (
     <>
       <Grid blastzones={blastzones} />
-      <polyline points={mainStage.join(" ")} class="fill-slate-800" />
-      <For each={platforms}>
-        {(points) => (
-          <polyline points={points.join(" ")} class="stroke-slate-800" />
-        )}
-      </For>
+      <Switch>
+        <Match when={collisionLines()}>
+          <For each={collisionLines()}>
+            {(line) => <line x1={line[0]} y1={line[1]} x2={line[2]} y2={line[3]}
+              class="stroke-slate-800" stroke-width="1" />}
+          </For>
+        </Match>
+        <Match when={!collisionLines()}>
+          <polyline points={mainStage.join(" ")} class="fill-slate-800" />
+          <For each={platforms}>
+            {(points) => <polyline points={points.join(" ")} class="stroke-slate-800" />}
+          </For>
+        </Match>
+      </Switch>
       <rect
         x={blastzones[0][0]}
         y={blastzones[0][1]}

@@ -16,6 +16,7 @@ import {
   CHAR_LINK,
   CHAR_YOUNG_LINK,
   STAGE_FINAL_DESTINATION,
+  STAGE_POKEMON_STADIUM,
   STAGE_FOUNTAIN_OF_DREAMS,
   STAGE_YOSHIS_STORY,
   SUPPORTED_CHARACTERS,
@@ -107,6 +108,26 @@ try {
       assert.equal(sim.module.HEAPU8.buffer.byteLength, heapSize);
     }
   }
+
+  reset({ stageId: STAGE_POKEMON_STADIUM, stadiumTransformations: true });
+  const stadiumTypes = new Set();
+  const stadiumGeometry = new Set();
+  for (let tick = 0; tick < 80000 && stadiumTypes.size < 5; tick += 1) {
+    sim.step(controllers());
+    if (tick % 31 === 0) {
+      const stage = frame().stage;
+      stadiumTypes.add(stage.stadiumType);
+      stadiumGeometry.add(JSON.stringify(stage.collisionLines));
+      assert(stage.collisionLines.length > 0);
+      assert(stage.collisionLines.every(line => line.every(Number.isFinite)));
+    }
+  }
+  assert.deepEqual([...stadiumTypes].sort((a, b) => a - b), [3, 4, 5, 6, 9]);
+  assert(stadiumGeometry.size > 5);
+  assert.equal(viewerSettingsFromState(sim.viewerView()).isFrozenStadium, false);
+  reset({ stageId: STAGE_POKEMON_STADIUM });
+  assert.equal(frame().stage.collisionLines, undefined);
+  assert.equal(viewerSettingsFromState(sim.viewerView()).isFrozenStadium, true);
 
   reset({ stageId: STAGE_FOUNTAIN_OF_DREAMS });
   const fountain = step();
