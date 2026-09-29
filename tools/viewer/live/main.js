@@ -4,6 +4,7 @@ import {
   CHAR_FALCO,
   CHAR_FOX,
   STAGE_FINAL_DESTINATION,
+  STAGE_POKEMON_STADIUM,
   SUPPORTED_CHARACTERS,
   SUPPORTED_STAGES,
 } from "./schema.js";
@@ -23,6 +24,10 @@ const controlP2Button = document.querySelector("#control-p2");
 const p1CharacterSelect = document.querySelector("#p1-character");
 const p2CharacterSelect = document.querySelector("#p2-character");
 const stageSelectorEl = document.querySelector("#stage-selector");
+const STAGE_OPTIONS = [
+  ...SUPPORTED_STAGES.map((stage) => ({ ...stage, stadiumTransformations: false })),
+  { id: STAGE_POKEMON_STADIUM, label: "PS (unfrozen)", name: "Pokemon Stadium (unfrozen)", stadiumTransformations: true },
+];
 const MAX_RENDER_FRAMES = 60 * 60 * 8 + 123;
 const STEP_MS = 1000 / 60;
 const MAX_STEPS_PER_PAINT = 5;
@@ -41,7 +46,7 @@ let frameCount = 0;
 let seed = 1;
 let inputTrace = [];
 let controlledPlayer = 0;
-let selectedStageId = STAGE_FINAL_DESTINATION;
+let selectedStage = STAGE_OPTIONS.find((stage) => stage.id === STAGE_FINAL_DESTINATION);
 const selectedCharacterIds = [CHAR_FOX, CHAR_FALCO];
 const adapterInput = new GameCubeAdapterInput({
   onStatus(message) {
@@ -87,16 +92,11 @@ function inputSourceLabel() {
 }
 
 function playerStatusSuffix() {
-  const stage = selectedStage();
-  const stagePrefix = stage ? `${stage.name}. ` : "";
+  const stagePrefix = `${selectedStage.name}. `;
   if (controlledPlayer === 0) {
     return `${stagePrefix}${inputSourceLabel()}, P2 neutral.`;
   }
   return `${stagePrefix}P1 neutral, ${inputSourceLabel()}.`;
-}
-
-function selectedStage() {
-  return SUPPORTED_STAGES.find((stage) => stage.id === selectedStageId) || SUPPORTED_STAGES[0];
 }
 
 function characterLabel(charId) {
@@ -114,13 +114,13 @@ function setControlledPlayer(playerIndex) {
 
 function updateStageButtons() {
   for (const button of stageSelectorEl.querySelectorAll("button[data-stage-id]")) {
-    const isSelected = Number(button.dataset.stageId) === selectedStageId;
+    const isSelected = STAGE_OPTIONS[Number(button.dataset.stageOption)] === selectedStage;
     button.setAttribute("aria-pressed", isSelected ? "true" : "false");
   }
 }
 
-function setSelectedStage(stageId) {
-  selectedStageId = stageId >>> 0;
+function setSelectedStage(stage) {
+  selectedStage = stage;
   updateStageButtons();
   reset();
 }
@@ -146,15 +146,16 @@ function installCharacterSelect(selectEl, playerIndex) {
 
 function installStageSelector() {
   stageSelectorEl.textContent = "";
-  for (const stage of SUPPORTED_STAGES) {
+  for (const [index, stage] of STAGE_OPTIONS.entries()) {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.stageId = String(stage.id);
+    button.dataset.stageOption = String(index);
     button.textContent = stage.label;
     button.title = stage.name;
     button.setAttribute("aria-label", stage.name);
-    button.setAttribute("aria-pressed", stage.id === selectedStageId ? "true" : "false");
-    button.addEventListener("click", () => setSelectedStage(stage.id));
+    button.setAttribute("aria-pressed", stage === selectedStage ? "true" : "false");
+    button.addEventListener("click", () => setSelectedStage(stage));
     stageSelectorEl.appendChild(button);
   }
 }
@@ -230,7 +231,8 @@ function reset() {
   seed = (seed + 1) >>> 0;
   const state = sim.reset({
     seed,
-    stageId: selectedStageId,
+    stageId: selectedStage.id,
+    stadiumTransformations: selectedStage.stadiumTransformations,
     p1Char: selectedCharacterIds[0],
     p2Char: selectedCharacterIds[1],
   });
@@ -407,7 +409,8 @@ async function main() {
           traceFrame: 0,
           simFrameId: 0,
           randomSeed: seed,
-          stageId: selectedStageId,
+          stageId: selectedStage.id,
+          stadiumTransformations: selectedStage.stadiumTransformations,
           playerCharacters: selectedCharacterIds.map((charId) => ({
             internalId: charId,
             label: characterLabel(charId),

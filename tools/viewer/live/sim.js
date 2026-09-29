@@ -7,6 +7,7 @@ import {
   MATCH_CONFIG_PLAYER_SIZE,
   MATCH_CONFIG_SIZE,
   STAGE_FINAL_DESTINATION,
+  STADIUM_TRANSFORMATIONS,
   UCF_SHIELD_DROP_084,
   VIEWER_STATE_SIZE,
   inputPlayerOffsets,
@@ -129,6 +130,7 @@ export class MslWasmSim {
     seed = 1,
     stocks = 4,
     stageId = STAGE_FINAL_DESTINATION,
+    stadiumTransformations = false,
   } = {}) {
     this.displayFrame = 0;
     this.module.HEAPU8.fill(0, this.configPtr, this.configPtr + MATCH_CONFIG_SIZE);
@@ -143,6 +145,7 @@ export class MslWasmSim {
     this.io.setUint8(base + matchConfigOffsets.numPlayers, 2);
     this.io.setUint8(base + matchConfigOffsets.stockCount, stocks);
     this.io.setUint8(base + matchConfigOffsets.arithmeticFlags, 1);
+    this.io.setUint8(base + matchConfigOffsets.stageFlags, stadiumTransformations ? STADIUM_TRANSFORMATIONS : 0);
     this.io.setUint8(base + matchConfigOffsets.brawlOffscreenDamage, 1);
     this.io.setUint8(base + matchConfigOffsets.freezeDeadUpFallPhysics, 1);
     this.io.setUint8(base + matchConfigOffsets.whispyDeadFighterFix, 1);
