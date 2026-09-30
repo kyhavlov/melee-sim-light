@@ -23,7 +23,7 @@ from tools.validation.slpz import (
     resolve_replay_path,
     set_native_unorder_events,
 )
-from tools.validation.admission import require_admissible
+from tools.validation.admission import (gecko_codes, require_admissible, wobble_prevention)
 from tools.validation.suite_io import ReplaySuite, display_path_under_repo, load_suite
 
 
@@ -321,6 +321,7 @@ def validate_one(
         game = _read_slippi(str(peppi_path), False)
         if not diagnostic:
             require_admissible(game, peppi_path, played_on=played_on, fnmsubs_profile=fnmsubs_profile)
+        codes = gecko_codes(peppi_path.read_bytes()) if peppi_path.exists() else {}
         metadata = game.metadata
         if played_on is not None:
             metadata = dict(metadata)
@@ -346,6 +347,7 @@ def validate_one(
             ucf_shield_drop_084_enabled=ucf_shield_drop_084_enabled,
             runner_stdin=runner.stdin_fd if runner is not None else -1,
             runner_stdout=runner.stdout_fd if runner is not None else -1,
+            wobble_prevention=wobble_prevention(codes),
         )
     result["admitted"] = not diagnostic
     result["diagnostic"] = diagnostic or signed_zero_equal or frames != 0 or start_frame is not None

@@ -831,3 +831,8 @@ int ftCo_804D903C = 0x3F800000;
 float ftCo_804D90D0 = 0.0F;
 float ftCo_804D90D4 = 1.0F;
 double ftCo_804D90D8 = 1.0;
+
+int msl_wobble_prevention(void)
+{
+    return msl_core_active_match()->config.wobble_prevention;
+}

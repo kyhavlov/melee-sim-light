@@ -71,4 +71,7 @@ bool msl_ucf_suppress_spotdodge(const Fighter* fp);
 bool msl_ucf_pass_oos_stick_check(const Fighter* fp);
 float msl_ucf_squatrv_threshold(const Fighter* fp, float vanilla_threshold);
 
+// MSL_WOBBLE_PREVENTION_* for the active match.
+int msl_wobble_prevention(void);
+
 #endif

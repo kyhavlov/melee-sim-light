@@ -78,6 +78,23 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
     return start.get("is_frozen_ps") is True or legacy_frozen
 
 
+# wire.h MSL_WOBBLE_PREVENTION_*.
+WOBBLE_PREVENTION_NONE, WOBBLE_PREVENTION_2021, WOBBLE_PREVENTION = 0, 1, 2
+
+
+def wobble_prevention(codes: dict[int, bytes]) -> int:
+    """Which PreventWobbling the capture ran (MslCoreMatchConfig
+    .wobble_prevention): the 2021 version injects its init at 0x800DA9DC,
+    the later one at 0x800DB880 and 0x800DBBD4; both check at 0x8008F090."""
+    if 0xC208F090 not in codes:
+        return WOBBLE_PREVENTION_NONE
+    if 0xC20DA9DC in codes:
+        return WOBBLE_PREVENTION_2021
+    if 0xC20DB880 in codes and 0xC20DBBD4 in codes:
+        return WOBBLE_PREVENTION
+    return WOBBLE_PREVENTION_NONE
+
+
 def capture_issues(game, raw: bytes, *, played_on: str | None = None,
                    fnmsubs_profile: str | None = None) -> list[str]:
     """Return property violations without running or consulting simulator output."""

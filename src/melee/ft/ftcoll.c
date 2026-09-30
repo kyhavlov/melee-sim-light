@@ -2770,6 +2770,18 @@ void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
     out->source = best_entry->gobj;
     out->damage = best_entry->x20;
     out->sfx_severity = sfx_severity;
+    if (dmg_ptr == &fp->dmg.facing_dir_1) {
+        // The first overlay's source word is PPC fp+0x1868. Hosted, the
+        // declared x1868_source pointer is padded to fp+0x1844+0x28, not the
+        // packed +0x24 above, so its readers (ft_07C1.c's thrown hitbox,
+        // ftCo_800C7434, ftCo_800C7590, PreventWobbling) read the damage
+        // float in its upper half. Publish both words where the Fighter
+        // declares them. (The second overlay's x1894 falls on an 8-byte
+        // boundary at +0x24 and needs no copy.)
+        f32 damage = best_entry->x20;
+        fp->dmg.x1868_source = best_entry->gobj;
+        memcpy(&fp->dmg.x186c, &damage, sizeof(damage));
+    }
 
     switch (best_entry->x0) {
     case 1: {

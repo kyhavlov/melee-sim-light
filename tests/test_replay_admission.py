@@ -163,3 +163,18 @@ def test_supported_rule_values_do_not_become_capture_bans(properties_only):
         player["stocks"] = 3
         player["handicap"] = 8
     assert "unsupported-settings" not in admission.capture_issues(game, raw)
+
+
+def test_wobble_prevention_version_is_read_from_its_injections():
+    check = {0xC208F090: b""}
+    assert admission.wobble_prevention({}) == admission.WOBBLE_PREVENTION_NONE
+    assert admission.wobble_prevention({**check, 0xC20DA9DC: b""}) == \
+        admission.WOBBLE_PREVENTION_2021
+    assert admission.wobble_prevention(
+        {**check, 0xC20DB880: b"", 0xC20DBBD4: b""}) == \
+        admission.WOBBLE_PREVENTION
+    # An init without the check (or half an init) prevents nothing.
+    assert admission.wobble_prevention({0xC20DA9DC: b""}) == \
+        admission.WOBBLE_PREVENTION_NONE
+    assert admission.wobble_prevention({**check, 0xC20DB880: b""}) == \
+        admission.WOBBLE_PREVENTION_NONE
