@@ -1179,13 +1179,12 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
         }
 
         if (msl_fighter_part_can_animate(fp, i)) {
-#ifdef MSL_CORE_NATIVE
-            // The interpolation skeleton was reset to this static pose before
-            // its attached animation ran. Unattached joints are unchanged.
-            if (!msl_fighter_pose_has_animation(fp->parts[i].x4_jobj2)) {
-                goto next_joint;
-            }
-#endif
+            // Every joint is blended, animated or not: both callers reset the
+            // interpolation skeleton to the costume rest pose
+            // (x108_costume_joint) but blend toward a different static pose
+            // (the character's ft_data->x20 pose), so an unattached joint still
+            // moves (Link's hip translation while shielding).
+            // refs/melee/src/melee/ft/ftanim.c::ftAnim_80070108
             if (fp->parts[i].flags_b4) {
                 lb_8000B4FC(fp->parts[i].x4_jobj2, joint);
             } else {
@@ -1198,7 +1197,6 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
 #endif
             }
         }
-    next_joint:
         i++;
         ftAnim_GetNextJointInTree(&joint, &sp1C);
     }
