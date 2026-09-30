@@ -22,7 +22,7 @@ from tools.validation.admission import require_admissible
 from tools.validation.slpz import replay_path_for_peppi
 
 
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 # Export semantics can change without changing the tape layout.
 CACHE_VERSION = 3
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"

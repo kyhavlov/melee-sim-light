@@ -71,4 +71,7 @@ bool msl_ucf_suppress_spotdodge(const Fighter* fp);
 bool msl_ucf_pass_oos_stick_check(const Fighter* fp);
 float msl_ucf_squatrv_threshold(const Fighter* fp, float vanilla_threshold);
 
+// Whether the active match's capture carried an MSL_PATCH_* patch.
+bool msl_slippi_patch(int patch);
+
 #endif

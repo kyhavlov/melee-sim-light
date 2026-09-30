@@ -78,6 +78,25 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
     return start.get("is_frozen_ps") is True or legacy_frozen
 
 
+# wire.h MSL_PATCH_*.
+PATCH_FD_BACKGROUND_FROZEN = 1 << 0
+PATCH_PS_CLOSEUP_CAMERA_TEST = 1 << 2
+
+
+def slippi_patches(codes: dict[int, bytes]) -> int:
+    """Single-instruction Slippi patches the capture ran
+    (MslCoreMatchConfig.slippi_patches): External/Frozen All/Core/2.asm puts
+    a nop at 0x8021AAE4, over Final Destination's background think."""
+    patches = 0
+    if codes.get(0x0421AAE4, b"")[4:8] == bytes.fromhex("60000000"):
+        patches |= PATCH_FD_BACKGROUND_FROZEN
+    # A list without Common/PSCameraIndependentMonitor: the close-up asks
+    # the camera. No list at all reports nothing.
+    if codes and 0xC21D24FC not in codes:
+        patches |= PATCH_PS_CLOSEUP_CAMERA_TEST
+    return patches
+
+
 def capture_issues(game, raw: bytes, *, played_on: str | None = None,
                    fnmsubs_profile: str | None = None) -> list[str]:
     """Return property violations without running or consulting simulator output."""
