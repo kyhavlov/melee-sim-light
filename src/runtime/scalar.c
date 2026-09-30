@@ -716,7 +716,10 @@ static int validate_config(MslCoreMatchConfig* config)
                     "and char_id=25 Ganondorf only\n");
             return -1;
         }
-        if (config->players[i].cpu_level > 9) {
+        if ((config->players[i].cpu_level & MSL_CORE_HUMAN_LEVEL) != 0
+                ? (config->players[i].cpu_level & 0x7F) > 9
+                : config->players[i].cpu_level > 9)
+        {
             fprintf(stderr, "CPU level must be 1..9\n");
             return -1;
         }
@@ -1273,10 +1276,15 @@ static int match_construct(MslCoreMatch* match,
                            ? 0.0F : ((encoded & 1) ? 1.0F : -1.0F);
         Player_SetPlayerCharacter(
             slot, source_character_kind(match->config.players[i].char_id));
-        Player_SetSlottype(slot, match->config.players[i].cpu_level != 0
-                                    ? Gm_PKind_Cpu : Gm_PKind_Human);
-        Player_SetPlayerAndEntityCpuLevel(slot,
-                                         match->config.players[i].cpu_level);
+        {
+            // A controller slot still carries the player's CPU level byte;
+            // a human Ice Climber's Nana sets her AI up from it
+            // (ftCo_800B9704). MSL_CORE_HUMAN_LEVEL marks that case.
+            uint8_t level = match->config.players[i].cpu_level;
+            bool human = level == 0 || (level & MSL_CORE_HUMAN_LEVEL) != 0;
+            Player_SetSlottype(slot, human ? Gm_PKind_Human : Gm_PKind_Cpu);
+            Player_SetPlayerAndEntityCpuLevel(slot, level & 0x7F);
+        }
         Player_SetTeam(slot, match->config.players[i].team_id);
         Player_SetStocks(slot, match->config.stock_count);
         // Player_SetHUDDamage initializes both player entities; Fighter_Create

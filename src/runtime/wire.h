@@ -75,6 +75,8 @@ typedef struct MslCoreStreamFrame {
 
 enum { MSL_FACING_AUTO_FLAG = 0x10 };
 
+enum { MSL_CORE_HUMAN_LEVEL = 0x80 };
+
 typedef struct MslCoreMatchPlayerConfig {
     uint8_t char_id;
     uint8_t team_id;
@@ -85,7 +87,10 @@ typedef struct MslCoreMatchPlayerConfig {
     uint8_t costume_id;
     uint8_t handicap;
     uint8_t start_percent;
-    uint8_t cpu_level; // Zero selects a controller; 1..9 retain a CPU slot.
+    // Zero selects a controller; 1..9 retain a CPU slot. A controller slot
+    // whose player level byte is 1..9 (Slippi records it for humans too)
+    // is MSL_CORE_HUMAN_LEVEL | level.
+    uint8_t cpu_level;
 } MslCoreMatchPlayerConfig;
 
 typedef struct MslCoreMatchConfig {

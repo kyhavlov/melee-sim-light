@@ -150,6 +150,9 @@ typedef struct ReplayView {
   uint8_t costume_id[MSL_CORE_MAX_PLAYERS];
   uint8_t handicap[MSL_CORE_MAX_PLAYERS];
   uint8_t cpu_level[MSL_CORE_MAX_PLAYERS];
+  // A human port's level byte from Game Start (admission.raw_player_levels);
+  // a human Ice Climber's Nana sets her AI up from it (ftCo_800B9704).
+  uint8_t human_level[MSL_CORE_MAX_PLAYERS];
   int num_players;
   uint32_t stage_id;
   uint32_t initial_random_seed;
@@ -439,6 +442,11 @@ static int parse_start(PyObject* start, ReplayView* replay) {
         return -1;
       }
       replay->cpu_level[slot] = (uint8_t)cpu_level;
+    } else {
+      PyObject* level = PyDict_GetItemString(player, "human_level");
+      long human_level = level != NULL && PyLong_Check(level) ? PyLong_AsLong(level) : 0;
+      replay->human_level[slot] =
+          human_level >= 1 && human_level <= 9 ? (uint8_t)human_level : 0;
     }
     replay->port_1based[slot] = port;
     replay->start_stocks[slot] = (uint8_t)PyLong_AsUnsignedLong(stocks_obj);
@@ -477,18 +485,21 @@ static int parse_start(PyObject* start, ReplayView* replay) {
         uint8_t costume = replay->costume_id[i];
         uint8_t handicap = replay->handicap[i];
         uint8_t cpu_level = replay->cpu_level[i];
+        uint8_t human_level = replay->human_level[i];
         replay->port_1based[i] = replay->port_1based[j];
         replay->start_stocks[i] = replay->start_stocks[j];
         replay->team_id[i] = replay->team_id[j];
         replay->costume_id[i] = replay->costume_id[j];
         replay->handicap[i] = replay->handicap[j];
         replay->cpu_level[i] = replay->cpu_level[j];
+        replay->human_level[i] = replay->human_level[j];
         replay->port_1based[j] = port;
         replay->start_stocks[j] = stocks;
         replay->team_id[j] = team;
         replay->costume_id[j] = costume;
         replay->handicap[j] = handicap;
         replay->cpu_level[j] = cpu_level;
+        replay->human_level[j] = human_level;
       }
     }
   }
@@ -1123,7 +1134,11 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     const ReplayPlayer* player = &replay->players[i];
     int64_t player_raw = rows->player_raw[i][0];
     uint8_t character = get_u8(&player->character, player_raw);
-    config->players[i].cpu_level = replay->cpu_level[i];
+    config->players[i].cpu_level =
+        replay->cpu_level[i] != 0 ? replay->cpu_level[i]
+        : replay->human_level[i] != 0
+            ? (uint8_t)(MSL_CORE_HUMAN_LEVEL | replay->human_level[i])
+            : 0;
     uint8_t stocks = replay->start_stocks[i];
     if (character != 5 && character != 1 && character != 2 && character != 3 && character != 6 && character != 7 &&
         character != 8 && character != 9 && character != 10 && character != 12 &&

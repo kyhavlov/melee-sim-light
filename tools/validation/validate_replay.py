@@ -23,7 +23,7 @@ from tools.validation.slpz import (
     resolve_replay_path,
     set_native_unorder_events,
 )
-from tools.validation.admission import require_admissible
+from tools.validation.admission import raw_player_levels, require_admissible
 from tools.validation.suite_io import ReplaySuite, display_path_under_repo, load_suite
 
 
@@ -321,13 +321,14 @@ def validate_one(
         game = _read_slippi(str(peppi_path), False)
         if not diagnostic:
             require_admissible(game, peppi_path, played_on=played_on, fnmsubs_profile=fnmsubs_profile)
+        start = with_human_levels(game.start, peppi_path)
         metadata = game.metadata
         if played_on is not None:
             metadata = dict(metadata)
             metadata["playedOn"] = played_on
         result = native.validate_replay(
             game.frames,
-            game.start,
+            start,
             metadata,
             qemu=str(QEMU),
             sysroot=str(SYSROOT),
@@ -352,6 +353,23 @@ def validate_one(
     result["fnmsubs_profile"] = fnmsubs_profile or "metadata"
     result["end_to_end_seconds"] = time.perf_counter() - started
     return result
+
+
+def with_human_levels(start: dict, path: Path) -> dict:
+    """The start block with each human port's recorded level byte as
+    "human_level" (a human Ice Climber's Nana sets her AI up from it)."""
+    levels = raw_player_levels(path.read_bytes()) if path.exists() else None
+    if levels is None:
+        return start
+    start = dict(start)
+    players = []
+    for player in start.get("players", []):
+        player = dict(player)
+        if player.get("type") == "Human":
+            player["human_level"] = levels["P1P2P3P4".index(str(player["port"])) // 2]
+        players.append(player)
+    start["players"] = players
+    return start
 
 
 def _parse_characters(value: str) -> frozenset[str]:
