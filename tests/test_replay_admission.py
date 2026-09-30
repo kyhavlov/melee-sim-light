@@ -163,3 +163,12 @@ def test_supported_rule_values_do_not_become_capture_bans(properties_only):
         player["stocks"] = 3
         player["handicap"] = 8
     assert "unsupported-settings" not in admission.capture_issues(game, raw)
+
+
+def test_frozen_fd_background_is_the_nop_at_its_think():
+    nop = bytes.fromhex("0421aae460000000")
+    assert admission.slippi_patches({0x0421AAE4: nop}) == \
+        admission.PATCH_FD_BACKGROUND_FROZEN
+    assert admission.slippi_patches(
+        {0x0421AAE4: bytes.fromhex("0421aae448000001")}) == 0
+    assert admission.slippi_patches({}) == 0
