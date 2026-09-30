@@ -831,3 +831,8 @@ int ftCo_804D903C = 0x3F800000;
 float ftCo_804D90D0 = 0.0F;
 float ftCo_804D90D4 = 1.0F;
 double ftCo_804D90D8 = 1.0;
+
+bool msl_slippi_patch(int patch)
+{
+    return (msl_core_active_match()->config.slippi_patches & patch) != 0;
+}

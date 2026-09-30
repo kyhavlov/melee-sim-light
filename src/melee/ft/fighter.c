@@ -2832,6 +2832,13 @@ void Fighter_procMap(Fighter_GObj* gobj)
 
         Fighter_SetRootPosition(gobj->hsd_obj, &fp->cur_pos);
     }
+#ifdef MSL_CORE_HOSTED
+    // Slippi 3.3's post-frame recorder ran here (0x8006C5D8), on every path
+    // out of procMap, before the damage, shield and hit procs.
+    if (msl_slippi_patch(MSL_PATCH_POST_FRAME_AT_MAP)) {
+        msl_core_capture_post_frame_at_map(gobj);
+    }
+#endif
 }
 
 void Fighter_8006C5F4(Fighter_GObj* gobj)

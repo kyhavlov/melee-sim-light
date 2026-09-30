@@ -78,6 +78,24 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
     return start.get("is_frozen_ps") is True or legacy_frozen
 
 
+# wire.h MSL_PATCH_*.
+PATCH_FD_BACKGROUND_FROZEN = 1 << 0
+PATCH_POST_FRAME_AT_MAP = 1 << 1
+
+
+def slippi_patches(codes: dict[int, bytes]) -> int:
+    """Single-instruction Slippi patches the capture ran
+    (MslCoreMatchConfig.slippi_patches): External/Frozen All/Core/2.asm puts
+    a nop at 0x8021AAE4, over Final Destination's background think."""
+    patches = 0
+    if codes.get(0x0421AAE4, b"")[4:8] == bytes.fromhex("60000000"):
+        patches |= PATCH_FD_BACKGROUND_FROZEN
+    # Slippi 3.3's SendGamePostFrame injection at the end of Fighter_procMap.
+    if 0xC206C5D8 in codes:
+        patches |= PATCH_POST_FRAME_AT_MAP
+    return patches
+
+
 def capture_issues(game, raw: bytes, *, played_on: str | None = None,
                    fnmsubs_profile: str | None = None) -> list[str]:
     """Return property violations without running or consulting simulator output."""
