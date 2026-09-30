@@ -42,6 +42,8 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, whispy_dead_fighter_fix)];
     config->stage_event_streams =
         wire[offsetof(MslCoreMatchConfig, stage_event_streams)];
+    config->jit_arithmetic =
+        wire[offsetof(MslCoreMatchConfig, jit_arithmetic)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),
            sizeof(config->players));
 }
