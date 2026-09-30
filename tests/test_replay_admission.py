@@ -163,3 +163,8 @@ def test_supported_rule_values_do_not_become_capture_bans(properties_only):
         player["stocks"] = 3
         player["handicap"] = 8
     assert "unsupported-settings" not in admission.capture_issues(game, raw)
+
+
+def test_neutral_spawn_is_read_from_the_code_list():
+    assert admission.neutral_spawn({0xC216E510: b""})
+    assert not admission.neutral_spawn({0xC21D45EC: b""})
