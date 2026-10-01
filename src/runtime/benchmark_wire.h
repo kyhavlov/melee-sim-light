@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 enum {
-  MSL_CORE_BENCHMARK_CASE_VERSION = 3,
+  MSL_CORE_BENCHMARK_CASE_VERSION = 4,
 };
 
 #pragma pack(push, 1)

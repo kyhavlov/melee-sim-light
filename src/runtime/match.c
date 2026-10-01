@@ -290,9 +290,27 @@ void msl_ucf_apply_pad_buffer(Fighter* fp)
     }
 }
 
+static bool msl_ucf_absent(int code)
+{
+    return (msl_core_active_match()->config.ucf_codes_absent & code) != 0;
+}
+
 void msl_ucf_apply_dashback(Fighter* fp)
 {
-    float stick_x = fp->input.lstick.x;
+    if (msl_ucf_absent(MSL_UCF_ABSENT_DASHBACK)) {
+        return;
+    }
+    // UCF 0.84 wants the stick in the new facing direction; UCF 0.8's
+    // Logic/UCF DB.asm tests its magnitude alone (lfs 0x620; fabs), so a
+    // flick back against the turn also qualifies there. The 0.8 code set
+    // ships DB, SD and Tumble together, and its SD is what clears
+    // ucf_shield_drop_084_enabled.
+    // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF DB.asm
+    float stick_x = msl_ucf_shield_drop_084_enabled
+                        ? fp->input.lstick.x
+                        : (fp->input.lstick.x < 0.0F ? -fp->input.lstick.x
+                                                     : fp->input.lstick.x) *
+                              fp->facing_dir;
 
     // Direct C translation of UCF 0.84/UCF/UCF Dashback.asm at the
     // ftCo_Turn_IASA 0x800C9A44 injection. The assembly reads the physical
@@ -327,6 +345,11 @@ bool msl_ucf_damagefall_wiggle_check(const Fighter* fp)
 {
     u8 hold_time = fp->x670_timer_lstick_tilt_x;
     float last_stick_x;
+
+    if (msl_ucf_absent(MSL_UCF_ABSENT_TUMBLE)) {
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c
+        return hold_time < p_ftCommonData->x214;
+    }
 
     // Direct C translation of refs/ucf/src/tumble/tumble.cpp, injected at
     // ftCo_DamageFall_IASA+0xCC (0x800908F4). Vanilla already accepts a
@@ -386,6 +409,9 @@ static float msl_ucf_08_rim_lane(float value)
 
 bool msl_ucf_suppress_spotdodge(const Fighter* fp)
 {
+    if (msl_ucf_absent(MSL_UCF_ABSENT_SHIELD_DROP)) {
+        return false;
+    }
     // The common Escape owner calls this at both vanilla spot-dodge entry
     // sites; the gecko hooks ftCo_80099894+0x10 and, when it suppresses,
     // unwinds to the caller's `li r3, 0` so the check reports no dodge.
@@ -439,8 +465,12 @@ bool msl_ucf_pass_oos_stick_check(const Fighter* fp)
 float msl_ucf_squatrv_threshold(const Fighter* fp, float vanilla_threshold)
 {
     // refs/ucf/src/dbooc/dbooc.S. Raise SquatRv's release threshold only for
-    // a one-frame rim input; 0.5900 is the UCF 0.84 IC-safe value.
-    if (fp->x670_timer_lstick_tilt_x < 1 &&
+    // a one-frame rim input; 0.5900 is the UCF 0.84 IC-safe value. The fix
+    // is UCF 0.84's (External/UCF 0.84/UCF/UCF DBOOC SquatRv Fix.asm at
+    // 0x800D65EC); the UCF 0.8 code set, which clears
+    // ucf_shield_drop_084_enabled, does not carry it.
+    if (msl_ucf_shield_drop_084_enabled &&
+        fp->x670_timer_lstick_tilt_x < 1 &&
         msl_ucf_is_rim_coord(fp->input.lstick))
     {
         return 0.5900F;

@@ -78,6 +78,17 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
     return start.get("is_frozen_ps") is True or legacy_frozen
 
 
+def ucf_codes_absent(codes: dict[int, bytes]) -> int:
+    """The UCF injections a capture's list lacks (MslCoreMatchConfig
+    .ucf_codes_absent: 1 tumble at 0x800908F4, 2 dashback at 0x800C9A44,
+    4 shield drop at 0x800998A4). A capture with no list reports none."""
+    if not codes:
+        return 0
+    return ((0 if 0xC20908F4 in codes else 1) |
+            (0 if 0xC20C9A44 in codes else 2) |
+            (0 if 0xC20998A4 in codes else 4))
+
+
 def capture_issues(game, raw: bytes, *, played_on: str | None = None,
                    fnmsubs_profile: str | None = None) -> list[str]:
     """Return property violations without running or consulting simulator output."""

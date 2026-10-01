@@ -163,3 +163,12 @@ def test_supported_rule_values_do_not_become_capture_bans(properties_only):
         player["stocks"] = 3
         player["handicap"] = 8
     assert "unsupported-settings" not in admission.capture_issues(game, raw)
+
+
+def test_ucf_codes_absent_names_each_missing_injection():
+    assert admission.ucf_codes_absent({}) == 0
+    assert admission.ucf_codes_absent({0xC216E510: b""}) == 7
+    assert admission.ucf_codes_absent(
+        {0xC20C9A44: b"", 0xC20998A4: b""}) == 1
+    assert admission.ucf_codes_absent(
+        {0xC20908F4: b"", 0xC20C9A44: b"", 0xC20998A4: b""}) == 0
