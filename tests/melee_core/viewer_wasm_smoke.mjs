@@ -25,7 +25,7 @@ import {
   viewerFrameFromState,
   viewerSettingsFromState,
 } from "../../tools/viewer/live/viewer_adapter.js";
-import { replayDataToMslTrace } from "../../tools/viewer/msltrace1.js";
+import { mslTraceToReplayData, replayDataToMslTrace } from "../../tools/viewer/msltrace1.js";
 
 const neutral = () => ({
   buttons: 0,
@@ -174,6 +174,43 @@ try {
       Math.abs(tiltedShield.shieldTiltY ?? 0) > 0.01,
     "live viewer shield projection did not expose Guard tilt",
   );
+
+  // An item's live hit capsule reaches the viewer and survives a trace
+  // round trip; a slot with no live hitbox carries no hitbox fields.
+  const flameFrames = [reset({ p1Char: CHAR_BOWSER })];
+  let flame;
+  for (let index = 0; index < 90 && !flame; index += 1) {
+    const current = step(controllers({ ...neutral(), buttons: BUTTONS.B }));
+    flameFrames.push(current);
+    flame = current.items.find(item => item.typeId === 100 && item.hitboxRadius > 0);
+  }
+  assert(flame, "Bowser flame never published a live item hitbox");
+  assert(Number.isFinite(flame.hitboxX) && Number.isFinite(flame.hitboxY));
+  const flameTrace = replayDataToMslTrace({
+    replayData: {
+      settings: viewerSettingsFromState(sim.viewerView()),
+      frames: flameFrames,
+      ending: { gameEndMethod: "GAME!", quitInitiator: -1 },
+    },
+    frameCount: flameFrames.length - 1,
+  });
+  const restoredFlame = mslTraceToReplayData(flameTrace).frames.at(-1).items
+    .find(item => item.spawnId === flame.spawnId);
+  assert(restoredFlame);
+  for (const field of ["hitboxX", "hitboxY", "hitboxRadius"]) {
+    assert(Math.abs(restoredFlame[field] - flame[field]) < 0.001, `flame trace ${field}`);
+  }
+  const legacyTrace = {
+    ...flameTrace,
+    items: {
+      encoding: flameTrace.items.encoding,
+      fields: ["alive", "typeId", "misc2"],
+      rows: [[0, 0, 0, [1, 64, 5]]],
+    },
+  };
+  const legacyShot = mslTraceToReplayData(legacyTrace).frames[0].items[0];
+  assert.equal(legacyShot.chargeShotChargeLevel, 5);
+  assert.equal(legacyShot.hitboxRadius, undefined);
 
   reset({ p1Char: CHAR_PEACH, stageId: STAGE_FINAL_DESTINATION, seed: 31 });
   let sawItem = false;

@@ -3,7 +3,7 @@ import { Camera } from "~/components/viewer/Camera";
 import { HUD } from "~/components/viewer/HUD";
 import { Players } from "~/components/viewer/Player";
 import { Stage } from "~/components/viewer/Stage";
-import { Item } from "~/components/viewer/Item";
+import { Item, ItemHitbox } from "~/components/viewer/Item";
 import { SpectateControls } from "~/components/viewer/SpectateControls";
 import { Controls } from "~/components/viewer/Controls";
 import { LiveIcon, ReconnectingText } from "~/components/common/icons";
@@ -52,6 +52,7 @@ export function Viewer() {
                   <Stage />
                   <Players />
                   <For each={items()}>{(item) => <Item item={item} />}</For>
+                  <For each={items()}>{(item) => <ItemHitbox item={item} />}</For>
                 </Camera>
                 <HUD />
               </g>

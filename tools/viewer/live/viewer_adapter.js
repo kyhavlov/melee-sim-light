@@ -3,8 +3,10 @@ import {
   BUTTONS,
   ITEM_SIZE,
   VIEWER_HITBOX_SIZE,
+  VIEWER_ITEM_HITBOX_SIZE,
   VIEWER_PLAYER_SIZE,
   itemOffsets,
+  viewerItemHitboxOffsets,
   viewerCameraOffsets,
   viewerHitboxOffsets,
   viewerOffsets,
@@ -237,6 +239,21 @@ function playerStateFromBase(state, base, frameNumber, idx, isNana) {
     };
 }
 
+// The item's first live hit capsule; absent when the sim reports no live
+// hitbox for the slot this frame.
+function itemHitbox(state, slot) {
+  const off = viewerOffsets.itemHitboxes + slot * VIEWER_ITEM_HITBOX_SIZE;
+  const hitboxRadius = f32(state, off + viewerItemHitboxOffsets.radius);
+  if (!(hitboxRadius > 0)) {
+    return {};
+  }
+  return {
+    hitboxX: f32(state, off + viewerItemHitboxOffsets.x),
+    hitboxY: f32(state, off + viewerItemHitboxOffsets.y),
+    hitboxRadius,
+  };
+}
+
 export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
   const numPlayers = u8(state, viewerOffsets.numPlayers);
   const players = [];
@@ -290,6 +307,7 @@ export function viewerFrameFromState(state, frameNumber, controllersByPlayer) {
       isChargeShotLaunched: false,
       chargeShotChargeLevel: u8(state, off + itemOffsets.misc2),
       owner: i8(state, off + itemOffsets.owner),
+      ...itemHitbox(state, idx),
     });
   }
 

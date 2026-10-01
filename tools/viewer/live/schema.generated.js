@@ -3,10 +3,11 @@ export const MATCH_CONFIG_SIZE = 63;
 export const MATCH_CONFIG_PLAYER_SIZE = 7;
 export const INPUT_SIZE = 52;
 export const INPUT_PLAYER_SIZE = 13;
-export const VIEWER_STATE_SIZE = 2332;
+export const VIEWER_STATE_SIZE = 2512;
 export const VIEWER_PLAYER_SIZE = 192;
 export const VIEWER_HITBOX_SIZE = 24;
 export const ITEM_SIZE = 48;
+export const VIEWER_ITEM_HITBOX_SIZE = 12;
 
 export const matchConfigOffsets = Object.freeze({
   stageId: 0,
@@ -65,10 +66,11 @@ export const viewerOffsets = Object.freeze({
   stockCount: 20,
   players: 24,
   items: 792,
-  stage: 1512,
-  camera: 1532,
-  followerPresent: 1560,
-  followers: 1564,
+  itemHitboxes: 1512,
+  stage: 1692,
+  camera: 1712,
+  followerPresent: 1740,
+  followers: 1744,
 });
 export const viewerPlayerOffsets = Object.freeze({
   charId: 0,
@@ -137,6 +139,11 @@ export const itemOffsets = Object.freeze({
   misc1: 45,
   misc2: 46,
   misc3: 47,
+});
+export const viewerItemHitboxOffsets = Object.freeze({
+  x: 0,
+  y: 4,
+  radius: 8,
 });
 export const viewerStageOffsets = Object.freeze({
   fodHeight: 0,

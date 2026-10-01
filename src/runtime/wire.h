@@ -323,6 +323,17 @@ typedef struct MslCoreViewerCamera {
     float fov;
 } MslCoreViewerCamera;
 
+// Viewer-only: an item's first enabled hit capsule in world space, the
+// same capsule ftColl's item loop tests against fighters. radius is the
+// capsule scale, which the item pass uses unscaled (lbColl_80007BCC scales
+// only the victim side). radius is 0 when the item has no live hitbox this
+// frame. Slots parallel MslCoreViewerState.items.
+typedef struct MslViewerItemHitbox {
+    float x;
+    float y;
+    float radius;
+} MslViewerItemHitbox;
+
 typedef struct MslCoreViewerState {
     int32_t frame_id;
     uint32_t random_seed;
@@ -336,6 +347,7 @@ typedef struct MslCoreViewerState {
     uint8_t _pad0[3];
     MslCoreViewerPlayer players[MSL_CORE_MAX_PLAYERS];
     MslCoreItem items[MSL_CORE_MAX_ITEMS];
+    MslViewerItemHitbox item_hitboxes[MSL_CORE_MAX_ITEMS];
     MslCoreViewerStage stage;
     MslCoreViewerCamera camera;
     // The Ice Climbers follower is a second rendered body on the owning
@@ -374,7 +386,9 @@ _Static_assert(sizeof(MslCoreViewerStage) == 20,
                "MslCoreViewerStage wire size");
 _Static_assert(sizeof(MslCoreViewerCamera) == 28,
                "MslCoreViewerCamera wire size");
-_Static_assert(sizeof(MslCoreViewerState) == 2332,
+_Static_assert(sizeof(MslViewerItemHitbox) == 12,
+               "MslViewerItemHitbox wire size");
+_Static_assert(sizeof(MslCoreViewerState) == 2512,
                "MslCoreViewerState wire size");
 
 static inline uint16_t msl_core_get_le16(const void* ptr)
