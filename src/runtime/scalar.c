@@ -179,7 +179,12 @@ static const MslCoreStageSpec stage_specs[] = {
       OLDPUPUPU,
       "/GrOp.dat",
       &grOp_803E6748,
-      (1U << 2) | (1U << 7),
+      // Map 1's animation carries particle events (stage generators
+      // 30000-30002), and creating each generator draws from the gameplay
+      // RNG ahead of that frame's CPU decisions (Nana's ledge option).
+      // Keep it animating.
+      // refs/melee/src/melee/ef/eflib.c::efLib_Cb_DPtcl
+      (1U << 1) | (1U << 2) | (1U << 7),
       0,
       { { -46.6F, 37.2F, 0.0F }, { 47.4F, 37.3F, 0.0F },
         { 0.0F, 7.0F, 0.0F }, { 0.0F, 58.5F, 0.0F } },
@@ -863,6 +868,7 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     msl_native_dat_finish_initialization();
     msl_memory_finish_initialization();
 #endif
+    msl_effect_install_match_callbacks();
     return 0;
 }
 
@@ -1716,6 +1722,21 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         if (preload_match_configuration(game_data, stage_specs[i].external_id,
                                         MSL_CORE_CHAR_FOX, MSL_CORE_CHAR_FOX) != 0)
         {
+            return -1;
+        }
+    }
+    // Each stage's particle command bank (map_ptcl), read once: a ground
+    // joint animation's particle event creates a generator from it, and
+    // creation draws from the gameplay RNG (effects.c::msl_effect_match_dptcl).
+    for (i = 0; i < sizeof(stage_specs) / sizeof(stage_specs[0]); ++i) {
+        HSD_Archive* archive = lbArchive_LoadArchive(stage_specs[i].archive);
+        if (archive == NULL ||
+            msl_effect_load_stage_bank(&game_data->stage_particles,
+                                       stage_specs[i].internal_id,
+                                       archive) != 0)
+        {
+            fprintf(stderr, "%s has an unreadable map_ptcl bank\n",
+                    stage_specs[i].archive);
             return -1;
         }
     }

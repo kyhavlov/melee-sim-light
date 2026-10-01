@@ -232,6 +232,8 @@ void msl_native_archive_locate_extern(HSD_Archive* archive,
 
 int msl_native_effect_bank(HSD_Archive* archive, const char* symbol,
                            int* count, HSD_PSCmdList*** commands);
+int msl_native_particle_bank(HSD_Archive* archive, const char* symbol,
+                             int* count, HSD_PSCmdList*** commands);
 EF_EffectDesc* msl_native_effect_models(HSD_Archive* archive,
                                         const char* symbol, int count);
 void msl_native_dat_finish_initialization(void);

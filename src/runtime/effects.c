@@ -4,13 +4,17 @@
 #include "ef/efasync.h"
 #include "ef/efsync.h"
 #include "ef/types.h"
+#include "gr/ground.h"
 #include "lb/lb_00B0.h"
+#include "runtime/context.h"
+#include "runtime/scalar.h"
 #include "lb/lbarchive.h"
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <baselib/archive.h>
 #include <baselib/gobj.h>
 #include <baselib/gobjproc.h>
 #include <baselib/jobj.h>
@@ -27,6 +31,9 @@ static _Thread_local MslCoreEffectState* msl_bound_effect_state;
 #define msl_effect_banks (msl_bound_effect_data->banks)
 #define msl_effect_nodes (msl_bound_effect_state->nodes)
 #define msl_effect_free (msl_bound_effect_state->free)
+
+static void msl_effect_consume_bank_command(
+    const MslCoreEffectGeneratorBank* data, int index);
 
 static void msl_effect_record_model_generator(int link_no, int bank,
                                               int gfx_id, HSD_JObj* jobj)
@@ -251,6 +258,112 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     HSD_JObjSetDPtclCallback(NULL);
 }
 
+#ifndef MSL_CORE_NATIVE
+// psInitDataBankLoad's header parse for an in-place command bank; entries
+// stay bank-relative (msl_effect_consume_bank_command relocates them).
+// refs/melee/src/sysdolphin/baselib/particle.c::psInitDataBankLoad
+static int msl_effect_parse_command_bank(MslCoreEffectGeneratorBank* bank,
+                                         int* command_bank)
+{
+    u16 version;
+
+    memset(bank, 0, sizeof(*bank));
+    if (command_bank == NULL) {
+        return 0;
+    }
+    version = *(u16*) command_bank;
+    bank->command_bank = command_bank;
+    if (version == 0) {
+        bank->count = command_bank[1];
+        bank->commands = (HSD_PSCmdList**) (command_bank + 2);
+    } else if (version >= 0x40 && version <= 0x43) {
+        bank->count = command_bank[1] + command_bank[2];
+        bank->commands = (HSD_PSCmdList**) (command_bank + 3 - command_bank[1]);
+        bank->id_base = command_bank[1];
+    } else {
+        return -1;
+    }
+    return 0;
+}
+#endif
+
+int msl_effect_load_stage_bank(MslCoreEffectStageBanks* stages,
+                               s32 internal_stage_id, HSD_Archive* archive)
+{
+    MslCoreEffectGeneratorBank* bank;
+
+    if (stages->count >= MSL_CORE_EFFECT_STAGE_BANK_CAPACITY) {
+        return -1;
+    }
+    bank = &stages->banks[stages->count];
+    memset(bank, 0, sizeof(*bank));
+#ifdef MSL_CORE_NATIVE
+    if (msl_native_particle_bank(archive, "map_ptcl", &bank->count,
+                                 &bank->commands) != 0)
+    {
+        return -1;
+    }
+#else
+    if (msl_effect_parse_command_bank(
+            bank, HSD_ArchiveGetPublicAddress(archive, "map_ptcl")) != 0)
+    {
+        return -1;
+    }
+#endif
+    bank->archive = archive;
+    stages->ids[stages->count++] = internal_stage_id;
+    return 0;
+}
+
+// efLib_Cb_DPtcl, as far as gameplay can see it: a joint animation's particle
+// event (JObj anim track 0x28) on the stage bank creates the generator
+// through grLib_801C99C0 -> hsd_8039EFAC -> hsd_8039F05C, whose gate draws
+// from the gameplay RNG in the middle of the frame. Final Destination's
+// ground animation fires generator 0x7530 on the match's first frame, before
+// the fighters' CPU think rolls its own numbers. Other banks' events spawn
+// visuals the headless build does not model.
+// refs/melee/src/melee/ef/eflib.c::{efLib_Cb_DPtcl,efLib_Init}
+// refs/melee/src/melee/gr/grlib.c::grLib_801C99C0
+static void msl_effect_match_dptcl(int link_no, int bank, int gfx_id,
+                                   HSD_JObj* jobj)
+{
+    const MslCoreEffectStageBanks* stages;
+    int i;
+
+    (void) link_no;
+    (void) jobj;
+    if (bank != MSL_CORE_EFFECT_STAGE_BANK ||
+        msl_core_try_active_match() == NULL ||
+        msl_core_context_game_data == NULL)
+    {
+        return;
+    }
+    stages = &msl_core_context_game_data->stage_particles;
+    for (i = 0; i < stages->count; ++i) {
+        if (stages->ids[i] == (s32) stage_info.internal_stage_id) {
+            msl_effect_consume_bank_command(&stages->banks[i], gfx_id);
+            return;
+        }
+    }
+#ifndef MSL_CORE_NATIVE
+    // The source build loads the stage archive per match; read the bank the
+    // ground loader published.
+    if (stage_info.map_ptcl != NULL) {
+        MslCoreEffectGeneratorBank local;
+        if (msl_effect_parse_command_bank(&local,
+                                          (int*) stage_info.map_ptcl) == 0)
+        {
+            msl_effect_consume_bank_command(&local, gfx_id);
+        }
+    }
+#endif
+}
+
+void msl_effect_install_match_callbacks(void)
+{
+    HSD_JObjSetDPtclCallback(msl_effect_match_dptcl);
+}
+
 void msl_effect_match_init(const MslCoreEffectData* data,
                            MslCoreEffectState* state)
 {
@@ -287,23 +400,32 @@ static void msl_effect_release(MslCoreEffectQueueNode* node)
 static void msl_effect_consume_generator_rng(s32 generator_id)
 {
     int bank = generator_id / 1000;
-    int index = generator_id - bank * 1000;
-    const MslCoreEffectGeneratorBank* data;
-    HSD_PSCmdList* command;
+    // hsd_8039EFAC(linkNo, bank, id) indexes ptclref[bank] by the full
+    // generator id (Mario's fireball: bank 1, 0x3E9), and a version-0x4x bank
+    // is located so that its [id_base, count) entries sit at those ids. The
+    // id modulo 1000 is below id_base for every such bank and found nothing.
+    // refs/melee/src/sysdolphin/baselib/generator.c::hsd_8039F05C
+    int index = generator_id;
 
     if (bank < 0 || bank >= (int) (sizeof(msl_effect_banks) /
                                    sizeof(msl_effect_banks[0])))
     {
         return;
     }
-    data = &msl_effect_banks[bank];
+    msl_effect_consume_bank_command(&msl_effect_banks[bank], index);
+}
+
+// hsd_8039F05C's gate for one generator of a bank: a generator whose command
+// list is not a static kind and has a nonnegative random spread draws once.
+static void msl_effect_consume_bank_command(
+    const MslCoreEffectGeneratorBank* data, int index)
+{
+    HSD_PSCmdList* command;
+
     // Version-0x4x per-character banks store commands indexed by the full
-    // generator id: only [id_base, count) exists in the archive. The native
-    // translation exposes a dense array whose entries below id_base are NULL,
-    // and the recorded corpus is bit-exact with those lookups consuming
-    // nothing; mirror that boundary here instead of walking off the front of
-    // the source command table (the PPC oracle crashed dereferencing that
-    // garbage on Fox's 0xBC0 reflector generator).
+    // generator id: only [id_base, count) exists in the archive, and the
+    // native translation exposes a dense array whose entries below id_base
+    // are NULL.
     if (index < data->id_base || index >= data->count ||
         data->commands == NULL)
     {

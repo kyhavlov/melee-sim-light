@@ -46,6 +46,20 @@ typedef struct MslCoreEffectGeneratorBank {
     s32 id_base;
 } MslCoreEffectGeneratorBank;
 
+enum {
+    // psInitDataBankLoad's slot for the stage archive's map_ptcl.
+    // refs/melee/src/melee/gr/ground.c::Ground_801C0800
+    MSL_CORE_EFFECT_STAGE_BANK = 0x1E,
+    MSL_CORE_EFFECT_STAGE_BANK_CAPACITY = 8,
+};
+
+// One map_ptcl bank per supported stage, keyed by internal stage id.
+typedef struct MslCoreEffectStageBanks {
+    MslCoreEffectGeneratorBank banks[MSL_CORE_EFFECT_STAGE_BANK_CAPACITY];
+    s32 ids[MSL_CORE_EFFECT_STAGE_BANK_CAPACITY];
+    s32 count;
+} MslCoreEffectStageBanks;
+
 typedef struct MslCoreEffectData {
     MslCoreEffectGeneratorBank banks[MSL_CORE_EFFECT_BANK_CAPACITY];
     MslCoreEffectModelStart
@@ -59,6 +73,12 @@ typedef struct MslCoreEffectState {
 } MslCoreEffectState;
 
 void msl_effect_game_data_init(MslCoreEffectData* data);
+// Reads a stage archive's map_ptcl into data->stage_banks (before GameData
+// seals). Returns nonzero when the bank is malformed.
+int msl_effect_load_stage_bank(MslCoreEffectStageBanks* stages,
+                               s32 internal_stage_id, HSD_Archive* archive);
+// Installs the match-time joint-animation particle callback.
+void msl_effect_install_match_callbacks(void);
 void msl_effect_match_init(const MslCoreEffectData* data,
                            MslCoreEffectState* state);
 void msl_effect_projection_bind(const MslCoreEffectData* data,
