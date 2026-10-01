@@ -23,8 +23,13 @@ function stickToRaw(value) {
   return clampInt(value * 80, -80, 80);
 }
 
+// The sim takes the trigger as the game does after its controller clamp:
+// HSD_PadClamp caps analog L/R at 140 before HSD_PadScale divides by 140, so
+// anything past that is a full press. Unclamped, the top of the trigger's
+// travel reads as more than a full press and the light shield overshoots.
+// refs/melee/src/sysdolphin/baselib/controller.c::{HSD_PadClamp,HSD_PadScale}
 function triggerToRaw(value) {
-  return clampInt(value * 255, 0, 255);
+  return clampInt(value * 255, 0, 140);
 }
 
 export class MslWasmSim {

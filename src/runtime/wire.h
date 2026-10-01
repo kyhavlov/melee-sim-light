@@ -273,7 +273,11 @@ typedef struct MslCoreViewerPlayer {
     // Kirby's copy-ability hat as the copied fighter kind; FTKIND_KIRBY (4)
     // means no hat and 0xFF marks a non-Kirby fighter.
     uint8_t kirby_hat;
-    uint8_t _pad0[2];
+    // Viewer-only: the alpha ftCo_Guard gives the shield bubble while one is
+    // live, 255 for a hard shield and lower the lighter it is held. 0 when
+    // no bubble.
+    uint8_t shield_alpha;
+    uint8_t _pad0;
     uint16_t action_id;
     int16_t action_frame;
     uint16_t hitlag;
