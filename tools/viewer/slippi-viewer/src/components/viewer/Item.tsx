@@ -43,6 +43,7 @@ const genericProjectiles: Record<string, [number, string]> = {
   "Ice(Iceclimbers)": [2, "#9fdcff"],
   "Mewtwo's Shadowball": [3, "#7040c0"],
   "PK Fire": [2, "#ff8030"],
+  "PK Fire Pillar": [5.5, "#ff8030"],
   "PK Flash": [3, "#40e070"],
   "PK Flash (explosion)": [8, "#40e070"],
   "Pikachu's thunder (B)": [2, "#ffe040"],
@@ -65,7 +66,16 @@ const genericProjectiles: Record<string, [number, string]> = {
 // is either (the held Shadow Ball's item position is frozen at the spawn
 // point for the whole charge while the ball orbits Mewtwo's hands), so
 // these draw nothing until their capsule is live.
-const capsuleAnchored = new Set(["Mewtwo's Shadowball", "Kirby's Cutter beam"]);
+const capsuleAnchored = new Set([
+  "Mewtwo's Shadowball",
+  "Kirby's Cutter beam",
+  "PK Fire Pillar",
+]);
+
+// Items whose body is as large as their capsule. PK Fire's pillar burns
+// above its ground-riding origin and doubles its capsule a few frames in,
+// so it takes both its place and its size from the capsule.
+const capsuleSized = new Set(["PK Fire Pillar"]);
 
 function GenericProjectile(props: { item: ItemUpdate; name: string }) {
   const style = createMemo(() => genericProjectiles[props.name]);
@@ -73,12 +83,17 @@ function GenericProjectile(props: { item: ItemUpdate; name: string }) {
   const onCapsule = createMemo(
     () => anchored() && (props.item.hitboxRadius ?? 0) > 0
   );
+  const radius = createMemo(() =>
+    onCapsule() && capsuleSized.has(props.name)
+      ? props.item.hitboxRadius
+      : style()[0]
+  );
   return (
     <Show when={!anchored() || onCapsule()}>
       <circle
         cx={onCapsule() ? props.item.hitboxX : props.item.xPosition}
         cy={onCapsule() ? props.item.hitboxY : props.item.yPosition}
-        r={style()[0]}
+        r={radius()}
         fill={style()[1]}
         fill-opacity={0.7}
         stroke="black"

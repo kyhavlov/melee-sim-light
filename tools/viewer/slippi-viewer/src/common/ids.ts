@@ -686,7 +686,7 @@ export const itemNamesById = [
   "Arrow", // 0x40
   "Fire Arrow", // 0x41
   "PK Fire", // 0x42
-  "PK Flash", // 0x43
+  "PK Fire Pillar", // 0x43
   "PK Flash", // 0x44
   "PK Thunder (Primary)", // 0x45
   "PK Thunder", // 0x46
