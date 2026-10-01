@@ -20,15 +20,19 @@ _RESULTS = {
 }
 
 
+# tools/build/build_windows.sh builds a DLL.
+_LIBRARY_NAME = "libmelee_core.dll" if os.name == "nt" else "libmelee_core.so"
+
+
 def _library_path() -> Path:
     override = os.environ.get("MSL_CORE_LIBRARY")
     if override:
         return Path(override).expanduser().resolve()
-    bundled = Path(__file__).with_name("libmelee_core.so")
+    bundled = Path(__file__).with_name(_LIBRARY_NAME)
     if bundled.is_file():
         return bundled
     checkout = Path(__file__).resolve().parents[1]
-    built = checkout / "build/melee_core/python/libmelee_core.so"
+    built = checkout / "build/melee_core/python" / _LIBRARY_NAME
     if built.is_file():
         return built
     raise FileNotFoundError(
