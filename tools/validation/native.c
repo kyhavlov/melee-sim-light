@@ -1638,6 +1638,34 @@ static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemField
   return (msl_core_item_gameplay_misc_mask(item->type, item->state) & (1U << misc_index)) != 0;
 }
 
+// Sheik's chain first writes x18 (Slippi's misc3 sample) in it_802BC080, on
+// the frame after it enters state 3. The core's projection leaves the byte
+// out in states 0-2; on the first recorded frame of state 3 it is still what
+// the pool slot held, so it is left out there too.
+// refs/melee/src/melee/it/items/itseakchain.c::it_802BC080
+static int sheik_chain_x18_unwritten(const ReplayView* replay, const FrameRows* rows,
+                                     int64_t logical_pos, const MslCoreItem* item,
+                                     const ItemFieldSpec* spec) {
+  MslCoreCompare previous;
+  int slot;
+  if (spec->offset != offsetof(MslCoreItem, misc3) ||
+      item->type != MSL_CORE_ITEM_KIND_SHEIK_CHAIN || item->state != 3) {
+    return 0;
+  }
+  if (logical_pos == 0) {
+    return 1;
+  }
+  build_expected(replay, rows, logical_pos - 1, &previous);
+  for (slot = 0; slot < MSL_CORE_MAX_ITEMS; ++slot) {
+    const MslCoreItem* before = &previous.items[slot];
+    if (before->type == MSL_CORE_ITEM_KIND_SHEIK_CHAIN &&
+        before->spawn_id == item->spawn_id) {
+      return before->state < 3;
+    }
+  }
+  return 1;
+}
+
 static void fingerprint_actual_output(ValidationResult* result, const MslCoreCompare* actual) {
   MslCoreCompare canonical = *actual;
   size_t item_field;
@@ -1771,7 +1799,9 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
         if ((!replay->item.instance_id_present &&
              spec->offset == offsetof(MslCoreItem, instance_id)) ||
             !item_field_is_gameplay_state(&expected.items[slot], spec) ||
-            !item_field_is_gameplay_state(&actual->items[slot], spec)) {
+            !item_field_is_gameplay_state(&actual->items[slot], spec) ||
+            sheik_chain_x18_unwritten(replay, rows, logical_pos, &expected.items[slot],
+                                      spec)) {
           // A sampled misc byte is a meaningful comparison only when the
           // article on each side owns the sampled offset. Inside a
           // classified divergence the hosted slot can hold a different
