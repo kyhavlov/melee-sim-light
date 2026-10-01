@@ -47,6 +47,20 @@
 
 #include <math.h>
 #include <math_ppc.h>
+
+// GALE01 0x800A65DC-0x800A6624 (ftCo_800A648C): MWCC squares dy (fmuls),
+// fmadds dx*dx onto it, and takes math_ppc.h's inline sqrtf of the sum
+// (frsqrte and three double-precision Newton steps). The hosted libc sqrtf
+// and an unfused sum differ from that in the last bit now and then, and the
+// CPU's item choices compare these distances.
+static inline float msl_ai_distance(float dx, float dy)
+{
+#ifdef MSL_CORE_HOSTED
+    return msl_gekko_sqrtf(__fmadds(dx, dx, dy * dy));
+#else
+    return sqrtf(dx * dx + dy * dy);
+#endif
+}
 #include <dolphin/mtx.h>
 #include <melee/ft/ftcmdscript.h>
 #include <MetroTRK/intrinsics.h>
@@ -2858,7 +2872,7 @@ static inline float itemDist(Fighter* fp, Item* ip)
     }
     dx = fp->cur_pos.x - ip->pos.x;
     dy = fp->cur_pos.y - ip->pos.y;
-    return sqrtf(dx * dx + dy * dy);
+    return msl_ai_distance(dx, dy);
 }
 
 /// Decide which common item to target
@@ -2932,7 +2946,7 @@ static inline f32 ftCo_800A648C_inline0(Fighter* fp, Item* ip)
     }
     dx = fp->cur_pos.x - ip->pos.x;
     dy = fp->cur_pos.y - ip->pos.y;
-    return sqrtf(dx * dx + dy * dy);
+    return msl_ai_distance(dx, dy);
 }
 
 Item* ftCo_800A61D8(Fighter* fp)
