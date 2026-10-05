@@ -73,6 +73,8 @@ enum {
   CHAR_PEACH = 9,
   CHAR_YOUNG_LINK = 20,
   CHAR_PIKACHU = 12,
+  CHAR_FOX = 1,
+  CHAR_FALCO = 22,
   // Thunder cadence for Pikachu ports. The article count per fighter is fixed,
   // so any cadence that keeps four ports overlapping reaches the same peak.
   THUNDER_PERIOD = 30,
@@ -110,6 +112,19 @@ enum {
   TURNIP_PERIOD = 45,
   TURNIP_HOLD = 3,
   TURNIP_TOSS = 30,
+  // Fox and Falco: a laser is item-pool live from spawn until its lifetime
+  // timer (Fox 31 frames, Falco 99) or a blast zone ends it, so the live
+  // count is fire rate times flight time. Fox's worst rate is the grounded
+  // blaster loop (held B); Falco's is the short-hop laser, whose period must
+  // clear the whole hop or every other B press lands in jumpsquat and
+  // whiffs. The one-time turn tilt stays below the dash threshold so the
+  // stream faces the near blast zone and never stuns the other ports out of
+  // their own item production.
+  LASER_PERIOD = 36,
+  LASER_JUMP_HOLD = 2,
+  LASER_FIRE = 8,
+  LASER_FIRE_HOLD = 2,
+  LASER_TURN_TILT = 30,
   // Size classes the mem-piece sampler can track; nb_memory_list is 32 in
   // every reached configuration, so this only needs to stay comfortably
   // above it.
@@ -238,6 +253,24 @@ static const Scenario scenarios[] = {
     // after four other specials have warmed the lists; here it comes first.
     {"four-ics-belay-cold-fd", 32, 4, {10, 10, 10, 10}, GRAPPLE_GROUND,
      NESS_FLASH, ICS_CYCLE, TETHER_COLD, 0, 0, 0, 0, 0, 0, 0, 1},
+    // The fourth pairing reported from RL: a Falco jumped and pressed B with
+    // the shared item pool already full, and the blaster-gun spawn aborted in
+    // HSD_ObjAllocAddFree (it_802AE8A8 via ftFx_SpecialAirN_Enter). The gun
+    // is an item and so is every laser, and lasers fired at the far blast
+    // zone outlive the fire interval, so a port that simply holds B stacks
+    // them. Final Destination is the widest supported stage and therefore
+    // the longest laser flight.
+    {"four-falco-laser-fd", 32, 4, {22, 22, 22, 22}, GRAPPLE_GROUND,
+     NESS_FLASH, ICS_CYCLE, TETHER_NONE, 450, 0, 0, 0, 10, 0, 0},
+    // Fox's blaster fires on a faster loop than Falco's; the clone pair is
+    // measured separately rather than assumed equal.
+    {"four-fox-laser-fd", 32, 4, {1, 1, 1, 1}, GRAPPLE_GROUND, NESS_FLASH,
+     ICS_CYCLE, TETHER_NONE, 450, 0, 0, 0, 11, 0, 0},
+    // The lineup that aborted in RL: Falco's laser stream beside Peach's
+    // turnip pulls, both feeding the one shared item pool. The bar proves
+    // gun, laser, and vegetable live at once.
+    {"falco-peach-laser-fd", 32, 2, {22, 9, 0, 0}, GRAPPLE_GROUND, NESS_FLASH,
+     ICS_CYCLE, TETHER_NONE, 450, 0, 0, 0, 3, 0, 0},
 };
 
 static void config_init(MslCoreMatchConfig* config, const Scenario* scenario) {
@@ -564,6 +597,50 @@ static int run_scenario(MslCoreMatch* match, const MslCoreGameData* game_data,
           if ((frame + player) % THUNDER_PERIOD < THUNDER_HOLD) {
             input.p[player].buttons = PAD_BUTTON_B;
             input.p[player].main_y = -STICK_MAX;
+          }
+        } else if (scenario->char_ids[player] == CHAR_FOX) {
+          // Tilt-turn away from the centre once, then mash B: each press
+          // edge fires the grounded blaster as fast as the loop allows,
+          // Fox's fastest fire rate, and his short laser lifetime makes the
+          // rate the whole figure.
+          int phase = frame - CHARGE_START_FRAME;
+          float pos_x = observation.slots[player].pos_x;
+          if (phase < 3) {
+            input.p[player].main_x =
+                (int8_t)(pos_x > 0.0F ? LASER_TURN_TILT : -LASER_TURN_TILT);
+          } else if (phase >= 6 && phase % 4 < 2) {
+            input.p[player].buttons = PAD_BUTTON_B;
+          }
+        } else if (scenario->char_ids[player] == CHAR_FALCO) {
+          // Tilt-turn away from the centre once, then short-hop laser.
+          int phase = frame - CHARGE_START_FRAME;
+          int cycle = phase % LASER_PERIOD;
+          float pos_x = observation.slots[player].pos_x;
+          if (phase < 3) {
+            input.p[player].main_x =
+                (int8_t)(pos_x > 0.0F ? LASER_TURN_TILT : -LASER_TURN_TILT);
+          } else if (phase >= 30) {
+            if (cycle < LASER_JUMP_HOLD) {
+              input.p[player].buttons = PAD_BUTTON_X;
+            } else if (cycle >= LASER_FIRE &&
+                       cycle < LASER_FIRE + LASER_FIRE_HOLD) {
+              input.p[player].buttons = PAD_BUTTON_B;
+            }
+          }
+        } else if (scenario->char_ids[player] == CHAR_PEACH) {
+          // Crouch first, then add B for the vegetable pull -- a same-frame
+          // stick-and-B edge reads as something else and only crouches --
+          // and toss with A, since a held Z shields and wedges the port in
+          // guard. The vegetables stack beside the laser stream in the
+          // shared item pool.
+          int phase = (frame + player * 11) % TURNIP_PERIOD;
+          if (phase < 2) {
+            input.p[player].main_y = -STICK_MAX;
+          } else if (phase < 2 + TURNIP_HOLD) {
+            input.p[player].buttons = PAD_BUTTON_B;
+            input.p[player].main_y = -STICK_MAX;
+          } else if (phase >= TURNIP_TOSS && phase < TURNIP_TOSS + 3) {
+            input.p[player].buttons = PAD_BUTTON_A;
           }
         } else if (scenario->char_ids[player] == CHAR_LINK ||
                    scenario->char_ids[player] == CHAR_YOUNG_LINK) {

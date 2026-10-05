@@ -13,6 +13,10 @@
 // Character ids are the public CSS ids from scalar.c. Reserves are validated
 // by comparing the printed peaks against the pools' capacities and the
 // class=192 growth against the JObj floor in msl_core_match_reset.
+// MSL_STAGE=<public id> overrides the Dream Land default. MSL_PRINT_SEAL=1
+// prints the sealed Match arena's used/allocations for the config and exits;
+// an RL abort report carries the same two figures, so sweeping stages and
+// lineups here identifies the crashed configuration exactly.
 
 #include "runtime/scalar.h"
 #include "runtime/observation.h"
@@ -38,10 +42,10 @@ static uint32_t lcg(void) {
 }
 
 static uint32_t pool_peaks[8];
-static const char* pool_names[8] = {"fobj", "aobj", "gobj", "item_link", "robj", "gobjproc", "mtx"};
+static const char* pool_names[8] = {"fobj", "aobj", "gobj", "item_link", "robj", "gobjproc", "mtx", "item"};
 
 static void track_pools(void) {
-  uint32_t used[7];
+  uint32_t used[8];
   int i;
   used[0] = HSD_ObjAllocResolve(HSD_FObjGetAllocData())->used;
   used[1] = HSD_ObjAllocResolve(HSD_AObjGetAllocData())->used;
@@ -50,7 +54,8 @@ static void track_pools(void) {
   used[4] = HSD_ObjAllocResolve(HSD_RObjGetAllocData())->used;
   used[5] = HSD_ObjAllocResolve(&gobjproc_alloc_data)->used;
   used[6] = HSD_ObjAllocResolve(HSD_MtxGetAllocData())->used;
-  for (i = 0; i < 7; ++i) {
+  used[7] = HSD_ObjAllocResolve(msl_item_runtime_pool())->used;
+  for (i = 0; i < 8; ++i) {
     if (used[i] > pool_peaks[i]) {
       pool_peaks[i] = used[i];
     }
@@ -120,6 +125,9 @@ int main(int argc, char** argv) {
   }
   memset(&config, 0, sizeof(config));
   config.stage_id = 28;  // Dream Land
+  if (getenv("MSL_STAGE") != NULL) {
+    config.stage_id = (uint8_t) atoi(getenv("MSL_STAGE"));
+  }
   config.frame_id = -123;
   config.frame_pre_random_seed = 1;
   config.initial_random_seed = 1;
@@ -133,6 +141,15 @@ int main(int argc, char** argv) {
   if (msl_core_match_reset(match, game_data, &config, &previous) != 0) {
     fprintf(stderr, "reset failed\n");
     return 1;
+  }
+  if (getenv("MSL_PRINT_SEAL") != NULL) {
+    // Print the sealed Match arena fingerprint (the figures an RL abort
+    // report carries) for this config, then exit: used to match a crash
+    // log against a (stage, lineup) sweep.
+    printf("seal stage=%d chars=%d,%d,%d,%d used=%zu allocations=%zu\n",
+           (int) config.stage_id, arg_char0, arg_char1, arg_char2, arg_char3,
+           match->memory.used, match->memory.allocation_count);
+    return 0;
   }
   report(match, -1);
   track(match, 1);
@@ -166,7 +183,7 @@ int main(int argc, char** argv) {
   report(match, frame);
   {
     int i;
-    HSD_ObjAllocData* pools[7];
+    HSD_ObjAllocData* pools[8];
     pools[0] = HSD_ObjAllocResolve(HSD_FObjGetAllocData());
     pools[1] = HSD_ObjAllocResolve(HSD_AObjGetAllocData());
     pools[2] = HSD_ObjAllocResolve(&gobj_alloc_data);
@@ -174,7 +191,8 @@ int main(int argc, char** argv) {
     pools[4] = HSD_ObjAllocResolve(HSD_RObjGetAllocData());
     pools[5] = HSD_ObjAllocResolve(&gobjproc_alloc_data);
     pools[6] = HSD_ObjAllocResolve(HSD_MtxGetAllocData());
-    for (i = 0; i < 7; ++i) {
+    pools[7] = HSD_ObjAllocResolve(msl_item_runtime_pool());
+    for (i = 0; i < 8; ++i) {
       printf("pool=%s peak=%u capacity=%u\n", pool_names[i], pool_peaks[i],
              pools[i]->used + pools[i]->free);
     }
