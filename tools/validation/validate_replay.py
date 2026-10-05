@@ -8,6 +8,7 @@ import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -141,39 +142,56 @@ class _NativeRunnerPool:
             self._runners.append(replacement)
         self._available.put(replacement)
 
-    def close(self) -> None:
-        errors: list[str] = []
+    def close(self) -> list[str]:
+        """Shut the pool down and return shutdown diagnostics.
+
+        Case failures already surface through their outcomes, so shutdown
+        problems come back as warning strings for the caller to print --
+        never an exception: close() runs in the callers' cleanup paths,
+        where raising replaces the result it is cleaning up after (a
+        fast-failing run used to hide its real per-case error behind
+        "native validation worker exited -9" from workers that were still
+        loading game data when the old two-second grace killed them).
+        """
+        warnings: list[str] = []
         for runner in self._runners:
             if runner.process.stdin is not None and not runner.process.stdin.closed:
                 runner.process.stdin.close()
+            # EOF alone cannot stop a worker blocked writing job output;
+            # dropping the read end turns its next write into EPIPE.
+            if runner.process.stdout is not None and not runner.process.stdout.closed:
+                runner.process.stdout.close()
         for runner in self._runners:
+            killed = False
             try:
-                returncode = runner.process.wait(timeout=2.0)
+                # A freshly spawned worker spends a few seconds loading game
+                # data before it can see the EOF; the grace must cover that.
+                returncode = runner.process.wait(timeout=10.0)
             except subprocess.TimeoutExpired:
                 runner.process.kill()
                 returncode = runner.process.wait()
+                killed = True
             stderr = b""
             if runner.process.stderr is not None:
                 stderr = runner.process.stderr.read()
                 runner.process.stderr.close()
-            if runner.process.stdout is not None:
-                runner.process.stdout.close()
-            if returncode != 0:
+            if killed:
+                warnings.append(
+                    "native validation worker did not exit within the "
+                    "shutdown grace period and was killed"
+                )
+            elif returncode != 0:
                 detail = stderr.decode(errors="replace").strip()
-                errors.append(detail or f"native validation worker exited {returncode}")
+                warnings.append(detail or f"native validation worker exited {returncode}")
         self._runners.clear()
-        if errors:
-            raise RuntimeError("; ".join(errors))
+        return warnings
 
     def __enter__(self) -> _NativeRunnerPool:
         return self
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
-        try:
-            self.close()
-        except RuntimeError:
-            if exc is None:
-                raise
+        for warning in self.close():
+            print(f"warning: {warning}", file=sys.stderr)
 
 
 @lru_cache(maxsize=1)
@@ -582,7 +600,8 @@ def run_cases(
                 outcomes = [future.result() for future in futures]
     finally:
         if pool is not None:
-            pool.close()
+            for warning in pool.close():
+                print(f"warning: {warning}", file=sys.stderr)
     return outcomes, time.perf_counter() - started
 
 
