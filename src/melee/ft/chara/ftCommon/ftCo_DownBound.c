@@ -122,8 +122,13 @@ void ftCo_800978D4(Fighter_GObj* gobj)
     float param =
         atan2f(-fp->coll_data.floor.normal.x, fp->coll_data.floor.normal.y);
     PAD_STACK(12);
-    efAsync_Spawn(gobj, (u8*) gobj->user_data + 0x60c, 4, 0x406,
-                  fp->parts[FtPart_TopN].joint, &param);
+    // The retail byte offset 0x60C does not address the hosted Fighter's
+    // x60C queue head (the C layout places the field elsewhere), so the
+    // raw-offset form chained every bounce-dust node at a dead address no
+    // flush ever drained -- one headless effect-queue node leaked per
+    // knockdown bounce until the 256-node pool ran dry mid-match.
+    efAsync_Spawn(gobj, &fp->x60C, 4, 0x406, fp->parts[FtPart_TopN].joint,
+                  &param);
     ftCo_800976A4(gobj);
 }
 

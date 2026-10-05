@@ -20,6 +20,7 @@
 
 #include "runtime/scalar.h"
 #include "runtime/observation.h"
+#include "runtime/effects.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,9 +44,14 @@ static uint32_t lcg(void) {
 
 static uint32_t pool_peaks[8];
 static const char* pool_names[8] = {"fobj", "aobj", "gobj", "item_link", "robj", "gobjproc", "mtx", "item"};
+// Effect-queue nodes still checked out at the frame boundary. The queue is
+// flushed or cleared within the frame, so any nonzero residual is a leak;
+// the running peak separates a leak from a genuine within-frame burst.
+static uint32_t effect_residual_peak;
 
 static void track_pools(void) {
   uint32_t used[8];
+  uint32_t effect_used;
   int i;
   used[0] = HSD_ObjAllocResolve(HSD_FObjGetAllocData())->used;
   used[1] = HSD_ObjAllocResolve(HSD_AObjGetAllocData())->used;
@@ -59,6 +65,10 @@ static void track_pools(void) {
     if (used[i] > pool_peaks[i]) {
       pool_peaks[i] = used[i];
     }
+  }
+  effect_used = msl_effect_queue_used();
+  if (effect_used > effect_residual_peak) {
+    effect_residual_peak = effect_used;
   }
 }
 
@@ -103,8 +113,8 @@ static void report(const MslCoreMatch* match, int frame) {
       free_larger += e->nb_free;
     }
   }
-  printf("frame=%d free192=%u live192=%u free_larger=%u\n", frame, free_192,
-         live_192, free_larger);
+  printf("frame=%d free192=%u live192=%u free_larger=%u effect_residual=%u\n",
+         frame, free_192, live_192, free_larger, msl_effect_queue_used());
 }
 
 int main(int argc, char** argv) {
@@ -114,6 +124,11 @@ int main(int argc, char** argv) {
   MslCoreInput previous = {0};
   MslCoreInput input;
   int frame;
+  // MSL_REPORT_EVERY narrows the report cadence when chasing an abort that
+  // lands between the default 10000-frame reports.
+  int report_every = getenv("MSL_REPORT_EVERY") != NULL
+                         ? atoi(getenv("MSL_REPORT_EVERY"))
+                         : 10000;
 
   if (argc >= 3) lcg_state = (uint32_t) atoi(argv[2]);
   if (argc >= 5) { arg_char0 = atoi(argv[3]); arg_char1 = atoi(argv[4]); }
@@ -176,8 +191,11 @@ int main(int argc, char** argv) {
     }
     track(match, 0);
     track_pools();
-    if (frame % 10000 == 0) {
+    if (frame % report_every == 0) {
       report(match, frame);
+      if (getenv("MSL_EFFECT_DUMP") != NULL) {
+        msl_effect_queue_dump();
+      }
     }
   }
   report(match, frame);
@@ -196,6 +214,8 @@ int main(int argc, char** argv) {
       printf("pool=%s peak=%u capacity=%u\n", pool_names[i], pool_peaks[i],
              pools[i]->used + pools[i]->free);
     }
+    printf("pool=effect_queue residual_peak=%u capacity=%u\n",
+           effect_residual_peak, (uint32_t) MSL_CORE_EFFECT_QUEUE_CAPACITY);
     for (i = 0; i < 64; ++i) {
       if (peak_growth[i] != 0) {
         printf("class=%u seal_live=%u peak_growth=%u\n", class_sizes[i],

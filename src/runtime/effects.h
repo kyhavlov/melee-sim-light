@@ -63,5 +63,12 @@ void msl_effect_match_init(const MslCoreEffectData* data,
                            MslCoreEffectState* state);
 void msl_effect_projection_bind(const MslCoreEffectData* data,
                                 MslCoreEffectState* state);
+// Nodes still checked out of the bound match's queue free list. Sampled at
+// a frame boundary this counts leaked nodes; the census tests use it to
+// prove flush/clear coverage.
+u32 msl_effect_queue_used(void);
+// Print every checked-out node's spawn kind and generator id; a node still
+// checked out at a frame boundary identifies its leaking spawner.
+void msl_effect_queue_dump(void);
 
 #endif

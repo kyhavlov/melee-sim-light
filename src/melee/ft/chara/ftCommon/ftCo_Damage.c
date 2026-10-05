@@ -250,8 +250,12 @@ static void inlineA0(Fighter_GObj* gobj, float f1, float f2)
 {
     {
         Fighter* fp = gobj->user_data;
-        efAsync_Spawn(gobj, fp->x60C, 4U, 0x406U, fp->parts[FtPart_TopN].joint,
-                      f1, fp, f2);
+        // The queue argument is the head slot's address; passing the head
+        // VALUE grafted the node onto an already-dequeued chain, leaking
+        // one queue node per smoke puff spawned from damage flinch
+        // (gfx 0x406) until the headless queue's 256 nodes ran dry.
+        efAsync_Spawn(gobj, &fp->x60C, 4U, 0x406U,
+                      fp->parts[FtPart_TopN].joint, f1, fp, f2);
     }
 }
 

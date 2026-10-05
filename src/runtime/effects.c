@@ -278,6 +278,40 @@ static MslCoreEffectQueueNode* msl_effect_alloc(void)
     return node;
 }
 
+u32 msl_effect_queue_used(void)
+{
+    u32 free_count = 0;
+    const MslCoreEffectQueueNode* node;
+    if (msl_bound_effect_state == NULL) {
+        return 0;
+    }
+    for (node = msl_effect_free; node != NULL; node = node->next) {
+        free_count += 1;
+    }
+    return (u32) MSL_CORE_EFFECT_QUEUE_CAPACITY - free_count;
+}
+
+void msl_effect_queue_dump(void)
+{
+    u8 is_free[MSL_CORE_EFFECT_QUEUE_CAPACITY] = {0};
+    const MslCoreEffectQueueNode* node;
+    int i;
+    if (msl_bound_effect_state == NULL) {
+        return;
+    }
+    for (node = msl_effect_free; node != NULL; node = node->next) {
+        is_free[node - msl_effect_nodes] = 1;
+    }
+    for (i = 0; i < MSL_CORE_EFFECT_QUEUE_CAPACITY; ++i) {
+        if (!is_free[i]) {
+            fprintf(stderr,
+                    "effect node %d checked out: spawn_kind=%u gfx_id=0x%x\n",
+                    i, msl_effect_nodes[i].spawn_kind,
+                    (unsigned) msl_effect_nodes[i].gfx_id);
+        }
+    }
+}
+
 static void msl_effect_release(MslCoreEffectQueueNode* node)
 {
     node->next = msl_effect_free;
