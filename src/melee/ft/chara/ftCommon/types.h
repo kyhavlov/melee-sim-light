@@ -433,7 +433,10 @@ union ftCommon_MotionVars {
     struct {
         /* fp+2340 */ int x40;
         /* fp+2344 */ int x44;
-        /* fp+2348 */ u8 pad_x48[0x4C - 0x48];
+        // Slippi Online's InitHitVelocity.asm keeps the frozen camera-KO
+        // fall velocity y in this previously padded slot (z reuses x4C once
+        // the case-1 lerp that reads it has finished).
+        /* fp+2348 */ float x48;
         /* fp+234C */ float x4C;
         /* fp+2350 */ Vec3 x50;
         /* fp+235C */ Vec3 x5C;

@@ -822,7 +822,11 @@ void ftYs_SpecialAirSEnd_IASA(Fighter_GObj* gobj) {}
 
 void ftYs_SpecialAirSStart_1_IASA(Fighter_GObj* gobj)
 {
-    M2C_FIELD(gobj->user_data, s32*, 0x2370) = 0;
+    // Retail fp+2370 is mv.ys.specials.x30 (the slot the SpecialAirSLoop
+    // IASA below also clears). The raw-offset form missed it in the hosted
+    // Fighter layout and instead zeroed four bitfield bytes of fp->x1A88
+    // grab state every airborne egg-lay startup frame.
+    GET_FIGHTER(gobj)->mv.ys.specials.x30 = 0;
 }
 
 void ftYs_SpecialAirSLoop_2_IASA(Fighter_GObj* gobj)
