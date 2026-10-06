@@ -1,6 +1,7 @@
 #include "runtime/observation.h"
 
 #include "ft/chara/ftCommon/forward.h"
+#include "ft/chara/ftPeach/forward.h"
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
@@ -179,6 +180,226 @@ static void write_fighter(const MslCoreMatch* match, const Fighter* fp,
     out[offsetof(MslCoreObservationPlayer, invulnerable)] = hurtbox != 0;
 }
 
+// The charge a fighter keeps between moves, as the game counts it. These are
+// the fighters ftData_UnkMotionStates4 gives a full-charge overlay, read from
+// the variable each of those callbacks tests; Kirby's is the one his copied
+// ability owns.
+// refs/melee/src/melee/ft/ftdata.c::ftData_UnkMotionStates4
+static uint8_t stored_charge(const Fighter* fp)
+{
+    int charge = 0;
+
+    switch (fp->kind) {
+    case FTKIND_DONKEY:
+        charge = fp->fv.dk.x222C;
+        break;
+    case FTKIND_SAMUS:
+        charge = fp->fv.ss.x2230;
+        break;
+    case FTKIND_MEWTWO:
+        charge = fp->fv.mt.x2234_shadowBallCharge;
+        break;
+    case FTKIND_SEAK:
+        charge = fp->fv.sk.x0;
+        break;
+    case FTKIND_GAMEWATCH:
+        charge = fp->fv.gw.x2238_panicCharge;
+        break;
+    case FTKIND_KIRBY:
+        // refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_Init_UnkMotionStates4
+        switch (fp->fv.kb.hat.kind) {
+        case FTKIND_DONKEY:
+            charge = fp->fv.kb.xBC;
+            break;
+        case FTKIND_SAMUS:
+            charge = fp->fv.kb.xA8;
+            break;
+        case FTKIND_MEWTWO:
+            charge = fp->fv.kb.x9C;
+            break;
+        case FTKIND_SEAK:
+            charge = fp->fv.kb.xB4;
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+    return charge < 0 ? 0 : charge > UINT8_MAX ? UINT8_MAX : (uint8_t) charge;
+}
+
+// Stored amounts that are not a count, as the game holds them.
+// Oil Panic: gauge[0] is the damage the caught shots would have dealt, summed
+// by ftGw_SpecialLw_AbsorbThink_DecideAction. The spill deals a multiple of
+// it, and ftGw_Init_OnDeath clears it while leaving the count.
+// refs/melee/src/melee/ft/chara/ftGameWatch/ftGw_SpecialLw.c::ftGw_SpecialLwShoot_ReleaseOil
+// Fire Breath: gauge[0] is the fuel and gauge[1] the flame size. Each breath
+// frame takes 1 from both down to a floor, and every frame outside the move
+// gives a little back up to the full value (ftKp_SpecialLw_80134D78). Each
+// flame is spawned with both: its speed is the fuel over the full fuel and
+// its scale the size over the full size (itKoopaFlame_Spawn). Kirby's copy
+// keeps its own pair while he wears Bowser's hat.
+// refs/melee/src/melee/ft/chara/ftKoopa/ftKp_SpecialN.c::ftKp_SpecialN_IASA
+// refs/melee/src/melee/ft/chara/ftKirby/ftkirbyspecialkoopa.c::ftKb_SpecialNKp_800FA7D4
+// Peach's float: gauge[0] is the frames of float left. The game loads it when
+// a float starts, counts it down in the float and in the attacks done out of
+// it, and reads it nowhere else, so a float that ends early leaves the rest
+// behind; outside those states it is published as 0.
+// refs/melee/src/melee/ft/chara/ftPeach/ftPe_Float.c::ftPe_Float_Anim
+// refs/melee/src/melee/ft/chara/ftPeach/ftPe_FloatAttack.c::ftPe_FloatAttackAir_Anim
+static void stored_gauge(const Fighter* fp, float gauge[2])
+{
+    gauge[0] = 0.0F;
+    gauge[1] = 0.0F;
+    switch (fp->kind) {
+    case FTKIND_GAMEWATCH:
+        gauge[0] = (float) fp->fv.gw.x223C_panicDamage;
+        break;
+    case FTKIND_KOOPA:
+        gauge[0] = fp->fv.kp.x222C;
+        gauge[1] = fp->fv.kp.x2230;
+        break;
+    case FTKIND_PEACH:
+        if (fp->motion_id == ftPe_MS_Float ||
+            (fp->motion_id >= ftPe_MS_FloatAttackAirN &&
+             fp->motion_id <= ftPe_MS_FloatAttackAirLw))
+        {
+            gauge[0] = fp->fv.pe.x4;
+        }
+        break;
+    case FTKIND_KIRBY:
+        if (fp->fv.kb.hat.kind == FTKIND_KOOPA) {
+            gauge[0] = fp->fv.kb.x84;
+            gauge[1] = fp->fv.kb.x88;
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+// Kirby's copied ability as the fighter kind whose neutral special he has,
+// the id space of char_id. The game keeps FTKIND_KIRBY for no hat
+// (ftKb_SpecialN_800F5D04); that and every other fighter read
+// MSL_COPIED_NONE.
+// refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ftKb_SpecialN_800F1BAC
+static uint8_t copied_char(const Fighter* fp)
+{
+    if (fp->kind != FTKIND_KIRBY || fp->fv.kb.hat.kind == FTKIND_KIRBY) {
+        return MSL_COPIED_NONE;
+    }
+    return (uint8_t) fp->fv.kb.hat.kind;
+}
+
+// What the fighter has used and the game has not yet given back. Each lift
+// bit is the variable the special tests before it rises, named by the
+// special's direction; Kirby's neutral one belongs to the copied move. The
+// game clears most of them in ftCo_Landing_Enter and in the fighter's
+// OnDeath; Luigi's only when a cyclone touches the ground.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter
+// refs/melee/src/melee/ft/chara/ftLuigi/ftLg_SpecialLw.c::ftLg_SpecialAirLw_Phys
+// Peach's float is spent while has_float is clear: the float clears it and
+// any action change on the ground sets it, where the tether flag is cleared.
+// refs/melee/src/melee/ft/chara/ftPeach/ftPe_Float.c::ftPe_8011BB6C
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_AirCatch.c::ftCo_800C3B10
+// refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+static uint8_t spent_flags(const Fighter* fp, const Fighter* follower)
+{
+    uint8_t spent = fp->used_tether ? MSL_SPENT_TETHER : 0;
+
+    switch (fp->kind) {
+    case FTKIND_MARIO:
+    case FTKIND_DRMARIO:
+        spent |= fp->fv.mr.x2238_isCapeBoost ? MSL_SPENT_SIDE_LIFT : 0;
+        spent |= fp->fv.mr.x2234_tornadoCharge ? MSL_SPENT_DOWN_LIFT : 0;
+        break;
+    case FTKIND_LUIGI:
+        spent |= fp->fv.lg.x222C_cycloneCharge ? MSL_SPENT_DOWN_LIFT : 0;
+        break;
+    case FTKIND_MARS:
+    case FTKIND_EMBLEM:
+        spent |= fp->fv.ms.x222C ? MSL_SPENT_SIDE_LIFT : 0;
+        break;
+    case FTKIND_MEWTWO:
+        spent |= fp->fv.mt.x223C_isConfusionBoost ? MSL_SPENT_SIDE_LIFT : 0;
+        break;
+    case FTKIND_PEACH:
+        spent |= fp->fv.pe.specialairn_used ? MSL_SPENT_NEUTRAL_LIFT : 0;
+        spent |= fp->fv.pe.has_float ? 0 : MSL_SPENT_FLOAT;
+        break;
+    case FTKIND_POPO:
+    case FTKIND_NANA:
+        spent |= fp->fv.pp.x224C ? MSL_SPENT_NEUTRAL_LIFT : 0;
+        break;
+    case FTKIND_KIRBY:
+        spent |= fp->fv.kb.x64 ? MSL_SPENT_SIDE_LIFT : 0;
+        switch (fp->fv.kb.hat.kind) {
+        case FTKIND_POPO:
+        case FTKIND_NANA:
+            spent |= fp->fv.kb.xC4 ? MSL_SPENT_NEUTRAL_LIFT : 0;
+            break;
+        case FTKIND_PEACH:
+            spent |= fp->fv.kb.xCC ? MSL_SPENT_NEUTRAL_LIFT : 0;
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+    if (follower != NULL && !follower->x221F_b3 && follower->fv.nn.x224C) {
+        spent |= MSL_SPENT_FOLLOWER_NEUTRAL_LIFT;
+    }
+    return spent;
+}
+
+// Mr. Game & Watch's last two Judge numbers, as the game holds them: the roll
+// leaves both out, then moves the newer into the older and stores the new one.
+// refs/melee/src/melee/ft/chara/ftGameWatch/ftGw_SpecialS.c::ftGw_SpecialS_GetRandomInt
+static uint8_t judge_number(const Fighter* fp, int older)
+{
+    if (fp->kind != FTKIND_GAMEWATCH) {
+        return MSL_JUDGE_NONE;
+    }
+    return (uint8_t) (older ? fp->fv.gw.x2230_judgeVar2
+                            : fp->fv.gw.x222C_judgeVar1);
+}
+
+// Writes what the player in slots[slot] keeps between moves. Slippi records
+// none of it, so there is no compare lane: both observation builders read
+// the fighter here. An absent player keeps the empty record.
+static void write_stored(const MslCoreMatch* match, int player, int slot,
+                         MslCoreObservation* output)
+{
+    const Fighter* fp = GET_FIGHTER(match->fighters[player]);
+    const Fighter* follower = match->follower_fighters[player] == NULL
+                                  ? NULL
+                                  : GET_FIGHTER(match->follower_fighters[player]);
+    uint8_t* out = (uint8_t*) &output->stored[slot];
+    float gauge[2];
+
+    if (fp->x221F_b3) {
+        return;
+    }
+    out[offsetof(MslCoreObservationStored, charge)] = stored_charge(fp);
+    out[offsetof(MslCoreObservationStored, copied_char)] = copied_char(fp);
+    out[offsetof(MslCoreObservationStored, spent)] = spent_flags(fp, follower);
+    // The wall jumps since the fighter last stood: each one after the first
+    // rises less.
+    // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Anim
+    out[offsetof(MslCoreObservationStored, wall_jumps)] = fp->x1969_walljumpUsed;
+    out[offsetof(MslCoreObservationStored, judge)] = judge_number(fp, 0);
+    out[offsetof(MslCoreObservationStored, judge) + 1] = judge_number(fp, 1);
+    stored_gauge(fp, gauge);
+    put_f32(out, offsetof(MslCoreObservationStored, gauge), gauge[0]);
+    put_f32(out, offsetof(MslCoreObservationStored, gauge) + sizeof(float),
+            gauge[1]);
+}
+
 // Writes the player into slots[slot] and its follower (Nana) into
 // followers[slot]. The follower follows the compare lanes' life-cycle: she is
 // absent while asleep before Rebirth.
@@ -191,6 +412,7 @@ static void write_slot(const MslCoreMatch* match, int player, uint8_t relation,
     write_fighter(match, GET_FIGHTER(match->fighters[player]),
                   match->output_pos_x[player], match->output_pos_y[player],
                   player, relation, &output->slots[slot]);
+    write_stored(match, player, slot, output);
     if (match->follower_fighters[player] == NULL) {
         return;
     }
@@ -401,6 +623,9 @@ int msl_core_match_write_observation(const MslCoreMatch* match,
     memset(output, 0, sizeof(*output));
     for (player = 0; player < MSL_CORE_MAX_PLAYERS; ++player) {
         output->slots[player].source_player = UINT8_MAX;
+        output->stored[player].copied_char = MSL_COPIED_NONE;
+        output->stored[player].judge[0] = MSL_JUDGE_NONE;
+        output->stored[player].judge[1] = MSL_JUDGE_NONE;
     }
     put_u32(out, offsetof(MslCoreObservation, frame_id),
             (uint32_t) match->frame_id);
@@ -460,6 +685,9 @@ int msl_core_match_write_observation_from_compare(
     memset(output, 0, sizeof(*output));
     for (player = 0; player < MSL_CORE_MAX_PLAYERS; ++player) {
         output->slots[player].source_player = UINT8_MAX;
+        output->stored[player].copied_char = MSL_COPIED_NONE;
+        output->stored[player].judge[0] = MSL_JUDGE_NONE;
+        output->stored[player].judge[1] = MSL_JUDGE_NONE;
     }
     memcpy(out + offsetof(MslCoreObservation, frame_id),
            source + offsetof(MslCoreCompare, frame_id), sizeof(uint32_t));
@@ -475,6 +703,7 @@ int msl_core_match_write_observation_from_compare(
 
     viewpoint_team = source[offsetof(MslCoreCompare, team_id) +
                             viewpoint_player];
+    write_stored(match, viewpoint_player, slot, output);
     write_follower_from_compare(compare, viewpoint_player, 0,
                                 &output->followers[slot]);
     write_player_from_compare(compare, viewpoint_player, 0,
@@ -485,6 +714,7 @@ int msl_core_match_write_observation_from_compare(
                 source[offsetof(MslCoreCompare, team_id) + player] ==
                     viewpoint_team)
             {
+                write_stored(match, player, slot, output);
                 write_follower_from_compare(compare, player, 1,
                                             &output->followers[slot]);
                 write_player_from_compare(compare, player, 1,
@@ -498,6 +728,7 @@ int msl_core_match_write_observation_from_compare(
              source[offsetof(MslCoreCompare, team_id) + player] !=
                  viewpoint_team))
         {
+            write_stored(match, player, slot, output);
             write_follower_from_compare(compare, player, 2,
                                         &output->followers[slot]);
             write_player_from_compare(compare, player, 2,

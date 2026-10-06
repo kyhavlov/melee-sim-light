@@ -212,6 +212,48 @@ typedef struct MslObservationStage {
   uint8_t _pad0[3];
 } MslObservationStage;
 
+enum {
+  // MslObservationStored.copied_char when there is no copied ability.
+  MSL_COPIED_NONE = 255,
+  // MslObservationStored.judge[] for a fighter without Judge.
+  MSL_JUDGE_NONE = 255,
+};
+
+// MslObservationStored.spent: what the fighter has used and does not get back
+// until the game returns it, for most of them on landing. API.md lists which
+// character has which bit and when the game clears it.
+enum {
+  // The lift of the neutral, side or down special is used: the next aerial
+  // use does not rise.
+  MSL_SPENT_NEUTRAL_LIFT = 1 << 0,
+  MSL_SPENT_SIDE_LIFT = 1 << 1,
+  MSL_SPENT_DOWN_LIFT = 1 << 2,
+  MSL_SPENT_FLOAT = 1 << 3,  // Peach's float.
+  MSL_SPENT_TETHER = 1 << 4, // The aerial grapple of Link, Young Link, Samus.
+  // MSL_SPENT_NEUTRAL_LIFT of the follower (Nana), who keeps her own.
+  MSL_SPENT_FOLLOWER_NEUTRAL_LIFT = 1 << 5,
+};
+
+// What a fighter keeps between moves, in the game's own units. Slippi records
+// none of it. API.md lists each character's meaning and range; a character
+// without one, and an absent player, reads 0, MSL_COPIED_NONE and
+// MSL_JUDGE_NONE.
+typedef struct MslObservationStored {
+  uint8_t charge; // A stored move's count: swings, steps, cycles, needles, shots.
+  // Kirby's copied ability: the MSL_CHARACTER_* whose neutral special he has,
+  // in the id space of MslObservationPlayer.char_id. It says whose move
+  // charge and gauge belong to. MSL_COPIED_NONE without one and for others.
+  uint8_t copied_char;
+  uint8_t spent;      // MSL_SPENT_* bits.
+  uint8_t wall_jumps; // Wall jumps made since the fighter last stood.
+  // Mr. Game & Watch's last two Judge numbers, which the next roll leaves
+  // out: [0] the most recent, [1] the one before, each the hammer's number
+  // minus one (0..8). MSL_JUDGE_NONE for everyone else.
+  uint8_t judge[2];
+  uint8_t _pad0[2]; // Spare, zero.
+  float gauge[2];   // Stored amounts that are not a count.
+} MslObservationStored;
+
 typedef struct MslObservation {
   int32_t frame_id;
   uint32_t frame_pre_random_seed;
@@ -227,6 +269,8 @@ typedef struct MslObservation {
   // slots[k], present only while Slippi would record a follower row for her
   // (awake, including her death animation; not while asleep before Rebirth).
   MslObservationPlayer followers[MSL_MAX_PLAYERS];
+  // stored[k] belongs to the player in slots[k].
+  MslObservationStored stored[MSL_MAX_PLAYERS];
 } MslObservation;
 
 typedef struct MslTerminal {
