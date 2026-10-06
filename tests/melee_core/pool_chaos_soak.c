@@ -14,9 +14,7 @@
 // by comparing the printed peaks against the pools' capacities and the
 // class=192 growth against the JObj floor in msl_core_match_reset.
 // MSL_STAGE=<public id> overrides the Dream Land default. MSL_PRINT_SEAL=1
-// prints the sealed Match arena's used/allocations for the config and exits;
-// an RL abort report carries the same two figures, so sweeping stages and
-// lineups here identifies the crashed configuration exactly.
+// prints the sealed arena's used/allocations to compare with an abort report.
 
 #include "runtime/scalar.h"
 #include "runtime/observation.h"
@@ -25,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include <dolphin/pad.h>
 #include <baselib/class.h>
@@ -124,11 +123,17 @@ int main(int argc, char** argv) {
   MslCoreInput previous = {0};
   MslCoreInput input;
   int frame;
-  // MSL_REPORT_EVERY narrows the report cadence when chasing an abort that
-  // lands between the default 10000-frame reports.
-  int report_every = getenv("MSL_REPORT_EVERY") != NULL
-                         ? atoi(getenv("MSL_REPORT_EVERY"))
-                         : 10000;
+  int report_every = 10000;
+  const char* report_interval = getenv("MSL_REPORT_EVERY");
+  if (report_interval != NULL) {
+    char* end;
+    long value = strtol(report_interval, &end, 10);
+    if (end == report_interval || *end != '\0' || value <= 0 || value > INT_MAX) {
+      fprintf(stderr, "MSL_REPORT_EVERY must be a positive integer <= %d\n", INT_MAX);
+      return 2;
+    }
+    report_every = (int)value;
+  }
 
   if (argc >= 3) lcg_state = (uint32_t) atoi(argv[2]);
   if (argc >= 5) { arg_char0 = atoi(argv[3]); arg_char1 = atoi(argv[4]); }
@@ -158,9 +163,6 @@ int main(int argc, char** argv) {
     return 1;
   }
   if (getenv("MSL_PRINT_SEAL") != NULL) {
-    // Print the sealed Match arena fingerprint (the figures an RL abort
-    // report carries) for this config, then exit: used to match a crash
-    // log against a (stage, lineup) sweep.
     printf("seal stage=%d chars=%d,%d,%d,%d used=%zu allocations=%zu\n",
            (int) config.stage_id, arg_char0, arg_char1, arg_char2, arg_char3,
            match->memory.used, match->memory.allocation_count);
@@ -191,11 +193,13 @@ int main(int argc, char** argv) {
     }
     track(match, 0);
     track_pools();
+    if (effect_residual_peak != 0) {
+      fprintf(stderr, "effect queue leaked %u nodes at frame %d\n", effect_residual_peak, frame);
+      msl_effect_queue_dump();
+      return 1;
+    }
     if (frame % report_every == 0) {
       report(match, frame);
-      if (getenv("MSL_EFFECT_DUMP") != NULL) {
-        msl_effect_queue_dump();
-      }
     }
   }
   report(match, frame);

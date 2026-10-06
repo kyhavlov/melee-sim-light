@@ -128,8 +128,6 @@ u32 msl_item_reserve_runtime_pools(bool common_items, u32 stage_item_count,
     return item_count;
 }
 
-// The Item pool is file-static like the source layout; expose it so the
-// pool census tests can track its high water against the sealed reserve.
 HSD_ObjAllocData* msl_item_runtime_pool(void)
 {
     return &item_alloc_data;

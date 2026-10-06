@@ -848,9 +848,6 @@ void ftCo_DeadUpFall_Anim(Fighter_GObj* gobj)
                 // velocity into the DeadUpFall overlay (fp+2348/fp+234C,
                 // unk_deadup.x48/.x4C) and zeros the retail physics vector
                 // so render-camera state cannot affect rollback gameplay.
-                // The slots must be addressed by name: the hosted Fighter
-                // layout places the overlay elsewhere, and the raw retail
-                // offsets land inside fp->x1A88.
                 fp->mv.co.unk_deadup.x48 = *(f32*) (data + 12);
                 fp->mv.co.unk_deadup.x4C = *(f32*) (data + 15);
                 fp->self_vel.x = 0.0F;

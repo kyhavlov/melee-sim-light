@@ -898,10 +898,6 @@ void ftCo_800A20A0(Fighter* fp)
     if (fp->x1A88.x44 != NULL && fp->ground_or_air == GA_Ground) {
         Fighter* other_fp = data->x44;
 
-        // Retail byte 0x20 of Fighter_804D64FC is the x20 per-character
-        // distance-threshold table. Pointer widening moves x20 to byte 0x40
-        // in the hosted struct, so the raw-offset form read the x10 smash
-        // attack table pointer reinterpreted as a float.
         if (ftCo_800A1AB4(fp, other_fp) <
             2.0f * Fighter_804D64FC->x20[fp->kind])
         {

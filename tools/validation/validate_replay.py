@@ -143,16 +143,7 @@ class _NativeRunnerPool:
         self._available.put(replacement)
 
     def close(self) -> list[str]:
-        """Shut the pool down and return shutdown diagnostics.
-
-        Case failures already surface through their outcomes, so shutdown
-        problems come back as warning strings for the caller to print --
-        never an exception: close() runs in the callers' cleanup paths,
-        where raising replaces the result it is cleaning up after (a
-        fast-failing run used to hide its real per-case error behind
-        "native validation worker exited -9" from workers that were still
-        loading game data when the old two-second grace killed them).
-        """
+        """Return shutdown warnings without masking per-case validation errors."""
         warnings: list[str] = []
         for runner in self._runners:
             if runner.process.stdin is not None and not runner.process.stdin.closed:
