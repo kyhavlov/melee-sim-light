@@ -32,6 +32,10 @@ Benchmarks ([details](agent_docs/performance/BASELINE.md)):
 
 You'll need Python 3.11 or newer, GCC, GNU Make, and binutils.
 
+On Windows, build the Python library and the native runner from a checkout
+with MinGW-w64 in Git Bash: `bash tools/build/build_windows.sh` (its header
+lists what it needs and writes). The replay validator is not built there.
+
 Install directly from GitHub in your Python project:
 
 ```bash

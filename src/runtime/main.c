@@ -5,6 +5,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
 enum { MSL_CORE_IO_BUFFER_BYTES = 64 * 1024 };
 
 static int read_exact_file(const char* path, void* dst, size_t size)
@@ -213,6 +218,13 @@ int main(int argc, char** argv)
     size_t count;
     int result = 1;
 
+#ifdef _WIN32
+    // The stream and server modes trade packed structs over stdin and
+    // stdout, which Windows opens in text mode (0x0A would go out as
+    // 0x0D 0x0A, and 0x1A would end the input).
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+#endif
     if (argc == 3 && strcmp(argv[2], "--stream") == 0) {
         return run_stream(argv[1]);
     }

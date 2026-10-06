@@ -3258,7 +3258,7 @@ static inline void ftKb_SpecialN_800EED50_inline(s32 arg0, s32 arg1)
             HSD_Archive** entry = &((HSD_Archive**) &ft_80459B88)[arg0];
             if (*entry == NULL) {
                 lbArchive_80017040(NULL, ftKb_Init_803CA9D0[arg0].filename,
-                                   entry, ftKb_Init_803CA9D0[arg0].name, 0);
+                                   entry, ftKb_Init_803CA9D0[arg0].name, MSL_LBARCHIVE_END);
             }
         }
         {
@@ -3274,10 +3274,10 @@ static inline void ftKb_SpecialN_800EED50_inline(s32 arg0, s32 arg1)
                     if (cs->matanim_joint_name != NULL) {
                         lbArchive_80017040(NULL, cs->dat_filename, item,
                                            cs->joint_name, &item->matanim,
-                                           cs->matanim_joint_name, 0);
+                                           cs->matanim_joint_name, MSL_LBARCHIVE_END);
                     } else {
                         lbArchive_80017040(NULL, cs->dat_filename, item,
-                                           cs->joint_name, 0);
+                                           cs->joint_name, MSL_LBARCHIVE_END);
                         item->matanim = NULL;
                     }
                 }
