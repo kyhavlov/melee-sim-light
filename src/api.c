@@ -39,7 +39,9 @@ _Static_assert(sizeof(MslMatchConfig) == 52, "MslMatchConfig layout");
 _Static_assert(sizeof(MslInputPlayer) == 8, "MslInputPlayer layout");
 _Static_assert(sizeof(MslInput) == 32, "MslInput layout");
 _Static_assert(sizeof(MslItem) == 48, "MslItem layout");
-_Static_assert(sizeof(MslObservation) == 1208, "MslObservation layout");
+_Static_assert(sizeof(MslObservationRecorded) == 10, "MslObservationRecorded layout");
+_Static_assert(MSL_STATE_FLAGS_BYTES == MSL_CORE_STATE_FLAGS_BYTES, "state flag bytes must agree");
+_Static_assert(sizeof(MslObservation) == 1288, "MslObservation layout");
 _Static_assert(sizeof(MslTerminal) == 16, "MslTerminal layout");
 _Static_assert(sizeof(MslSaveHeader) == 20, "MslSaveHeader layout");
 

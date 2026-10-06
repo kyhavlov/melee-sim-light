@@ -95,6 +95,58 @@ fighter is awake, including her death animation, but not while she is eliminated
 until the leader's Rebirth. Otherwise, and for every other character, it is
 zeroed.
 
+`recorded[k]` holds four values of the player in `slots[k]` that a Slippi
+recording carries in its post-frame row and `MslObservationPlayer` leaves out,
+in the recording's own encoding. `follower_recorded[k]` is the same for
+`followers[k]`. A record is zeroed while its row is absent.
+
+`state_flags` is Slippi's State Bit Flags 1 to 5: the fighter's flag bytes at
+`0x2218`, `0x221A`, `0x221B`, `0x221C` and `0x221F`. Bits that Slippi's
+specification or the decompilation names:
+
+| byte | bit | constant | meaning |
+| --- | --- | --- | --- |
+| `state_flags[0]` | `0x80` | `MSL_STATE0_ALLOW_INTERRUPT` | the move has reached the frame from which it can be interrupted (IASA); `allow_interrupt` in the decompilation, unnamed by Slippi. A move clears it as it starts and its script raises it; it keeps its last value outside such moves |
+| | `0x10` | `MSL_STATE0_REFLECT` | a reflector is active |
+| | `0x08` | `MSL_STATE0_REFLECT_KEEPS_OWNER` | the reflector does not take ownership of the projectile (Mewtwo's Confusion) |
+| | `0x02` | `MSL_STATE0_ABSORB` | an absorber is active (Oil Panic) |
+| `state_flags[1]` | `0x20` | `MSL_STATE1_HITLAG` | in hitlag |
+| | `0x10` | `MSL_STATE1_DEFENDER_HITLAG` | in hitlag as the one hit (not shield hitlag) |
+| | `0x08` | `MSL_STATE1_FAST_FALL` | fast-falling |
+| | `0x04` | `MSL_STATE1_SUBACTION_INVULNERABLE` | intangible or invincible from the move's own script |
+| `state_flags[2]` | `0x80` | `MSL_STATE2_SHIELD` | the shield is up |
+| | `0x04` | `MSL_STATE2_HOLDING` | holding another fighter (a grab or a command grab) |
+| `state_flags[3]` | `0x20` | `MSL_STATE3_POWERSHIELD` | powershield active |
+| | `0x04` | `MSL_STATE3_DETECTION_ON_SHIELD` | this fighter's detection hitbox touches a shield |
+| | `0x02` | `MSL_STATE3_HITSTUN` | in hitstun |
+| `state_flags[4]` | `0x80` | `MSL_STATE4_OFFSCREEN` | off screen. The game's render pass sets it, so against a recording it can differ for a frame; replay validation does not hold the sim to this bit |
+| | `0x40` | `MSL_STATE4_DEAD` | dead: through the death animation, cleared by the respawn |
+| | `0x10` | `MSL_STATE4_INACTIVE` | asleep; never set here, because a sleeping fighter's row is absent |
+| | `0x08` | `MSL_STATE4_FOLLOWER` | a follower (Nana) |
+| | `0x02` | `MSL_STATE4_CLOAK` | Cloaking Device |
+
+The other bits are passed through as recorded and have no name in either
+source.
+
+`l_cancel` is nonzero only on the frame an aerial attack lands in its landing
+lag: `MSL_L_CANCEL_HIT` (`1`) when the shield button came inside the window and
+the lag is halved, `MSL_L_CANCEL_MISSED` (`2`) when it did not. It is
+`MSL_L_CANCEL_NONE` (`0`) on every other frame, and for landings that have no
+landing-lag action.
+
+`ground_id` is the index of the stage collision line the fighter stands on, or
+last stood on while in the air: it changes on the landing frame. A fighter
+that has stood on nothing since it respawned reads `65535`. The indices are
+the stage file's own, so they mean something per stage only; each platform is
+its own line or run of lines (on Battlefield the main stage under the left
+platform is `1`, the left platform `2` and the right platform `4`).
+
+`last_attack_landed` is the Slippi attack id of the last attack of this
+fighter that hit another fighter (`2` for the first jab, `10` for a forward
+smash; the ids are Slippi's attack table, the same ids `MslItem.attack_id`
+and the stale-move queue use). The value stays after the move ends. It is `0`
+before the first hit and from the respawn after a KO.
+
 Top-level fields:
 
 | field | type | values / range | shape |
@@ -109,6 +161,8 @@ Top-level fields:
 | `slots` | `MslObservationPlayer` | viewpoint-relative players | `[4]` |
 | `items` | `MslItem` | active/inactive item slots | `[15]` |
 | `followers` | `MslObservationPlayer` | follower of each slot's player | `[4]` |
+| `recorded` | `MslObservationRecorded` | recorded values of each slot's player | `[4]` |
+| `follower_recorded` | `MslObservationRecorded` | recorded values of each slot's follower | `[4]` |
 
 `MslObservationPlayer`:
 
@@ -133,6 +187,15 @@ Top-level fields:
 | `jumps_left` | `uint8_t` | remaining air jumps |
 | `hurtbox_state` | `uint8_t` | GALE01 hurtbox state id |
 | `invulnerable` | `uint8_t` | `0` or `1` |
+
+`MslObservationRecorded`:
+
+| field | type | values / range |
+| --- | --- | --- |
+| `state_flags` | `uint8_t[5]` | Slippi's State Bit Flags 1 to 5, `MSL_STATE*` bits above |
+| `l_cancel` | `uint8_t` | `MSL_L_CANCEL_*`: `0` none, `1` hit, `2` missed |
+| `ground_id` | `uint16_t` | stage collision line index |
+| `last_attack_landed` | `uint8_t` | Slippi attack id, `0` for none |
 
 `MslItem` slots are fixed-capacity. Inactive slots have `exists == 0`.
 

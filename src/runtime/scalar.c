@@ -2050,7 +2050,7 @@ static uint8_t ppc_state_bit(unsigned int value, unsigned int index)
     return value != 0 ? (uint8_t) (0x80U >> index) : 0;
 }
 
-static void pack_fighter_state_flags(const Fighter* fp, uint8_t flags[5])
+void msl_core_pack_fighter_state_flags(const Fighter* fp, uint8_t flags[5])
 {
     flags[0] = ppc_state_bit(fp->allow_interrupt, 0) |
                ppc_state_bit(fp->x2218_b1, 1) | ppc_state_bit(fp->x2218_b2, 2) |
@@ -2163,7 +2163,7 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
         out[offsetof(MslCoreCompare, combo_count) + i] = (uint8_t) fp->x2090;
         out[offsetof(MslCoreCompare, last_hit_by) + i] =
             (uint8_t) fp->dmg.x18c4_source_ply;
-        pack_fighter_state_flags(fp, state_flags);
+        msl_core_pack_fighter_state_flags(fp, state_flags);
         state_flags[4] =
             (state_flags[4] & 0x7FU) |
             ppc_state_bit(match->output_render_visibility[i], 0);
@@ -2249,7 +2249,7 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
             (uint8_t) fp->x2090;
         out[offsetof(MslCoreCompare, follower_last_hit_by) + i] =
             (uint8_t) fp->dmg.x18c4_source_ply;
-        pack_fighter_state_flags(fp, state_flags);
+        msl_core_pack_fighter_state_flags(fp, state_flags);
         state_flags[4] =
             (state_flags[4] & 0x7FU) |
             ppc_state_bit(match->follower_output_render_visibility[i], 0);

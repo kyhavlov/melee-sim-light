@@ -193,6 +193,54 @@ typedef struct MslObservationPlayer {
   uint8_t _pad0;
 } MslObservationPlayer;
 
+// Per-fighter values a Slippi recording carries in its post-frame row that
+// MslObservationPlayer does not, in the recording's own encoding.
+enum {
+  MSL_STATE_FLAGS_BYTES = 5,
+};
+
+// Bits of MslObservationRecorded.state_flags that Slippi's specification or
+// the decompilation names. The other bits are recorded and unnamed.
+enum {
+  // state_flags[0], Fighter 0x2218
+  MSL_STATE0_ALLOW_INTERRUPT = 0x80, // decompilation: allow_interrupt (IASA)
+  MSL_STATE0_REFLECT = 0x10,
+  MSL_STATE0_REFLECT_KEEPS_OWNER = 0x08,
+  MSL_STATE0_ABSORB = 0x02,
+  // state_flags[1], Fighter 0x221A
+  MSL_STATE1_HITLAG = 0x20,
+  MSL_STATE1_DEFENDER_HITLAG = 0x10,
+  MSL_STATE1_FAST_FALL = 0x08,
+  MSL_STATE1_SUBACTION_INVULNERABLE = 0x04,
+  // state_flags[2], Fighter 0x221B
+  MSL_STATE2_SHIELD = 0x80,
+  MSL_STATE2_HOLDING = 0x04,
+  // state_flags[3], Fighter 0x221C
+  MSL_STATE3_POWERSHIELD = 0x20,
+  MSL_STATE3_DETECTION_ON_SHIELD = 0x04,
+  MSL_STATE3_HITSTUN = 0x02,
+  // state_flags[4], Fighter 0x221F
+  MSL_STATE4_OFFSCREEN = 0x80,
+  MSL_STATE4_DEAD = 0x40,
+  MSL_STATE4_INACTIVE = 0x10,
+  MSL_STATE4_FOLLOWER = 0x08,
+  MSL_STATE4_CLOAK = 0x02,
+};
+
+typedef enum MslLCancel {
+  MSL_L_CANCEL_NONE = 0,
+  MSL_L_CANCEL_HIT = 1,
+  MSL_L_CANCEL_MISSED = 2,
+} MslLCancel;
+
+typedef struct MslObservationRecorded {
+  uint8_t state_flags[MSL_STATE_FLAGS_BYTES]; /* Slippi's State Bit Flags 1..5. */
+  uint8_t l_cancel; /* MSL_L_CANCEL_*, on the frame an aerial attack lands. */
+  uint16_t ground_id; /* Stage collision line last stood on; kept in the air. */
+  uint8_t last_attack_landed; /* Slippi attack id of the last hit dealt. */
+  uint8_t _pad0;
+} MslObservationRecorded;
+
 typedef struct MslObservationRandall {
   uint8_t exists;
   uint8_t _pad0[3];
@@ -227,6 +275,11 @@ typedef struct MslObservation {
   // slots[k], present only while Slippi would record a follower row for her
   // (awake, including her death animation; not while asleep before Rebirth).
   MslObservationPlayer followers[MSL_MAX_PLAYERS];
+  // Recorded values the player rows above leave out: recorded[k] belongs to
+  // the player in slots[k] and follower_recorded[k] to followers[k]. Zeroed
+  // while that row is absent.
+  MslObservationRecorded recorded[MSL_MAX_PLAYERS];
+  MslObservationRecorded follower_recorded[MSL_MAX_PLAYERS];
 } MslObservation;
 
 typedef struct MslTerminal {

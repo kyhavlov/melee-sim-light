@@ -236,6 +236,7 @@ typedef struct MslCoreCompare {
 } MslCoreCompare;
 
 typedef MslObservationPlayer MslCoreObservationPlayer;
+typedef MslObservationRecorded MslCoreObservationRecorded;
 typedef MslObservationRandall MslCoreObservationRandall;
 typedef MslObservationFodPlatforms MslCoreObservationFodPlatforms;
 typedef MslObservationStage MslCoreObservationStage;
@@ -362,7 +363,9 @@ _Static_assert(sizeof(MslCoreObservationPlayer) == 56,
                "MslCoreObservationPlayer wire size");
 _Static_assert(sizeof(MslCoreObservationStage) == 24,
                "MslCoreObservationStage wire size");
-_Static_assert(sizeof(MslCoreObservation) == 1208,
+_Static_assert(sizeof(MslCoreObservationRecorded) == 10,
+               "MslCoreObservationRecorded wire size");
+_Static_assert(sizeof(MslCoreObservation) == 1288,
                "MslCoreObservation wire size");
 _Static_assert(sizeof(MslCoreTerminal) == 16,
                "MslCoreTerminal wire size");
