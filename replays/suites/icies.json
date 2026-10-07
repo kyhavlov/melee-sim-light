@@ -338,6 +338,19 @@
     "1": "Ice Climbers",
     "2": "Peach"
    }
+  },
+  {
+   "replay": "replays/validation/icies/platinum-platinum-9dc16c938bf8ed578f6d43dd.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Marth",
+    "2": "Ice Climbers"
+   },
+   "played_on": "network"
   }
   ]
 }
