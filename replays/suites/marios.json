@@ -506,6 +506,19 @@
         "1": "Dr. Mario",
         "2": "Marth"
       }
+    },
+    {
+      "replay": "replays/validation/marios/platinum-platinum-3d9c7e1486bef415564c4005.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Dr. Mario"
+      },
+      "played_on": "network"
     }
   ]
 }
