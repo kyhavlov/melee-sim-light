@@ -51,6 +51,7 @@ _Thread_local MslNativeDatContext* msl_core_context_native_dat;
 void msl_core_bind_game_data(MslCoreGameData* game_data)
 {
     msl_core_context_match = NULL;
+    msl_jit_no_host_fma = 0;
     msl_core_context_game_data = game_data;
     msl_core_context_random = &game_data->bootstrap_random;
     msl_core_context_objalloc = &game_data->bootstrap_objalloc;
@@ -99,9 +100,13 @@ void msl_core_bind_game_data(MslCoreGameData* game_data)
 #endif
 }
 
+_Thread_local int msl_jit_no_host_fma;
+
 void msl_core_bind_match(MslCoreMatch* match)
 {
     msl_core_context_match = match;
+    msl_jit_no_host_fma =
+        (match->config.jit_arithmetic & MSL_JIT_NO_HOST_FMA) != 0;
     msl_core_context_game_data = match->game_data;
     msl_core_context_random = &match->random;
     msl_core_context_objalloc = &match->objalloc;

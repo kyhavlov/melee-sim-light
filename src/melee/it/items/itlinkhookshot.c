@@ -438,7 +438,7 @@ bool itLinkhookshot_UnkMotion8_Anim(Item_GObj* arg0)
     temp_f1 = (f32) var_r5 / (f32) attr->x2C;
     jobj->child->child->rotate.z = 6.2831855f * temp_f1;
     // GALE01 0x802A2E28: the grip-scale blend fuses in double precision.
-    temp_f0 = (f32) __builtin_fma(0.6499999761581421, 1.0 - (f64) temp_f1,
+    temp_f0 = (f32) msl_ppc_fma(0.6499999761581421, 1.0 - (f64) temp_f1,
                                   0.3499999940395355);
     jobj->child->child->scale.x = temp_f0;
     jobj->child->child->scale.y = temp_f0;

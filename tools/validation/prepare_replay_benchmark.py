@@ -22,7 +22,7 @@ from tools.validation.admission import require_admissible
 from tools.validation.slpz import replay_path_for_peppi
 
 
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 # Export semantics can change without changing the tape layout.
 CACHE_VERSION = 3
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
@@ -91,7 +91,8 @@ def prepare(args: argparse.Namespace) -> None:
         with replay_path_for_peppi(case.replay) as peppi_path:
             game = _read_slippi(str(peppi_path), False)
             require_admissible(game, peppi_path, played_on=case.played_on,
-                               fnmsubs_profile=case.fnmsubs_profile)
+                               fnmsubs_profile=case.fnmsubs_profile,
+                               jit_arithmetic=case.jit_arithmetic)
             if any(player["type"] == "Cpu" for player in game.start["players"]):
                 print(f"skipping CPU recording (controller-only benchmark): {case.display_path}")
                 skipped_cpu += 1

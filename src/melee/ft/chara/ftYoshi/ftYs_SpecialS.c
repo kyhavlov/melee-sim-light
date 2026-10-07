@@ -456,7 +456,7 @@ void ftYs_SpecialAirSLoop_0_Anim(Fighter_GObj* gobj)
         }
     }
 
-    fp->mv.ys.specials.x14 = __builtin_fma(
+    fp->mv.ys.specials.x14 = msl_ppc_fma(
         M_TAU / 25.0, attributes->xD8 * ABS(fp->mv.ys.specials.x1C),
         fp->mv.ys.specials.x14);
 
@@ -516,7 +516,7 @@ static inline void ftYs_SpecialS_UpdateLoop1Rotation2(Fighter* fp, f32* angle,
         } else {
             delta = ABS(fp->mv.ys.specials.x10) + ABS(fp->gr_vel);
         }
-        *angle = __builtin_fma(delta / total, M_PI, M_PI_2);
+        *angle = msl_ppc_fma(delta / total, M_PI, M_PI_2);
     } else {
         f32 delta;
         if (fp->gr_vel < 0.0F) {
@@ -524,7 +524,7 @@ static inline void ftYs_SpecialS_UpdateLoop1Rotation2(Fighter* fp, f32* angle,
         } else {
             delta = ABS(fp->mv.ys.specials.x10) + ABS(fp->gr_vel);
         }
-        *angle = __builtin_fma(delta / total, M_PI, 3.0 * M_PI_2);
+        *angle = msl_ppc_fma(delta / total, M_PI, 3.0 * M_PI_2);
     }
 
     while (*angle < 0.0F) {
@@ -547,7 +547,7 @@ void ftYs_SpecialAirSLoop_1_Anim(Fighter_GObj* gobj)
     ftYs_SpecialS_UpdateScale2(gobj);
 
     fp->mv.ys.specials.x14 =
-        __builtin_fma(2.0 * M_PI / 25.0, attributes->xA0,
+        msl_ppc_fma(2.0 * M_PI / 25.0, attributes->xA0,
                       fp->mv.ys.specials.x14);
 
     ftYs_SpecialS_WrapAndSetRotX(gobj);
@@ -628,7 +628,7 @@ void ftYs_SpecialAirSLoop_2_Anim(Fighter_GObj* gobj)
     ftYs_SpecialS_8012EB48(gobj);
     ftYs_SpecialS_UpdateScale(gobj, &scale);
 
-    fp->mv.ys.specials.x14 = __builtin_fma(M_PI / 30.0, attributes->x60,
+    fp->mv.ys.specials.x14 = msl_ppc_fma(M_PI / 30.0, attributes->x60,
                                           fp->mv.ys.specials.x14);
 
     ftYs_SpecialS_WrapAndSetRotX(gobj);
@@ -696,7 +696,7 @@ void ftYs_SpecialAirSLoop_3_Anim(Fighter_GObj* gobj)
             abs_speed = -abs_speed;
         }
         fp->mv.ys.specials.x14 =
-            __builtin_fma(2.0 * M_PI / 25.0, attributes->xD8 * abs_speed,
+            msl_ppc_fma(2.0 * M_PI / 25.0, attributes->xD8 * abs_speed,
                           fp->mv.ys.specials.x14);
     }
 
@@ -1319,7 +1319,7 @@ void ftYs_SpecialAirSLoop_3_Coll(Fighter_GObj* gobj)
             fp->self_vel.z = 0.0F;
             fp->self_vel.y = 0.0F;
             fp->mv.ys.specials.x14 =
-                __builtin_fma(2.0 * M_PI / 25.0,
+                msl_ppc_fma(2.0 * M_PI / 25.0,
                               perm_mul_inline(attributes->xD8,
                                               ABS(fp->mv.ys.specials.x1C)),
                               fp->mv.ys.specials.x14);
