@@ -117,6 +117,34 @@
       ]
     },
     {
+      "replay": "replays/validation/dk/Game_A45C27B4D631_20200306T215248.slpz",
+      "sha256_slp": "94798269313b9ba8ede0a432dd0a8e78b74d101439e173632bd499d103c603fe",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ],
+      "evidence": "Slippi 3.3 console capture with UCF 0.74 (no tumble fix), kept as the recording behind the rule that a UCF routine the code list lacks stays vanilla. It is a 3.3 file, so it also needs the 3.3 post-frame record point (pull request #57): on this branch alone a fighter's shield differs from frame -25. On a local merge of #57 with this branch's first commit only, one fighter's action state differs on 16 frames from frame 728 (the tumble wiggle); on a local merge of #57 with all of this branch, all 9,699 frames are equal. No stage-bounds offscreen patch; 3.3 records the main stick's raw x only. tools/validation/validate_replay.py reads a recording with peppi_py's _read_slippi (0.8.6 in uv.lock), which fails on a Slippi 3.3 file (arrow2 StructArray 'must contain at least one field'), so the validator stops before admission; it was read here with an older peppi_py build. Measured with a Windows build and a replay driver comparing fighter gameplay lanes, the code-list flags set as this branch's own admission.py sets them; the C-stick and main-stick y bytes Slippi 3.3 does not record come from the driver's fixed reading of the processed sticks, not from a fit. Not run with tools/validation.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm",
+        "src/runtime/match.c",
+        "tools/validation/admission.py::ucf_codes_absent",
+        "tools/validation/validate_replay.py"
+      ]
+    },
+    {
+      "replay": "replays/validation/dk/diamond-diamond-33b572328d41bb20873121a4.slpz",
+      "sha256_slp": "35f1b56d4f24a1423c121cdaac3d89b152ebd2c34cd637bf1af17b3c82baf21e",
+      "reasons": [
+        "missing-recorded-inputs"
+      ],
+      "evidence": "UCF 0.8 online capture, kept as the recording behind UCF 0.8's dashback and SquatRv rules. Before them a fighter's action state first differs at frame 395, then facing and position to the end; with them all 8,870 frames are equal. Slippi 3.14 records no raw C-stick bytes. Measured with a Windows build and a replay driver comparing fighter and item gameplay lanes with the recording's own code list; the C-stick bytes this Slippi version does not record come from the driver's fixed reading of the processed C-stick, not from a fit. Not run with tools/validation.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm",
+        "src/runtime/match.c::msl_ucf_apply_dashback",
+        "src/runtime/match.c::msl_ucf_squatrv_threshold"
+      ]
+    },
+    {
       "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
       "sha256_slp": "cb9371a757528237dafa85e9c37066eb36e2db0b327d914cda1d2703a73b15d9",
       "reasons": [

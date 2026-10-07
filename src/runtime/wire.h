@@ -141,8 +141,21 @@ typedef struct MslCoreMatchConfig {
     uint8_t stage_event_streams;
     // Online/Core/WhispyBlowDirFix excludes death animations from the vote.
     uint8_t whispy_dead_fighter_fix;
+    // UCF injections the capture's code list lacks (MSL_UCF_ABSENT_*): the
+    // UCF 0.74 toggle set has no tumble fix, and an unmodified game has none
+    // of them. Zero keeps every UCF routine the other flags select.
+    uint8_t ucf_codes_absent;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
+
+enum {
+    // UCF Tumble.asm (0x800908F4): the tumble wiggle's one-frame swing test.
+    MSL_UCF_ABSENT_TUMBLE = 1 << 0,
+    // UCF dashback (0x800C9A44).
+    MSL_UCF_ABSENT_DASHBACK = 1 << 1,
+    // UCF shield drop (0x800998A4).
+    MSL_UCF_ABSENT_SHIELD_DROP = 1 << 2,
+};
 
 // Native validation workers keep immutable GameData alive across jobs. The
 // frame count gives each job an explicit boundary without closing the stream;
@@ -352,9 +365,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 63,
+_Static_assert(sizeof(MslCoreMatchConfig) == 64,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 119,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 120,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");
