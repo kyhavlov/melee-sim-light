@@ -1482,7 +1482,13 @@ static void* translate_fighter_common_public(MslNativeArchive* context,
         // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_800D4FF4
         msl_dat_root_Fighter_804D6534_t,
         msl_dat_root_MslDatVec2Pointer,
-        msl_dat_root_MslDatByte,
+        // Pointers 10 and 11 are one (list, length) pair each: the shake of
+        // a held fighter that mashes and of a smash charge. Fighter_804D652C_t
+        // has Fighter_804D6528_t's layout; as bytes the pair kept the file's
+        // 32-bit words and ftCommon_InitGrab read its length past them.
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_InitGrab,
+        //   ftCommon_GrabMash,ftCommon_8008021C}
+        msl_dat_root_Fighter_804D6528_t,
         msl_dat_root_Fighter_804D6528_t,
         msl_dat_root_Fighter_804D6524_t,
         msl_dat_root_Fighter_804D6520_t,
@@ -1506,6 +1512,28 @@ static void* translate_fighter_common_public(MslNativeArchive* context,
                             ? translate_fighter_cpu_tables(context, target)
                             : translate_target(context, target,
                                                element_types[i]);
+        }
+    }
+    // Pointer 9 (Fighter_804D6530, the shake of a fighter that is hit) is
+    // three pairs of a table and that table's length: air, ground, electric.
+    // The source reads it as six pointer-sized slots. A length is a plain
+    // word with no relocation, so as a pointer it came out null:
+    // ftCo_80090594 stored a length of 0 and Fighter_8006A360 put the
+    // shake's index back to 0 every frame. The lengths are the file's own
+    // words, kept in the odd slots where the source reads them.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::{
+    //   ftCo_80090594,ftCo_80090690}
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    {
+        uint32_t target = raw_pointer(context, offset + 9 * 4);
+        void** pairs = result[9];
+        if (target != UINT32_MAX && pairs != NULL &&
+            next_boundary(context, target) - target >= 24)
+        {
+            for (i = 0; i < 3; ++i) {
+                pairs[i * 2 + 1] = (void*) (uintptr_t) read_be32(
+                    context->data + target + (i * 2 + 1) * 4);
+            }
         }
     }
     return result;
