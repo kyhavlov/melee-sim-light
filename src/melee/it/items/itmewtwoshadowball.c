@@ -86,8 +86,11 @@ u32 it_802C4D10(Item_GObj* gobj)
             f32 rand;
             ip->xDD4_itemVar.mewtwoshadowball.x48 = 0;
             rand = HSD_Randf();
-            ip->xDD4_itemVar.mewtwoshadowball.x3C +=
-                ((M_PI / 4) * (2.0f * (rand - 0.5f)));
+            // GALE01 0x802C4DB8: a double-precision fmadd of the pi/4
+            // constant onto the angle, then frsp.
+            ip->xDD4_itemVar.mewtwoshadowball.x3C =
+                (f32) __builtin_fma(M_PI / 4, 2.0f * (rand - 0.5f),
+                                     ip->xDD4_itemVar.mewtwoshadowball.x3C);
             ip->xDD4_itemVar.mewtwoshadowball.x44 =
                 -ip->xDD4_itemVar.mewtwoshadowball.x40 / (0.5f * attr->x20);
             Item_8026AF0C(ip, it_803F7880[HSD_Randi(3)], 127, 64);
@@ -95,14 +98,19 @@ u32 it_802C4D10(Item_GObj* gobj)
         ip->xDD4_itemVar.mewtwoshadowball.x40 +=
             ip->xDD4_itemVar.mewtwoshadowball.x44;
         ip->xDD4_itemVar.mewtwoshadowball.x30.x = 0.0f;
-        ip->xDD4_itemVar.mewtwoshadowball.x30.y +=
+        // GALE01 0x802C4E48/0x802C4E68: fmuls of x40 and x50, then an
+        // fmadds of the sine (cosine) onto the offset, so the wobble
+        // accumulates without rounding the product.
+        ip->xDD4_itemVar.mewtwoshadowball.x30.y = __fmadds(
             ip->xDD4_itemVar.mewtwoshadowball.x40 *
-            ip->xDD4_itemVar.mewtwoshadowball.x50 *
-            sinf(ip->xDD4_itemVar.mewtwoshadowball.x3C);
-        ip->xDD4_itemVar.mewtwoshadowball.x30.z +=
+                ip->xDD4_itemVar.mewtwoshadowball.x50,
+            sinf(ip->xDD4_itemVar.mewtwoshadowball.x3C),
+            ip->xDD4_itemVar.mewtwoshadowball.x30.y);
+        ip->xDD4_itemVar.mewtwoshadowball.x30.z = __fmadds(
             ip->xDD4_itemVar.mewtwoshadowball.x40 *
-            ip->xDD4_itemVar.mewtwoshadowball.x50 *
-            cosf(ip->xDD4_itemVar.mewtwoshadowball.x3C);
+                ip->xDD4_itemVar.mewtwoshadowball.x50,
+            cosf(ip->xDD4_itemVar.mewtwoshadowball.x3C),
+            ip->xDD4_itemVar.mewtwoshadowball.x30.z);
     } else {
         ip->xDD4_itemVar.mewtwoshadowball.x30.z = 0.0f;
         ip->xDD4_itemVar.mewtwoshadowball.x30.y = 0.0f;

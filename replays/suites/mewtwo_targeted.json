@@ -98,6 +98,19 @@
         "1": "Falco",
         "2": "Mewtwo"
       }
+    },
+    {
+      "replay": "replays/validation/mewtwo/master-platinum-3764cfdde76b6367c9b161d3.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Ice Climbers",
+        "2": "Mewtwo"
+      },
+      "played_on": "network"
     }
   ]
 }
