@@ -338,6 +338,32 @@
     "1": "Ice Climbers",
     "2": "Peach"
    }
+  },
+  {
+   "replay": "replays/validation/icies/master-platinum-9718e1fa01455e35446f7ae7.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 28,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Falco"
+   },
+   "played_on": "network"
+  },
+  {
+   "replay": "replays/validation/icies/master-master-11064a828d78625eda78bbac.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 32,
+   "characters": {
+    "1": "Dr. Mario",
+    "2": "Ice Climbers"
+   },
+   "played_on": "network"
   }
   ]
 }

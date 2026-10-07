@@ -66,7 +66,7 @@ Ban captures with any of these properties, even when they currently compare exac
 Admission is independent of comparison results. New captures need recording
 provenance, these property checks and a complete strict run. Do not shorten a
 failing recording, omit inconvenient rows or add tolerated mismatch snapshots.
-The aggregate contains 514 exact recordings across 148 manifest-listed
+The aggregate contains 516 exact recordings across 148 manifest-listed
 fighter/stage pairs. This is pair coverage, not a claim
 of exhaustive move/branch coverage or every fighter on every stage.
 

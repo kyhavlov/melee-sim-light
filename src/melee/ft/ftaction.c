@@ -1274,7 +1274,13 @@ void ftAction_80072E4C(Fighter_GObj* gobj, CommandInfo* cmd)
     }
 
     if (gfx_id == -1) {
-        gfx_id = ((u16*) cmd->u)[1];
+        // The halfword after the opcode is the effect id. Command bytes are
+        // authored big-endian, so a raw u16 load on a little-endian host
+        // reads it byte-swapped (0x3F8 as 0xF803), which spawns nothing and
+        // skips the effect's random draws.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80072E4C
+        const u8* bytes = (const u8*) cmd->u;
+        gfx_id = (bytes[2] << 8) | bytes[3];
     }
     offset.z = 0.0f;
     range.z = 0.0f;

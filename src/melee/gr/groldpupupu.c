@@ -67,7 +67,9 @@ static int grOp_804D48C8[1][2] = { { 4, 0 } };
 static int grOp_804D48D0[1][2] = { { 5, 1 } };
 static int grOp_804D48D8[1][2] = { { 2, 3 } };
 
-static int grOp_804D48E0[1][2] = { { 0, 0 } };
+// GALE01 0x804D48E0 holds { 1, 0 }: Whispy's blow effect (object 6) plays
+// animation 1.
+static int grOp_804D48E0[1][2] = { { 1, 0 } };
 
 typedef struct grOldPupupuSpawnDesc {
     s8 x0;
@@ -236,11 +238,9 @@ void grOldPupupu_80210A24(Ground_GObj* gobj)
 
     if ((int) grOp_804D6A9C == 0 && gp->gv.oldpupupu.xD0 == 1) {
         gp->gv.oldpupupu.xD0 = 0;
-#ifdef MSL_CORE_NATIVE
-        // Object 7 owns Whispy's gameplay state. Object 1 consumes this
-        // handshake only to select a background animation.
-        return;
-#endif
+        // Object 1's background animations carry stage particle events
+        // (generators 30000-30002) whose creation draws from the gameplay
+        // RNG, so the source selection runs here too.
         switch (gp->gv.oldpupupu.xC8) {
         case 0:
             grAnime_801C8138(
