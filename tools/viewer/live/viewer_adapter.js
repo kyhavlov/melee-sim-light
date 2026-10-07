@@ -200,6 +200,9 @@ function playerStateFromBase(state, base, frameNumber, idx, isNana) {
         shieldX: hasShieldCenter ? sourceShieldX : undefined,
         shieldY: hasShieldCenter ? sourceShieldY : undefined,
         shieldRadius: hasShieldBubble ? shieldRadius : undefined,
+        shieldAlpha: hasShieldBubble
+          ? u8(state, base + viewerPlayerOffsets.shieldAlpha) / 255
+          : undefined,
         shieldTiltX: hasShieldBubble
           ? f32(state, base + viewerPlayerOffsets.shieldTiltX)
           : undefined,

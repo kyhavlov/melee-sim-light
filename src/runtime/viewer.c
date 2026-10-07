@@ -124,6 +124,19 @@ static void write_shield(const Fighter* fp, uint8_t* player_out)
     put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_radius),
             shield->size * joint_uniform_scale(shield->bone));
 
+    // ftCo_80091E78 fades the bubble with the light-shield amount: common
+    // data's x2F4 is the lightest alpha and a hard shield is opaque. Yoshi's
+    // egg is not faded.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091E78
+    if (fp->kind == FTKIND_YOSHI) {
+        player_out[offsetof(MslCoreViewerPlayer, shield_alpha)] = 255;
+    } else {
+        float alpha = p_ftCommonData->x2F4;
+        player_out[offsetof(MslCoreViewerPlayer, shield_alpha)] =
+            (u8) (int) (alpha + (float) (int) (fp->lightshield_amount *
+                                               (255 - alpha)));
+    }
+
     if (fp->motion_id < ftCo_MS_GuardOn ||
         fp->motion_id > ftCo_MS_GuardReflect)
     {
