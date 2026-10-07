@@ -846,6 +846,33 @@ static inline void inlineB2(Fighter_GObj* gobj)
     ftCommon_800804FC(fp);
 }
 
+#ifdef MSL_CORE_HOSTED
+// inlineB2 at the one call site Slippi's PreventWobbling patches (GALE01
+// 0x8008F090, after ftCo_800C8D00): a hit that breaks the grab skips the held
+// victim's CaptureDamage entry and resumes at 0x8008F0C8.
+// refs/slippi-ssbm-asm/External/PreventWobbling/Wobble Check.asm
+static void msl_damage_held_victim(Fighter_GObj* gobj)
+{
+    Fighter* fp = gobj->user_data;
+    ftCo_800C8D00(gobj);
+    if (!msl_wobble_check(gobj)) {
+        if (fp->motion_id == 0xe0 || fp->motion_id == 0xe1) {
+            ftCo_800DC284(gobj);
+        }
+        if (fp->motion_id == 0xe3 || fp->motion_id == 0xe4) {
+            ftCo_800DC3A4(gobj);
+        }
+    }
+    if (ftCo_8008DA4C(
+            gobj, fp->dmg.x1860_element,
+            ftCo_8008D8E8(fp->dmg.kb_applied * p_ftCommonData->x154)))
+    {
+        ftCo_800C0408(gobj);
+    }
+    ftCommon_800804FC(fp);
+}
+#endif
+
 /// @todo Inline depth.
 static inline bool inlineB3(Fighter_GObj* gobj)
 {
@@ -911,7 +938,11 @@ void ftCo_8008EC90(Fighter_GObj* gobj)
                     // pummel hitlag is therefore discarded, not accumulated
                     // (53362 @1383: retail Ness x668 0x100 -> 0).
                     fp->input.x668 = fp->input.x66C = 0;
+#ifdef MSL_CORE_HOSTED
+                    msl_damage_held_victim(gobj);
+#else
                     inlineB2(gobj);
+#endif
                     goto ret_A8C;
                 }
                 {

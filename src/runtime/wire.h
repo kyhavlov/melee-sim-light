@@ -141,8 +141,26 @@ typedef struct MslCoreMatchConfig {
     uint8_t stage_event_streams;
     // Online/Core/WhispyBlowDirFix excludes death animations from the vote.
     uint8_t whispy_dead_fighter_fix;
+    // Slippi's PreventWobbling, which breaks an Ice Climbers grab after
+    // repeated hits from the grabber's partner (MSL_WOBBLE_PREVENTION_*).
+    // Zero is the unmodified game.
+    uint8_t wobble_prevention;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
+
+enum {
+    MSL_WOBBLE_PREVENTION_NONE = 0,
+    // The first version (External/PreventWobbling/{1,2}.asm, until October
+    // 2022): the third distinct hit from Nana, or one of her items, breaks
+    // Popo's grab. Its init replaces the lfs of 0.0f at 0x800DA9DC in
+    // fn_800DA8E4, so the victim's CapturePulled starts at, and blends over,
+    // the grab timer instead of frame 0.
+    MSL_WOBBLE_PREVENTION_2021 = 1,
+    // Init Wobble Count / Wobble Check: the fourth distinct hit breaks the
+    // grab in singles and releases Nana too; the count is reset when the
+    // victim enters CaptureWait.
+    MSL_WOBBLE_PREVENTION = 2,
+};
 
 // Native validation workers keep immutable GameData alive across jobs. The
 // frame count gives each job an explicit boundary without closing the stream;
@@ -352,9 +370,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 63,
+_Static_assert(sizeof(MslCoreMatchConfig) == 64,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 119,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 120,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");

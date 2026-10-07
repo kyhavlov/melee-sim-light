@@ -37,6 +37,13 @@
 #include <MetroTRK/intrinsics.h>
 #endif
 #include <baselib/gobj.h>
+#ifdef MSL_CORE_HOSTED
+#include "gm/gm_16AE.h"
+#include "it/types.h"
+#include "pl/player.h"
+#include "runtime/match.h"
+#include "runtime/wire.h"
+#endif
 #include <baselib/jobj.h>
 #include <baselib/random.h>
 #include <melee/cm/camera.h>
@@ -2371,27 +2378,39 @@ void fn_800DA8E4(Fighter_GObj* gobj, Fighter_GObj* victim_gobj, s32 arg2)
     fp->facing_dir = -victim->facing_dir;
     cd = p_ftCommonData;
     cd2 = &cd->x360;
+    f32 start = 0.0f;
     v = (*cd2) * (cd->x364 - ((f32) (Player_80033BB8(fp->player_id) + 1)));
     {
         f32 s3 = (cd->x35C - (f32) Player_GetHandicap(fp->player_id));
 #ifdef MSL_CORE_HOSTED
+        f32 timer;
         // Same retail grab-timer expression as ftCo_800DA824; GALE01
         // 0x800DA9CC and 0x800DA9D4 are fmadds.
         s3 = __fmadds(cd->x358, s3, cd->x354);
         s3 = s3 + v;
-        ftCommon_InitGrab(
-            fp, 0, __fmadds(fp->dmg.x1830_percent, cd->x368, s3));
+        timer = __fmadds(fp->dmg.x1830_percent, cd->x368, s3);
+        ftCommon_InitGrab(fp, 0, timer);
+        if (msl_wobble_prevention() == MSL_WOBBLE_PREVENTION_2021) {
+            // The first PreventWobbling's init sits at 0x800DA9DC in place
+            // of the lfs that loads 0.0f into f1, so f1 still holds the grab
+            // timer passed to ftCommon_InitGrab: the grav and friction slots
+            // and CapturePulled's start frame and blend all take it.
+            // refs/slippi-ssbm-asm/External/PreventWobbling/1.asm (removed in
+            // 3fc22e7, October 2022)
+            start = timer;
+            msl_wobble_count_init(fp, MSL_WOBBLE_PREVENTION_2021);
+        }
 #else
         s3 = cd->x358 * s3 + cd->x354;
         s3 = s3 + v;
         ftCommon_InitGrab(fp, 0, (fp->dmg.x1830_percent * cd->x368) + s3);
 #endif
     }
-    fp->mv.ca.specials.grav = 0.0f;
+    fp->mv.ca.specials.grav = start;
     fp->mv._[0xC] = 0;
-    fp->mv.ca.speciallw.friction = 0.0f;
+    fp->mv.ca.speciallw.friction = start;
     fp->mv.ca.speciallw.x4 = 0;
-    Fighter_ChangeMotionState(gobj, arg2, 0, 0.0f, 1.0f, 0.0f, NULL);
+    Fighter_ChangeMotionState(gobj, arg2, 0, start, 1.0f, start, NULL);
     ftAnim_8006EBA4(gobj);
     ftCommon_8007E2FC(gobj);
     ftCommon_8007E2F4(fp, 0x1FF);
@@ -2801,6 +2820,13 @@ void fn_800DB790(Fighter_GObj* gobj)
     }
 
     ftCommon_8007E2F4(fp, 0x1FF);
+#ifdef MSL_CORE_HOSTED
+    // Init Wobble Count Air/Ground.asm run at this epilogue (GALE01
+    // 0x800DB880 and 0x800DBBD4).
+    if (msl_wobble_prevention() == MSL_WOBBLE_PREVENTION) {
+        msl_wobble_count_init(fp, MSL_WOBBLE_PREVENTION);
+    }
+#endif
 }
 
 #pragma push
@@ -2917,6 +2943,13 @@ void fn_800DBAE4(Fighter_GObj* gobj)
     }
 
     ftCommon_8007E2F4(fp, 0x1FF);
+#ifdef MSL_CORE_HOSTED
+    // Init Wobble Count Air/Ground.asm run at this epilogue (GALE01
+    // 0x800DB880 and 0x800DBBD4).
+    if (msl_wobble_prevention() == MSL_WOBBLE_PREVENTION) {
+        msl_wobble_count_init(fp, MSL_WOBBLE_PREVENTION);
+    }
+#endif
 }
 
 static inline void fn_800DBBF8_noinline(Fighter_GObj* gobj1, Fighter* gobj2)
@@ -3242,3 +3275,125 @@ void fn_800DC624(HSD_GObj* gobj)
     PAD_STACK(4);
     fn_800DC624_inline(gobj);
 }
+
+#ifdef MSL_CORE_HOSTED
+// Slippi's PreventWobbling, from the code bytes the captures carry. Both
+// versions keep their count on the held victim: the 2021 version in the motion
+// vars at fp+0x2350 (count) and fp+0x2352 (last move id), the later one at
+// fp+0x2384 and fp+0x2386. They are addressed here as the same bytes of mv.
+// refs/slippi-ssbm-asm/External/PreventWobbling/{PreventWobbling.s,
+// Wobble Check.asm, Init Wobble Count Air.asm, Init Wobble Count Ground.asm}
+// and, for the 2021 version, 1.asm and 2.asm before 3fc22e7.
+static u8* msl_wobble_count(Fighter* fp, int version)
+{
+    return &fp->mv._[version == MSL_WOBBLE_PREVENTION_2021 ? 0x10 : 0x44];
+}
+
+static u16* msl_wobble_last_move(Fighter* fp, int version)
+{
+    return (u16*) &fp->mv._[version == MSL_WOBBLE_PREVENTION_2021 ? 0x12
+                                                                   : 0x46];
+}
+
+void msl_wobble_count_init(Fighter* fp, int version)
+{
+    *msl_wobble_count(fp, version) = 0;
+    *msl_wobble_last_move(fp, version) = 0xFFFF;
+}
+
+// Runs on a held victim's hit, after ftCo_800C8D00 and before the victim's
+// CaptureDamage entry (the injection at GALE01 0x8008F090 in ftCo_8008EC90).
+bool msl_wobble_check(Fighter_GObj* gobj)
+{
+    int version = msl_wobble_prevention();
+    Fighter* fp = GET_FIGHTER(gobj);
+    Fighter_GObj* grabber_gobj;
+    Fighter* grabber;
+    HSD_GObj* partner;
+    HSD_GObj* source;
+    u16 move;
+    u16 last;
+    u8 count;
+
+    if (version == MSL_WOBBLE_PREVENTION_NONE ||
+        fp->motion_id < ftCo_MS_CapturePulledHi ||
+        fp->motion_id > ftCo_MS_CaptureDamageLw || fp->victim_gobj == NULL)
+    {
+        return false;
+    }
+    grabber_gobj = fp->victim_gobj;
+    grabber = GET_FIGHTER(grabber_gobj);
+    // fp+0x2222 & 0x04: the grabber leads a follower (Popo).
+    if (!grabber->x2222_b5) {
+        return false;
+    }
+    // The 2021 version counts hits from the follower herself; the later one
+    // compares against the grabber, whose gobj is what the follower's
+    // damage records as its source.
+    partner = version == MSL_WOBBLE_PREVENTION_2021
+                  ? Player_GetEntityAtIndex(grabber->player_id, 1)
+                  : grabber_gobj;
+    if (partner == NULL) {
+        return false;
+    }
+    source = fp->dmg.x1868_source;
+    last = *msl_wobble_last_move(fp, version);
+    if (source == partner) {
+        move = GET_FIGHTER(partner)->x2074.x2088;
+    } else {
+        Item* item;
+        // A hit with no recorded source reads the halfword at address 0,
+        // which the console maps to the start of RAM (the game id, "GA"),
+        // not the item class.
+        if (source == NULL || source->classifier != HSD_GOBJ_CLASS_ITEM) {
+            return false;
+        }
+        item = GET_ITEM(source);
+        if (item->owner != partner) {
+            return false;
+        }
+        move = item->xDA8_short;
+    }
+    if (move == last) {
+        return false;
+    }
+    *msl_wobble_last_move(fp, version) = move;
+    count = (u8) (*msl_wobble_count(fp, version) + 1);
+    *msl_wobble_count(fp, version) = count;
+    if (version == MSL_WOBBLE_PREVENTION_2021) {
+        if (count < 3) {
+            return false;
+        }
+        // r4 at the call still holds the previous move id.
+        ftCo_800DA698(grabber_gobj, last != 0);
+        return true;
+    }
+    if (gm_8016B168() || count <= 3) {
+        return false;
+    }
+    ftCo_800DA698(grabber_gobj, last != 0);
+    {
+        HSD_GObj* nana_gobj =
+            Player_GetEntityAtIndex(grabber->player_id, 1);
+        Fighter* nana;
+        if (nana_gobj == NULL) {
+            return true;
+        }
+        nana = GET_FIGHTER(nana_gobj);
+        if (nana->x221F_b1 || nana->x2219_b5 || nana->x2070.x2071_b0_3 == 13) {
+            return true;
+        }
+        if (nana->ground_or_air == GA_Ground) {
+            ftCo_800DA698(nana_gobj, false);
+        } else {
+            ftCommon_8007D5D4(nana);
+            nana->self_vel.x = p_ftCommonData->x374 * -nana->facing_dir;
+            nana->self_vel.y = p_ftCommonData->x378;
+            nana->mv.ca.specials.grav = 0.0F;
+            Fighter_ChangeMotionState(nana_gobj, ftCo_MS_CaptureJump, 0, 0.0F,
+                                      1.0F, 0.0F, NULL);
+        }
+    }
+    return true;
+}
+#endif

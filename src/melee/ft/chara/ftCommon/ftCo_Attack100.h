@@ -194,4 +194,12 @@
 /* 0DC5EC */ void ftCo_CaptureDamageLw_Coll(Fighter_GObj* gobj);
 /* 0DC624 */ void fn_800DC624(HSD_GObj* gobj);
 
+#ifdef MSL_CORE_HOSTED
+/// Slippi PreventWobbling (runtime/wire.h MSL_WOBBLE_PREVENTION_*): reset the
+/// victim's count, and count a hit on a held victim; true when that hit
+/// broke the grab, so the victim does not enter CaptureDamage.
+void msl_wobble_count_init(Fighter* fp, int version);
+bool msl_wobble_check(Fighter_GObj* gobj);
+#endif
+
 #endif
