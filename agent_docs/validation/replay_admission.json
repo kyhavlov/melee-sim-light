@@ -117,6 +117,21 @@
       ]
     },
     {
+      "replay": "replays/validation/dk/Game_000000000000_20200304T201704.slpz",
+      "sha256_slp": "f142d976921dde2240b6c0f8b2fafbad09b072c23ac70aacce265ceb6f8d59c0",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ],
+      "evidence": "Slippi 3.3 console capture, kept as the recording behind the 3.3 post-frame record point. Without the flag a fighter's shield first differs at frame -33 (1,694 frames), then percent and action state from frame 213; with the lanes published from the end of Fighter_procMap all 5,773 frames are equal. No stage-bounds offscreen patch; 3.3 records the main stick's raw x only. tools/validation/validate_replay.py reads a recording with peppi_py's _read_slippi (0.8.6 in uv.lock), which fails on a Slippi 3.3 file (arrow2 StructArray 'must contain at least one field'), so the validator stops before admission; it was read here with an older peppi_py build. Measured with a Windows build and a replay driver comparing fighter gameplay lanes, the code-list flags set as this branch's own admission.py sets them; the C-stick and main-stick y bytes Slippi 3.3 does not record come from the driver's fixed reading of the processed sticks, not from a fit. Not run with tools/validation.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm",
+        "src/runtime/scalar.c::read_post_lanes",
+        "tools/validation/admission.py::slippi_patches",
+        "tools/validation/validate_replay.py"
+      ]
+    },
+    {
       "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
       "sha256_slp": "cb9371a757528237dafa85e9c37066eb36e2db0b327d914cda1d2703a73b15d9",
       "reasons": [

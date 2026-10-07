@@ -2077,6 +2077,90 @@ static void pack_fighter_state_flags(const Fighter* fp, uint8_t flags[5])
                ppc_state_bit(fp->x221F_b6, 6) | ppc_state_bit(fp->x221F_b7, 7);
 }
 
+// The MslCoreCompare lanes read from a Fighter, with the position the
+// caller supplies (the pre-render capture, or the fighter's own position at
+// an earlier record point).
+static void read_post_lanes(Fighter* fp, float pos_x, float pos_y,
+                            MslCorePostFrameLanes* lanes)
+{
+    float hitstun = fp->x221C_b6 ? fp->mv.co.damage.x0 : 0.0F;
+    int hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
+    int jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
+
+    lanes->pos_x = pos_x;
+    lanes->pos_y = pos_y;
+    lanes->self_vel_x = fp->self_vel.x;
+    lanes->gr_vel = fp->gr_vel;
+    lanes->self_vel_y = fp->self_vel.y;
+    lanes->kb_vel_x = fp->x8c_kb_vel.x;
+    lanes->kb_vel_y = fp->x8c_kb_vel.y;
+    lanes->percent = fp->dmg.x1830_percent;
+    lanes->shield = fp->shield_health;
+    lanes->motion_id = (uint16_t) fp->motion_id;
+    lanes->anim_frame = (uint16_t) state_age_i16(fp->cur_anim_frame);
+    lanes->hitlag = float_frames_u16(fp->dmg.x195c_hitlag_frames);
+    lanes->hitstun = float_frames_u16(hitstun);
+    lanes->ground_id = (uint16_t) fp->coll_data.floor.index;
+    lanes->instance_hit_by = fp->dmg.x18ec_instancehitby;
+    lanes->instance_id = fp->x2074.x2088;
+    lanes->anim_id = (uint32_t) fp->anim_id;
+    lanes->kind = fp->kind;
+    lanes->facing = fp->facing_dir > 0.0F;
+    lanes->on_ground = fp->ground_or_air == GA_Ground;
+    lanes->jumps_left = jumps_left > 0 ? (uint8_t) jumps_left : 0;
+    // Slippi's ExtendPlayerBlock/GetLCancelStatus patches own this byte.
+    // refs/slippi-ssbm-asm/Recording/{Recording.s,GetLCancelStatus/}
+    lanes->l_cancel = msl_slippi_lcancel_get(fp);
+    lanes->hurtbox = (uint8_t) hurtbox;
+    lanes->last_attack_landed = (uint8_t) fp->x208C;
+    lanes->combo_count = (uint8_t) fp->x2090;
+    lanes->last_hit_by = (uint8_t) fp->dmg.x18c4_source_ply;
+    pack_fighter_state_flags(fp, lanes->state_flags);
+}
+
+// Slippi 3.3 sends the post-frame event from the end of Fighter_procMap
+// (its injection at 0x8006C5D8), before the damage, shield and hit procs.
+// Fighter_procMap calls this for every fighter when the capture carried that
+// recorder (MSL_PATCH_POST_FRAME_AT_MAP); write_compare publishes the lanes.
+void msl_core_capture_post_frame_at_map(HSD_GObj* gobj)
+{
+    MslCoreMatch* match = msl_core_active_match();
+    Fighter* fp = GET_FIGHTER(gobj);
+    int i;
+
+    for (i = 0; i < match->config.num_players; ++i) {
+        int role = match->fighters[i] == gobj
+                       ? 0
+                       : (match->follower_fighters[i] == gobj ? 1 : -1);
+        if (role >= 0) {
+            MslCorePostFrameLanes* lanes = &match->post_frame_at_map[i][role];
+            read_post_lanes(fp, fp->cur_pos.x, fp->cur_pos.y, lanes);
+            // The match advances frame_id after the gameplay procs.
+            lanes->frame_id = match->frame_id + 1;
+            return;
+        }
+    }
+}
+
+// The lanes write_compare publishes for one fighter: its lanes at the
+// procMap record point when the capture's recorder sent from there and they
+// were taken this frame, else the fighter now.
+static void compare_lanes(const MslCoreMatch* match, int slot, int role,
+                          Fighter* fp, float pos_x, float pos_y,
+                          MslCorePostFrameLanes* lanes)
+{
+    const MslCorePostFrameLanes* at_map =
+        &match->post_frame_at_map[slot][role];
+
+    if ((match->config.slippi_patches & MSL_PATCH_POST_FRAME_AT_MAP) &&
+        at_map->frame_id == match->frame_id)
+    {
+        *lanes = *at_map;
+        return;
+    }
+    read_post_lanes(fp, pos_x, pos_y, lanes);
+}
+
 static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
                           MslCoreCompare* compare)
 {
@@ -2100,70 +2184,61 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
 
     for (i = 0; i < match->config.num_players; ++i) {
         Fighter* fp = GET_FIGHTER(match->fighters[i]);
+        MslCorePostFrameLanes lanes;
         uint8_t state_flags[5];
-        float hitstun = fp->x221C_b6 ? fp->mv.co.damage.x0 : 0.0F;
-        int hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
-        int jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
 
+        compare_lanes(match, i, 0, fp, match->output_pos_x[i],
+                      match->output_pos_y[i], &lanes);
         out[offsetof(MslCoreCompare, team_id) + i] = fp->team;
-        out[offsetof(MslCoreCompare, char_id) + i] = fp->kind;
-        put_player_f32(out, offsetof(MslCoreCompare, pos_x), i,
-                       match->output_pos_x[i]);
-        put_player_f32(out, offsetof(MslCoreCompare, pos_y), i,
-                       match->output_pos_y[i]);
+        out[offsetof(MslCoreCompare, char_id) + i] = lanes.kind;
+        put_player_f32(out, offsetof(MslCoreCompare, pos_x), i, lanes.pos_x);
+        put_player_f32(out, offsetof(MslCoreCompare, pos_y), i, lanes.pos_y);
         put_player_f32(out, offsetof(MslCoreCompare, speed_air_x_self), i,
-                       fp->self_vel.x);
+                       lanes.self_vel_x);
         put_player_f32(out, offsetof(MslCoreCompare, speed_ground_x_self), i,
-                       fp->gr_vel);
+                       lanes.gr_vel);
         put_player_f32(out, offsetof(MslCoreCompare, speed_y_self), i,
-                       fp->self_vel.y);
+                       lanes.self_vel_y);
         put_player_f32(out, offsetof(MslCoreCompare, speed_x_attack), i,
-                       fp->x8c_kb_vel.x);
+                       lanes.kb_vel_x);
         put_player_f32(out, offsetof(MslCoreCompare, speed_y_attack), i,
-                       fp->x8c_kb_vel.y);
-        out[offsetof(MslCoreCompare, facing) + i] = fp->facing_dir > 0.0F;
-        out[offsetof(MslCoreCompare, on_ground) + i] =
-            fp->ground_or_air == GA_Ground;
+                       lanes.kb_vel_y);
+        out[offsetof(MslCoreCompare, facing) + i] = lanes.facing;
+        out[offsetof(MslCoreCompare, on_ground) + i] = lanes.on_ground;
         // The existing MslCoreCompare contract uses this lane for eliminated
         // player slots, not the source Fighter's transient Dead motion flag.
         // Slippi-visible stock ownership remains Player_GetStocks.
         out[offsetof(MslCoreCompare, is_dead) + i] =
             Player_GetStocks(fp->player_id) == 0;
         put_player_u16(out, offsetof(MslCoreCompare, action_id), i,
-                       (uint16_t) fp->motion_id);
+                       lanes.motion_id);
         put_player_u16(out, offsetof(MslCoreCompare, action_frame), i,
-                       (uint16_t) state_age_i16(fp->cur_anim_frame));
-        out[offsetof(MslCoreCompare, jumps_left) + i] =
-            jumps_left > 0 ? (uint8_t) jumps_left : 0;
+                       lanes.anim_frame);
+        out[offsetof(MslCoreCompare, jumps_left) + i] = lanes.jumps_left;
         out[offsetof(MslCoreCompare, stocks) + i] =
             (uint8_t) Player_GetStocks(fp->player_id);
         put_player_f32(out, offsetof(MslCoreCompare, percent), i,
-                       fp->dmg.x1830_percent);
+                       lanes.percent);
         put_player_f32(out, offsetof(MslCoreCompare, shield_hp), i,
-                       fp->shield_health);
-        put_player_u16(out, offsetof(MslCoreCompare, hitlag), i,
-                       float_frames_u16(fp->dmg.x195c_hitlag_frames));
+                       lanes.shield);
+        put_player_u16(out, offsetof(MslCoreCompare, hitlag), i, lanes.hitlag);
         put_player_u16(out, offsetof(MslCoreCompare, hitstun), i,
-                       float_frames_u16(hitstun));
-        // Slippi's ExtendPlayerBlock/GetLCancelStatus patches own this byte.
-        // refs/slippi-ssbm-asm/Recording/{Recording.s,GetLCancelStatus/}
-        out[offsetof(MslCoreCompare, l_cancel) + i] =
-            msl_slippi_lcancel_get(fp);
-        out[offsetof(MslCoreCompare, hurtbox_state) + i] = (uint8_t) hurtbox;
+                       lanes.hitstun);
+        out[offsetof(MslCoreCompare, l_cancel) + i] = lanes.l_cancel;
+        out[offsetof(MslCoreCompare, hurtbox_state) + i] = lanes.hurtbox;
         put_player_u16(out, offsetof(MslCoreCompare, ground_id), i,
-                       (uint16_t) fp->coll_data.floor.index);
+                       lanes.ground_id);
         put_player_u32(out, offsetof(MslCoreCompare, animation_index), i,
-                       (uint32_t) fp->anim_id);
+                       lanes.anim_id);
         put_player_u16(out, offsetof(MslCoreCompare, instance_hit_by), i,
-                       fp->dmg.x18ec_instancehitby);
+                       lanes.instance_hit_by);
         put_player_u16(out, offsetof(MslCoreCompare, instance_id), i,
-                       fp->x2074.x2088);
+                       lanes.instance_id);
         out[offsetof(MslCoreCompare, last_attack_landed) + i] =
-            (uint8_t) fp->x208C;
-        out[offsetof(MslCoreCompare, combo_count) + i] = (uint8_t) fp->x2090;
-        out[offsetof(MslCoreCompare, last_hit_by) + i] =
-            (uint8_t) fp->dmg.x18c4_source_ply;
-        pack_fighter_state_flags(fp, state_flags);
+            lanes.last_attack_landed;
+        out[offsetof(MslCoreCompare, combo_count) + i] = lanes.combo_count;
+        out[offsetof(MslCoreCompare, last_hit_by) + i] = lanes.last_hit_by;
+        memcpy(state_flags, lanes.state_flags, sizeof(state_flags));
         state_flags[4] =
             (state_flags[4] & 0x7FU) |
             ppc_state_bit(match->output_render_visibility[i], 0);
@@ -2178,10 +2253,8 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
     // refs/melee/src/melee/ft/ftcolanim.c::ftCo_800BFD04
     for (i = 0; i < match->config.num_players; ++i) {
         Fighter* fp;
+        MslCorePostFrameLanes lanes;
         uint8_t state_flags[5];
-        float hitstun;
-        int hurtbox;
-        int jumps_left;
 
         if (match->follower_fighters[i] == NULL) {
             continue;
@@ -2190,66 +2263,62 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
         if (fp->x221F_b3) {
             continue;
         }
-        hitstun = fp->x221C_b6 ? fp->mv.co.damage.x0 : 0.0F;
-        hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
-        jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
+        compare_lanes(match, i, 1, fp, match->follower_output_pos_x[i],
+                      match->follower_output_pos_y[i], &lanes);
 
         out[offsetof(MslCoreCompare, follower_present) + i] = 1;
-        out[offsetof(MslCoreCompare, follower_char_id) + i] = fp->kind;
+        out[offsetof(MslCoreCompare, follower_char_id) + i] = lanes.kind;
         put_player_f32(out, offsetof(MslCoreCompare, follower_pos_x), i,
-                       match->follower_output_pos_x[i]);
+                       lanes.pos_x);
         put_player_f32(out, offsetof(MslCoreCompare, follower_pos_y), i,
-                       match->follower_output_pos_y[i]);
+                       lanes.pos_y);
         put_player_f32(out, offsetof(MslCoreCompare, follower_speed_air_x_self),
-                       i, fp->self_vel.x);
+                       i, lanes.self_vel_x);
         put_player_f32(out,
                        offsetof(MslCoreCompare, follower_speed_ground_x_self),
-                       i, fp->gr_vel);
+                       i, lanes.gr_vel);
         put_player_f32(out, offsetof(MslCoreCompare, follower_speed_y_self), i,
-                       fp->self_vel.y);
+                       lanes.self_vel_y);
         put_player_f32(out, offsetof(MslCoreCompare, follower_speed_x_attack),
-                       i, fp->x8c_kb_vel.x);
+                       i, lanes.kb_vel_x);
         put_player_f32(out, offsetof(MslCoreCompare, follower_speed_y_attack),
-                       i, fp->x8c_kb_vel.y);
-        out[offsetof(MslCoreCompare, follower_facing) + i] =
-            fp->facing_dir > 0.0F;
-        out[offsetof(MslCoreCompare, follower_on_ground) + i] =
-            fp->ground_or_air == GA_Ground;
+                       i, lanes.kb_vel_y);
+        out[offsetof(MslCoreCompare, follower_facing) + i] = lanes.facing;
+        out[offsetof(MslCoreCompare, follower_on_ground) + i] = lanes.on_ground;
         put_player_u16(out, offsetof(MslCoreCompare, follower_action_id), i,
-                       (uint16_t) fp->motion_id);
+                       lanes.motion_id);
         put_player_u16(out, offsetof(MslCoreCompare, follower_action_frame), i,
-                       (uint16_t) state_age_i16(fp->cur_anim_frame));
+                       lanes.anim_frame);
         out[offsetof(MslCoreCompare, follower_jumps_left) + i] =
-            jumps_left > 0 ? (uint8_t) jumps_left : 0;
+            lanes.jumps_left;
         out[offsetof(MslCoreCompare, follower_stocks) + i] =
             (uint8_t) Player_GetStocks(fp->player_id);
         put_player_f32(out, offsetof(MslCoreCompare, follower_percent), i,
-                       fp->dmg.x1830_percent);
+                       lanes.percent);
         put_player_f32(out, offsetof(MslCoreCompare, follower_shield_hp), i,
-                       fp->shield_health);
+                       lanes.shield);
         put_player_u16(out, offsetof(MslCoreCompare, follower_hitlag), i,
-                       float_frames_u16(fp->dmg.x195c_hitlag_frames));
+                       lanes.hitlag);
         put_player_u16(out, offsetof(MslCoreCompare, follower_hitstun), i,
-                       float_frames_u16(hitstun));
-        out[offsetof(MslCoreCompare, follower_l_cancel) + i] =
-            msl_slippi_lcancel_get(fp);
+                       lanes.hitstun);
+        out[offsetof(MslCoreCompare, follower_l_cancel) + i] = lanes.l_cancel;
         out[offsetof(MslCoreCompare, follower_hurtbox_state) + i] =
-            (uint8_t) hurtbox;
+            lanes.hurtbox;
         put_player_u16(out, offsetof(MslCoreCompare, follower_ground_id), i,
-                       (uint16_t) fp->coll_data.floor.index);
+                       lanes.ground_id);
         put_player_u32(out, offsetof(MslCoreCompare, follower_animation_index),
-                       i, (uint32_t) fp->anim_id);
+                       i, lanes.anim_id);
         put_player_u16(out, offsetof(MslCoreCompare, follower_instance_hit_by),
-                       i, fp->dmg.x18ec_instancehitby);
+                       i, lanes.instance_hit_by);
         put_player_u16(out, offsetof(MslCoreCompare, follower_instance_id), i,
-                       fp->x2074.x2088);
+                       lanes.instance_id);
         out[offsetof(MslCoreCompare, follower_last_attack_landed) + i] =
-            (uint8_t) fp->x208C;
+            lanes.last_attack_landed;
         out[offsetof(MslCoreCompare, follower_combo_count) + i] =
-            (uint8_t) fp->x2090;
+            lanes.combo_count;
         out[offsetof(MslCoreCompare, follower_last_hit_by) + i] =
-            (uint8_t) fp->dmg.x18c4_source_ply;
-        pack_fighter_state_flags(fp, state_flags);
+            lanes.last_hit_by;
+        memcpy(state_flags, lanes.state_flags, sizeof(state_flags));
         state_flags[4] =
             (state_flags[4] & 0x7FU) |
             ppc_state_bit(match->follower_output_render_visibility[i], 0);

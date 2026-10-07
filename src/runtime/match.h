@@ -54,6 +54,9 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
 bool msl_whispy_ignores_dead_fighters(void);
 bool msl_core_uses_online_fnmsubs_zero(void);
 bool msl_core_has_brawl_offscreen_damage(void);
+// MSL_PATCH_POST_FRAME_AT_MAP: record this fighter's post-frame lanes at the
+// end of Fighter_procMap.
+void msl_core_capture_post_frame_at_map(HSD_GObj* gobj);
 bool msl_core_freezes_dead_up_fall_physics(void);
 void msl_core_advance_match_frame(void);
 void msl_core_apply_team_stock_steal(void);
@@ -70,5 +73,8 @@ bool msl_ucf_shield_sdi_check(const Fighter* fp);
 bool msl_ucf_suppress_spotdodge(const Fighter* fp);
 bool msl_ucf_pass_oos_stick_check(const Fighter* fp);
 float msl_ucf_squatrv_threshold(const Fighter* fp, float vanilla_threshold);
+
+// Whether the active match's capture carried an MSL_PATCH_* patch.
+bool msl_slippi_patch(int patch);
 
 #endif

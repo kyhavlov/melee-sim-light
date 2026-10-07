@@ -141,8 +141,23 @@ typedef struct MslCoreMatchConfig {
     uint8_t stage_event_streams;
     // Online/Core/WhispyBlowDirFix excludes death animations from the vote.
     uint8_t whispy_dead_fighter_fix;
+    // Other single-instruction Slippi patches the capture's list carries
+    // (MSL_PATCH_*).
+    uint8_t slippi_patches;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
+
+enum {
+    // External/Frozen All/Core/2.asm: a nop in place of Final Destination's
+    // background think (the bl at 0x8021AAE4), so the background never
+    // transforms and never draws random numbers.
+    MSL_PATCH_FD_BACKGROUND_FROZEN = 1 << 0,
+    // Slippi 3.3's recorder sends the post-frame event from the end of
+    // Fighter_procMap (its injection at 0x8006C5D8), before the damage,
+    // shield and hit procs run; later versions send it at 0x8006DA34. The
+    // recorded post-frame lanes are the fighter as it stood at that point.
+    MSL_PATCH_POST_FRAME_AT_MAP = 1 << 1,
+};
 
 // Native validation workers keep immutable GameData alive across jobs. The
 // frame count gives each job an explicit boundary without closing the stream;
@@ -352,9 +367,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 63,
+_Static_assert(sizeof(MslCoreMatchConfig) == 64,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 119,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 120,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");

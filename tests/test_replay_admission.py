@@ -166,3 +166,21 @@ def test_supported_rule_values_do_not_become_capture_bans(properties_only):
         player["stocks"] = 3
         player["handicap"] = 8
     assert "unsupported-settings" not in admission.capture_issues(game, raw)
+
+
+def test_frozen_fd_background_is_the_nop_at_its_think():
+    nop = bytes.fromhex("0421aae460000000")
+    assert admission.slippi_patches({0x0421AAE4: nop}) == \
+        admission.PATCH_FD_BACKGROUND_FROZEN
+    assert admission.slippi_patches(
+        {0x0421AAE4: bytes.fromhex("0421aae448000001")}) == 0
+    assert admission.slippi_patches({}) == 0
+
+
+def test_slippi_3_3_post_frame_record_point_is_read_from_the_list():
+    # 3.3 sends the post-frame event from the end of Fighter_procMap
+    # (0x8006C5D8); later versions send it at 0x8006DA34.
+    assert admission.slippi_patches({0xC206C5D8: b""}) == \
+        admission.PATCH_POST_FRAME_AT_MAP
+    assert admission.slippi_patches({0xC206DA34: b""}) & \
+        admission.PATCH_POST_FRAME_AT_MAP == 0
