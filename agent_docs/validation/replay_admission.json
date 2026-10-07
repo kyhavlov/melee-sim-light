@@ -173,6 +173,20 @@
       ]
     },
     {
+      "replay": "replays/validation/icies/collision2024_ICs_v_DK_FD.slpz",
+      "sha256_slp": "844e8a7c449eef81ba0369552aa45eb4f7a256c4d181983fd4f992bf53c93883",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ],
+      "evidence": "Console capture without the stage-bounds offscreen patch, kept as the recording behind the vanilla magnifier leader-bit fix. Before the fix a fighter's percent first differs at frame 2369 (731 frames), then positions; with the bit published for each port's leader only, all 7,571 frames are equal. Slippi 3.15 records no raw C-stick bytes. Measured with a Windows build and a replay driver comparing fighter and item gameplay lanes with the recording's own code list; the C-stick bytes this Slippi version does not record come from the driver's fixed reading of the processed C-stick, not from a fit. Not run with tools/validation.",
+      "sources": [
+        "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
+        "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+        "src/runtime/camera.c::msl_camera_publish_match_visibility"
+      ]
+    },
+    {
       "replay": "replays/validation/icies/master-diamond-e1f45bc846c8b64f90b35a94.slpz",
       "sha256_slp": "1b1c2cadac531ee28ebb38c12272d8c9160dde1feab15285704d199d02b1e6c4",
       "reasons": [

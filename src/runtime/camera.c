@@ -425,7 +425,10 @@ void msl_camera_publish_match_visibility(Fighter_GObj* const* fighters,
         // a new one.
         // refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC618
         // refs/melee/src/melee/ft/fighter.c::Fighter_80068E64
-        if (fp->player_id >= 0 && fp->player_id < 6) {
+        // It asks Player_GetEntity(slot) - the port's leader - so an Ice
+        // Climbers port publishes Popo's bit and never Nana's; she shares
+        // Popo's slot and would otherwise overwrite it every frame.
+        if (fp->player_id >= 0 && fp->player_id < 6 && !fp->x221F_b4) {
             msl_vanilla_magnify_offscreen[fp->player_id] =
                 fp->x221F_b0 && ftLib_80086ED0(gobj);
         }
