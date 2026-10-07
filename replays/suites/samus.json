@@ -278,6 +278,19 @@
         "1": "Fox",
         "2": "Samus"
       }
+    },
+    {
+      "replay": "replays/validation/samus/platinum-platinum-2e8c697ee6810b51ee334625.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Samus",
+        "2": "Link"
+      },
+      "played_on": "network"
     }
   ]
 }

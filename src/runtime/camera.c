@@ -343,8 +343,52 @@ static void headless_camera_build_view(Mtx view, Vec3* eye, float* fov,
                      (eye->x * look.x + eye->y * look.y));
 }
 
+static void headless_camera_project(const Mtx view, float fov,
+                                    const Vec3* point, float* out_x,
+                                    float* out_y);
+
 static bool headless_camera_point_on_screen(const Mtx view, float fov,
                                             const Vec3* point)
+{
+    float screen_x;
+    float screen_y;
+    int pixel_x;
+    int pixel_y;
+
+    headless_camera_project(view, fov, point, &screen_x, &screen_y);
+    pixel_x = (int) screen_x;
+    pixel_y = (int) screen_y;
+    return pixel_x >= 0 && pixel_x < 640 && pixel_y >= 0 && pixel_y < 480;
+}
+
+// grStadium_801D32D0: the jumbotron's close-up keeps going while a 124x80
+// box centred on the followed fighter's camera point fits inside the
+// gameplay camera's 640x480 viewport.
+// refs/melee/src/melee/gr/grpstadium.c::grStadium_801D32D0
+bool msl_camera_stadium_closeup_fits(const Vec3* point)
+{
+    Mtx view;
+    Vec3 eye;
+    float fov;
+    float x;
+    float y;
+
+    headless_camera_build_view(view, &eye, &fov, false);
+    headless_camera_project(view, fov, point, &x, &y);
+    x -= 62.0F;
+    if (x < 0.0F || x + 124.0F > 640.0F) {
+        return false;
+    }
+    y -= 40.0F;
+    if (y < 0.0F || y + 80.0F > 480.0F) {
+        return false;
+    }
+    return true;
+}
+
+static void headless_camera_project(const Mtx view, float fov,
+                                    const Vec3* point, float* out_x,
+                                    float* out_y)
 {
     Vec3 projected_point;
     Vec3 eye_point;
@@ -394,11 +438,8 @@ static bool headless_camera_point_on_screen(const Mtx view, float fov,
     clip_x = eye_point.x * (cotangent / 1.2173333F);
     clip_y = eye_point.y * cotangent;
     reciprocal_w = 1.0F / -eye_point.z;
-    screen_x = 320.0F + (reciprocal_w * (clip_x * 320.0F));
-    screen_y = 240.0F + (reciprocal_w * (-clip_y * 240.0F));
-    pixel_x = (int) screen_x;
-    pixel_y = (int) screen_y;
-    return pixel_x >= 0 && pixel_x < 640 && pixel_y >= 0 && pixel_y < 480;
+    *out_x = 320.0F + (reciprocal_w * (clip_x * 320.0F));
+    *out_y = 240.0F + (reciprocal_w * (-clip_y * 240.0F));
 }
 
 void msl_camera_publish_match_visibility(Fighter_GObj* const* fighters,
