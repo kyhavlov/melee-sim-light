@@ -36,6 +36,20 @@ void lbArchive_InitializeDAT(HSD_Archive* archive, void* data, size_t length)
 }
 #pragma pop
 
+// GameData preload publishes most symbol tables; a later Match reloading one
+// finds it equal and writes nothing, because Matches stepped on other
+// threads read it meanwhile.
+static inline void* msl_archive_publish_symbol(void** symbol,
+                                               HSD_Archive* archive,
+                                               const char* symbol_name)
+{
+    void* address = HSD_ArchiveGetPublicAddress(archive, symbol_name);
+    if (*symbol != address) {
+        *symbol = address;
+    }
+    return address;
+}
+
 void lbArchive_LoadSections(HSD_Archive* archive, void** symbol, ...)
 {
     const char* symbol_name;
@@ -44,9 +58,7 @@ void lbArchive_LoadSections(HSD_Archive* archive, void** symbol, ...)
     va_start(symbols, symbol);
     for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
-        *symbol = NULL;
-        *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);
-        if (*symbol == NULL) {
+        if (msl_archive_publish_symbol(symbol, archive, symbol_name) == NULL) {
             OSReport("Cannot find symbol %s.\n", symbol_name);
         }
     }
@@ -87,9 +99,7 @@ static inline void lbArchive_vLoadSectionsFatal(HSD_Archive* archive,
 
     for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
-        *symbol = NULL;
-        *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);
-        if (*symbol == NULL) {
+        if (msl_archive_publish_symbol(symbol, archive, symbol_name) == NULL) {
             OSReport("Cannot find symbol %s.\n", symbol_name);
             HSD_ASSERT(112, 0);
         }
@@ -103,9 +113,7 @@ static inline void lbArchive_vLoadSections(HSD_Archive* archive, void** symbol,
 
     for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
-        *symbol = NULL;
-        *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);
-        if (*symbol == NULL) {
+        if (msl_archive_publish_symbol(symbol, archive, symbol_name) == NULL) {
             OSReport("Cannot find symbol %s.\n", symbol_name);
         }
     }
