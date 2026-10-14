@@ -218,6 +218,32 @@
         "1": "Sheik",
         "2": "Bowser"
       }
+    },
+    {
+      "replay": "replays/validation/bowser/diamond-platinum-540a552e00244ab564885561.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Bowser"
+      },
+      "played_on": "network"
+    },
+    {
+      "replay": "replays/validation/bowser/master-platinum-fc8b52d1589bdae714c2901c.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Fox",
+        "2": "Bowser"
+      },
+      "played_on": "network"
     }
   ]
 }
