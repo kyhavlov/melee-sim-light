@@ -397,7 +397,12 @@ static void msl_effect_release(MslCoreEffectQueueNode* node)
 static void msl_effect_consume_generator_rng(s32 generator_id)
 {
     int bank = generator_id / 1000;
-    int index = generator_id - bank * 1000;
+    // hsd_8039EFAC(linkNo, bank, id) indexes ptclref[bank] by the full
+    // generator id (Mario's fireball: bank 1, 0x3E9), and a version-0x4x bank
+    // lists [id_base, count) at those ids. The id modulo 1000 is below
+    // id_base for every such bank and found nothing.
+    // refs/melee/src/sysdolphin/baselib/generator.c::hsd_8039F05C
+    int index = generator_id;
 
     if (bank < 0 || bank >= (int) (sizeof(msl_effect_banks) /
                                    sizeof(msl_effect_banks[0])))
