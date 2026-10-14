@@ -377,6 +377,19 @@
     "2": "Ice Climbers"
    },
    "played_on": "network"
+  },
+    {
+   "replay": "replays/validation/icies/diamond-platinum-d7e5ba443ed6f176c1880a44.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 3,
+   "characters": {
+    "1": "Falco",
+    "2": "Ice Climbers"
+   },
+   "played_on": "network"
   }
   ]
 }
