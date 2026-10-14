@@ -10,7 +10,7 @@ _SIZES = {
     "controller_input": 112,
     "input": 32,
     "match_config": 52,
-    "gamestate": 1208,
+    "gamestate": 1288,
     "terminal": 16,
 }
 
@@ -216,6 +216,20 @@ def gamestate_stage_dtype() -> np.dtype:
 
 
 @lru_cache(maxsize=1)
+def gamestate_recorded_dtype() -> np.dtype:
+    return np.dtype(
+        [
+            ("state_flags", "u1", (5,)),
+            ("l_cancel", "u1"),
+            ("ground_id", "<u2"),
+            ("last_attack_landed", "u1"),
+            ("_pad0", "u1"),
+        ],
+        align=False,
+    )
+
+
+@lru_cache(maxsize=1)
 def gamestate_dtype() -> np.dtype:
     dtype = np.dtype(
         [
@@ -230,6 +244,8 @@ def gamestate_dtype() -> np.dtype:
             ("slots", gamestate_player_dtype(), (MAX_PLAYERS,)),
             ("items", item_dtype(), (15,)),
             ("followers", gamestate_player_dtype(), (MAX_PLAYERS,)),
+            ("recorded", gamestate_recorded_dtype(), (MAX_PLAYERS,)),
+            ("follower_recorded", gamestate_recorded_dtype(), (MAX_PLAYERS,)),
         ],
         align=False,
     )
