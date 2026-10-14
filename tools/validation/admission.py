@@ -80,6 +80,7 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
 
 # wire.h MSL_PATCH_*.
 PATCH_FD_BACKGROUND_FROZEN = 1 << 0
+PATCH_PREVENT_WOBBLING = 1 << 1
 
 
 def slippi_patches(codes: dict[int, bytes]) -> int:
@@ -87,6 +88,8 @@ def slippi_patches(codes: dict[int, bytes]) -> int:
     patches = 0
     if codes.get(0x0421AAE4, b"")[4:8] == bytes.fromhex("60000000"):
         patches |= PATCH_FD_BACKGROUND_FROZEN
+    if all(a in codes for a in (0xC208F090, 0xC20DB880, 0xC20DBBD4)):
+        patches |= PATCH_PREVENT_WOBBLING
     return patches
 
 

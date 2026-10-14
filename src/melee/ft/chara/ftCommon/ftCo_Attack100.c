@@ -37,6 +37,13 @@
 #include <MetroTRK/intrinsics.h>
 #endif
 #include <baselib/gobj.h>
+#ifdef MSL_CORE_HOSTED
+#include "gm/gm_16AE.h"
+#include "it/types.h"
+#include "pl/player.h"
+#include "runtime/match.h"
+#include "runtime/wire.h"
+#endif
 #include <baselib/jobj.h>
 #include <baselib/random.h>
 #include <melee/cm/camera.h>
@@ -2801,6 +2808,12 @@ void fn_800DB790(Fighter_GObj* gobj)
     }
 
     ftCommon_8007E2F4(fp, 0x1FF);
+#ifdef MSL_CORE_HOSTED
+    // Init Wobble Count Air/Ground.asm at this epilogue (0x800DB880, 0x800DBBD4).
+    if (msl_slippi_patch(MSL_PATCH_PREVENT_WOBBLING)) {
+        msl_wobble_count_init(fp);
+    }
+#endif
 }
 
 #pragma push
@@ -2917,6 +2930,12 @@ void fn_800DBAE4(Fighter_GObj* gobj)
     }
 
     ftCommon_8007E2F4(fp, 0x1FF);
+#ifdef MSL_CORE_HOSTED
+    // Init Wobble Count Air/Ground.asm at this epilogue (0x800DB880, 0x800DBBD4).
+    if (msl_slippi_patch(MSL_PATCH_PREVENT_WOBBLING)) {
+        msl_wobble_count_init(fp);
+    }
+#endif
 }
 
 static inline void fn_800DBBF8_noinline(Fighter_GObj* gobj1, Fighter* gobj2)
@@ -3242,3 +3261,102 @@ void fn_800DC624(HSD_GObj* gobj)
     PAD_STACK(4);
     fn_800DC624_inline(gobj);
 }
+
+#ifdef MSL_CORE_HOSTED
+// Slippi's PreventWobbling, from the code bytes the capture carries: the count
+// and the last move id live on the held victim at fp+0x2384 and fp+0x2386.
+// refs/slippi-ssbm-asm/External/PreventWobbling/{Wobble Check.asm,
+// Init Wobble Count Air.asm, Init Wobble Count Ground.asm}
+static u8* msl_wobble_count(Fighter* fp)
+{
+    return &fp->mv._[0x44];
+}
+
+static u16* msl_wobble_last_move(Fighter* fp)
+{
+    return (u16*) &fp->mv._[0x46];
+}
+
+void msl_wobble_count_init(Fighter* fp)
+{
+    *msl_wobble_count(fp) = 0;
+    *msl_wobble_last_move(fp) = 0xFFFF;
+}
+
+// Runs on a held victim's hit, after ftCo_800C8D00 and before the victim's
+// CaptureDamage entry (the injection at 0x8008F090 in ftCo_8008EC90).
+bool msl_wobble_check(Fighter_GObj* gobj)
+{
+    Fighter* fp = GET_FIGHTER(gobj);
+    Fighter_GObj* grabber_gobj;
+    Fighter* grabber;
+    HSD_GObj* source;
+    u16 move;
+    u16 last;
+    u8 count;
+
+    if (!msl_slippi_patch(MSL_PATCH_PREVENT_WOBBLING) ||
+        fp->motion_id < ftCo_MS_CapturePulledHi ||
+        fp->motion_id > ftCo_MS_CaptureDamageLw || fp->victim_gobj == NULL)
+    {
+        return false;
+    }
+    grabber_gobj = fp->victim_gobj;
+    grabber = GET_FIGHTER(grabber_gobj);
+    // fp+0x2222 & 0x04: the grabber leads a follower (Popo).
+    if (!grabber->x2222_b5) {
+        return false;
+    }
+    // The follower's damage records the grabber's gobj as its source.
+    source = fp->dmg.x1868_source;
+    last = *msl_wobble_last_move(fp);
+    if (source == grabber_gobj) {
+        move = grabber->x2074.x2088;
+    } else {
+        Item* item;
+        // A hit with no recorded source reads the halfword at address 0,
+        // which the console maps to the start of RAM, not the item class.
+        if (source == NULL || source->classifier != HSD_GOBJ_CLASS_ITEM) {
+            return false;
+        }
+        item = GET_ITEM(source);
+        if (item->owner != grabber_gobj) {
+            return false;
+        }
+        move = item->xDA8_short;
+    }
+    if (move == last) {
+        return false;
+    }
+    *msl_wobble_last_move(fp) = move;
+    count = (u8) (*msl_wobble_count(fp) + 1);
+    *msl_wobble_count(fp) = count;
+    if (gm_8016B168() || count <= 3) {
+        return false;
+    }
+    ftCo_800DA698(grabber_gobj, last != 0);
+    {
+        HSD_GObj* nana_gobj =
+            Player_GetEntityAtIndex(grabber->player_id, 1);
+        Fighter* nana;
+        if (nana_gobj == NULL) {
+            return true;
+        }
+        nana = GET_FIGHTER(nana_gobj);
+        if (nana->x221F_b1 || nana->x2219_b5 || nana->x2070.x2071_b0_3 == 13) {
+            return true;
+        }
+        if (nana->ground_or_air == GA_Ground) {
+            ftCo_800DA698(nana_gobj, false);
+        } else {
+            ftCommon_8007D5D4(nana);
+            nana->self_vel.x = p_ftCommonData->x374 * -nana->facing_dir;
+            nana->self_vel.y = p_ftCommonData->x378;
+            nana->mv.ca.specials.grav = 0.0F;
+            Fighter_ChangeMotionState(nana_gobj, ftCo_MS_CaptureJump, 0, 0.0F,
+                                      1.0F, 0.0F, NULL);
+        }
+    }
+    return true;
+}
+#endif

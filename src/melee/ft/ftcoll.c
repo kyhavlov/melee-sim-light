@@ -2770,6 +2770,13 @@ void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
     out->source = best_entry->gobj;
     out->damage = best_entry->x20;
     out->sfx_severity = sfx_severity;
+    if (dmg_ptr == &fp->dmg.facing_dir_1) {
+        // PPC fp+0x1868 is the packed overlay's source; hosted x1868_source is
+        // at +0x28. Publish both words where Fighter declares them.
+        f32 damage = best_entry->x20;
+        fp->dmg.x1868_source = best_entry->gobj;
+        memcpy(&fp->dmg.x186c, &damage, sizeof(damage));
+    }
 
     switch (best_entry->x0) {
     case 1: {
