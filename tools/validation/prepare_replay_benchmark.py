@@ -22,9 +22,9 @@ from tools.validation.admission import gecko_codes, require_admissible, slippi_p
 from tools.validation.slpz import replay_path_for_peppi
 
 
-FORMAT_VERSION = 4
+FORMAT_VERSION = 5
 # Export semantics can change without changing the tape layout.
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
 DEFAULT_OUTPUT = ROOT / "build/melee_core/benchmark/cases.tsv"
 
@@ -49,6 +49,8 @@ def _cache_key(case: ReplayCase) -> str:
     )
     if case.fnmsubs_profile is not None:
         identity += "\0fnmsubs=" + case.fnmsubs_profile
+    if case.jit_arithmetic is not None:
+        identity += "\0jit=" + case.jit_arithmetic
     return hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
@@ -60,7 +62,7 @@ def _cached_frame_count(path: Path) -> int | None:
     except (OSError, struct.error):
         return None
     if (
-        magic != b"MSLRPB04"
+        magic != b"MSLRPB05"
         or version != FORMAT_VERSION
         or header_size < 24
         or input_size != 52
@@ -91,7 +93,8 @@ def prepare(args: argparse.Namespace) -> None:
         with replay_path_for_peppi(case.replay) as peppi_path:
             game = _read_slippi(str(peppi_path), False)
             require_admissible(game, peppi_path, played_on=case.played_on,
-                               fnmsubs_profile=case.fnmsubs_profile)
+                               fnmsubs_profile=case.fnmsubs_profile,
+                               jit_arithmetic=case.jit_arithmetic)
             if any(player["type"] == "Cpu" for player in game.start["players"]):
                 print(f"skipping CPU recording (controller-only benchmark): {case.display_path}")
                 skipped_cpu += 1
@@ -114,6 +117,7 @@ def prepare(args: argparse.Namespace) -> None:
                         ucf_shield_drop_084_enabled=case.ucf_shield_drop_084_enabled,
                         fnmsubs_profile=case.fnmsubs_profile,
                         slippi_patches=slippi_patches(gecko_codes(peppi_path.read_bytes())),
+                        jit_arithmetic=1 if case.jit_arithmetic == "no-host-fma" else 0,
                     )
                     os.replace(temporary, case_path)
                 finally:

@@ -7698,9 +7698,9 @@ void ftCo_800B0AF4(Fighter* fp)
             // 800B0C34: fmul rounds 0.05*recorded once, then a single fmadd
             // fuses 0.95*cur with that product before frsp. Two rounded
             // products plus an add drifts 1 ulp against retail.
-            fp->cur_pos.x = (f32) __builtin_fma(
+            fp->cur_pos.x = (f32) msl_ppc_fma(
                 0.95, (f64) fp->cur_pos.x, 0.05 * (f64) data->x448->cur_pos.x);
-            fp->cur_pos.y = (f32) __builtin_fma(
+            fp->cur_pos.y = (f32) msl_ppc_fma(
                 0.95, (f64) fp->cur_pos.y, 0.05 * (f64) data->x448->cur_pos.y);
             if (fp->motion_id != ftPp_MS_SpecialLw &&
                 fp->motion_id != ftPp_MS_SpecialAirLw)

@@ -88,8 +88,8 @@ u32 it_802C4D10(Item_GObj* gobj)
             rand = HSD_Randf();
             // GALE01 0x802C4DB8: double fmadd, then frsp.
             ip->xDD4_itemVar.mewtwoshadowball.x3C =
-                (f32) __builtin_fma(M_PI / 4, 2.0f * (rand - 0.5f),
-                                   ip->xDD4_itemVar.mewtwoshadowball.x3C);
+                (f32) msl_ppc_fma(M_PI / 4, 2.0f * (rand - 0.5f),
+                                  ip->xDD4_itemVar.mewtwoshadowball.x3C);
             ip->xDD4_itemVar.mewtwoshadowball.x44 =
                 -ip->xDD4_itemVar.mewtwoshadowball.x40 / (0.5f * attr->x20);
             Item_8026AF0C(ip, it_803F7880[HSD_Randi(3)], 127, 64);

@@ -121,6 +121,19 @@
         "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
       ],
       "evidence_limit": "The prior writer investigation establishes exact-cancellation zero-sign behavior and, for doubles, its DI consequence. This infers the supported instruction semantics, not the unavailable historical build. Full native/PPC profile verification is required independently."
+    },
+    {
+      "source": "public anonymized ranked set: ranked_anonymized_6/master-diamond-52318ed052aa47b823e4d641.slpz",
+      "replay": "replays/validation/icies/master-diamond-52318ed052aa47b823e4d641.slpz",
+      "sha256_slp": "74cfea696c1612561f0231e1a4af4d7aa85c7cce8b6e86f724cf3ed2cf8591cc",
+      "jit_arithmetic": "no-host-fma",
+      "profile_evidence": "Strict full-game arithmetic differential on a Slippi 3.17 ranked capture; the recording host is unknown. With fused double-precision sites (a host with FMA3) Nana's x first differs in its last bits at frame 209; with no-host-fma every frame is equal. Three more public 3.17 ranked captures on frozen Stadium behave the same way (master-master-0f04ca1bf0d9309028a4e92f, platinum-platinum-256e268c3fa54fd2d68ac021, platinum-platinum-78d2d3d1e310e161dab4bea8). No first-writer trace yet. Measured with a Windows build and a replay driver comparing fighters', Nana's and items' gameplay lanes, not with tools/validation.",
+      "profile_differential": {
+        "transitions": 13691,
+        "fma_first_mismatch": 209,
+        "fma_mismatched_frames": 770,
+        "no_host_fma_mismatched_frames": 0
+      }
     }
   ]
 }
