@@ -24,7 +24,7 @@ from tools.validation.slpz import replay_path_for_peppi
 
 FORMAT_VERSION = 4
 # Export semantics can change without changing the tape layout.
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
 DEFAULT_OUTPUT = ROOT / "build/melee_core/benchmark/cases.tsv"
 

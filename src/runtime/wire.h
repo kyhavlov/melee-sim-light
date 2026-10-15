@@ -149,6 +149,8 @@ typedef struct MslCoreMatchConfig {
 enum {
     // External/Frozen All/Core/2.asm: nop the call at 0x8021AAE4.
     MSL_PATCH_FD_BACKGROUND_FROZEN = 1 << 0,
+    // No External/NeutralSpawn (0x8016E510): each port at its own spawn point.
+    MSL_PATCH_RETAIL_SPAWNS = 1 << 2,
 };
 
 // Native validation workers keep immutable GameData alive across jobs. The
