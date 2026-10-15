@@ -117,6 +117,19 @@
       ]
     },
     {
+      "replay": "replays/validation/dk/diamond-diamond-33b572328d41bb20873121a4.slpz",
+      "sha256_slp": "35f1b56d4f24a1423c121cdaac3d89b152ebd2c34cd637bf1af17b3c82baf21e",
+      "reasons": [
+        "missing-recorded-inputs"
+      ],
+      "evidence": "UCF 0.8 online capture, kept as the recording behind UCF 0.8's missing SquatRv fix. Without it Captain Falcon is recorded in SquatRv at frame 395 but simulated in SquatWait, then facing and position differ to the end; with it all 8,870 frames are equal. Slippi 3.14 records no raw C-stick bytes. Measured with a Windows build and a replay driver comparing fighter and item gameplay lanes with the recording's own code list; the C-stick bytes this Slippi version does not record come from the driver's fixed reading of the processed C-stick, not from a fit. Not run with tools/validation.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm",
+        "src/runtime/match.c::msl_ucf_apply_dashback",
+        "src/runtime/match.c::msl_ucf_squatrv_threshold"
+      ]
+    },
+    {
       "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
       "sha256_slp": "cb9371a757528237dafa85e9c37066eb36e2db0b327d914cda1d2703a73b15d9",
       "reasons": [
@@ -170,6 +183,18 @@
         "refs/slippi-ssbm-asm/Recording/GetLCancelStatus/ResetLCancelStatus.asm",
         "src/platform/slippi.c::msl_slippi_lcancel_get",
         "https://github.com/kyhavlov/melee-sim-light/blob/8d049aba187a38b7ace9961ba2eaf3c03f5487ee/agent_docs/CORRECTNESS_COMPLETION_2026-09-08.md"
+      ]
+    },
+    {
+      "replay": "replays/validation/icies/master-diamond-bf25cf805e23959b754c2c71.slpz",
+      "sha256_slp": "bf132d3abe79a7ee58781a520382fd1023af7459a9f5edcebacd6bf1a2174b87",
+      "reasons": [
+        "missing-recorded-inputs"
+      ],
+      "evidence": "UCF 0.8 online capture (Slippi 3.15, Battlefield, Sheik vs Ice Climbers), kept as the recording behind UCF 0.8's magnitude dashback. Without it the Ice Climbers port's facing first differs at frame 9229, where the leader turns back with the stick against the facing direction (a dashback under 0.8's |stick x| test, a tilt turn under 0.84's); with it all 12,376 frames are equal. Slippi 3.15 records no raw C-stick bytes. Measured with a Windows build and a replay driver comparing fighter and item gameplay lanes with the recording's own code list; the C-stick bytes this Slippi version does not record come from the driver's fixed reading of the processed C-stick, not from a fit (one drive). Not run with tools/validation.",
+      "sources": [
+        "refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF DB.asm",
+        "src/runtime/match.c::msl_ucf_apply_dashback"
       ]
     },
     {
