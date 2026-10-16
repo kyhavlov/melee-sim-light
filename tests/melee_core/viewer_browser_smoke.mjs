@@ -204,6 +204,49 @@ if (production) {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
+if (production && result.startsWith("PASS|")) {
+  // The hitbox overlay is off by default; the live checkbox must reveal the
+  // fighter's live hit capsules once an attack is out.
+  await call("Runtime.evaluate", {
+    expression: `window.dispatchEvent(new KeyboardEvent("keydown", { key: "x", bubbles: true }))`,
+  });
+  const hitboxDeadline = Date.now() + 4000;
+  let enabled = false;
+  result = "FAIL|hitbox toggle did not render";
+  while (Date.now() < hitboxDeadline) {
+    const response = await call("Runtime.evaluate", {
+      expression: `(() => {
+        const viewer = document.querySelector("slippi-viewer");
+        const root = viewer.shadowRoot || viewer;
+        const frame = window.__mslViewerReplayData?.frames?.[window.__mslViewerFrameCount];
+        return JSON.stringify({
+          live: (frame?.players?.[0]?.state?.hitboxes?.length ?? 0) > 0,
+          drawn: root.querySelectorAll('circle[stroke="#b91c1c"]').length,
+          enabled: viewer.getShowHitboxes(),
+        });
+      })()`,
+      returnByValue: true,
+    });
+    const state = JSON.parse(response.result?.result?.value || "{}");
+    if (!enabled && state.live) {
+      if (state.enabled || state.drawn !== 0) {
+        result = "FAIL|hitboxes were visible by default";
+        break;
+      }
+      enabled = true;
+      await call("Runtime.evaluate", {
+        expression: `document.querySelector("#show-hitboxes").click()`,
+      });
+    } else if (enabled && state.enabled && state.drawn > 0) {
+      result = "PASS|production viewer hitbox toggle";
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  await call("Runtime.evaluate", {
+    expression: `window.dispatchEvent(new KeyboardEvent("keyup", { key: "x", bubbles: true }))`,
+  });
+}
 socket.close();
 signalChromeGroup("SIGTERM");
 await Promise.race([

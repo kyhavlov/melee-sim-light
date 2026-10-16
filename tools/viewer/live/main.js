@@ -16,6 +16,8 @@ const statusEl = document.querySelector("#status");
 const inputStatusEl = document.querySelector("#input-status");
 const resetButton = document.querySelector("#reset");
 const saveTraceButton = document.querySelector("#save-trace");
+const showHitboxesInput = document.querySelector("#show-hitboxes");
+const HITBOX_PREF_KEY = "msl-viewer-show-hitboxes";
 const connectAdapterButton = document.querySelector("#connect-adapter");
 const adapterPortSelect = document.querySelector("#adapter-port");
 const controlP1Button = document.querySelector("#control-p1");
@@ -389,6 +391,28 @@ async function main() {
   installCharacterSelect(p2CharacterSelect, 1);
   installStageSelector();
   resetButton.addEventListener("click", reset);
+  if (showHitboxesInput) {
+    let stored = false;
+    try {
+      stored = window.localStorage.getItem(HITBOX_PREF_KEY) === "1";
+    } catch (_error) {
+      stored = false;
+    }
+    showHitboxesInput.checked = stored;
+    if (typeof viewer?.setShowHitboxes === "function") {
+      viewer.setShowHitboxes(stored);
+    }
+    showHitboxesInput.addEventListener("change", () => {
+      if (typeof viewer?.setShowHitboxes === "function") {
+        viewer.setShowHitboxes(showHitboxesInput.checked);
+      }
+      try {
+        window.localStorage.setItem(HITBOX_PREF_KEY, showHitboxesInput.checked ? "1" : "0");
+      } catch (_error) {
+        // Preference storage is optional.
+      }
+    });
+  }
   saveTraceButton.addEventListener("click", () => {
     try {
       const traceName = window.prompt("Trace name", `live_f${frameCount}`);
