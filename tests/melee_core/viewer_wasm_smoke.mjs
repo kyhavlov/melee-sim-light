@@ -135,6 +135,30 @@ try {
   }
   assert(hitShyGuy, "live viewer never damaged Yoshi's Shy Guy");
 
+  // A hard shield is opaque; a light shield is larger and fainter. Analog-only
+  // shielding exercises the source light-shield amount rather than the button.
+  const shieldFor = (l, buttons) => {
+    reset({ p1Char: CHAR_FOX });
+    let state;
+    for (let index = 0; index < 12; index += 1) {
+      state = step(controllers({ ...neutral(), l, buttons })).players[0].state;
+    }
+    assert(state.isShieldActive && (state.shieldRadius ?? 0) > 0);
+    return state;
+  };
+  const hardShield = shieldFor(1, BUTTONS.L);
+  const lightShield = shieldFor(0.3, 0);
+  assert.equal(hardShield.shieldAlpha, 1);
+  assert(lightShield.shieldAlpha > 0 && lightShield.shieldAlpha < 1,
+    `light shield alpha ${lightShield.shieldAlpha}`);
+  assert(lightShield.shieldRadius > hardShield.shieldRadius);
+  // The trigger's travel past the game's clamp is a full press, not more.
+  const fullAnalogShield = shieldFor(1, 0);
+  assert.equal(fullAnalogShield.shieldAlpha, 1);
+  assert(Math.abs(fullAnalogShield.shieldRadius - hardShield.shieldRadius) < 0.01,
+    `full analog shield radius ${fullAnalogShield.shieldRadius}`);
+  assert.equal(reset({ p1Char: CHAR_FOX }).players[0].state.shieldAlpha, undefined);
+
   reset({ p1Char: CHAR_FOX });
   let sawHitbox = false;
   for (let index = 0; index < 20; index += 1) {

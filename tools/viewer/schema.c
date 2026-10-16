@@ -106,6 +106,7 @@ int main(void)
     FIELD(MslCoreViewerPlayer, last_hit_by, "lastHitBy");
     FIELD(MslCoreViewerPlayer, state_flags, "stateFlags");
     FIELD(MslCoreViewerPlayer, kirby_hat, "kirbyHat");
+    FIELD(MslCoreViewerPlayer, shield_alpha, "shieldAlpha");
     FIELD(MslCoreViewerPlayer, action_id, "actionId");
     FIELD(MslCoreViewerPlayer, action_frame, "actionFrame");
     FIELD(MslCoreViewerPlayer, hitlag, "hitlag");
