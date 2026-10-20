@@ -2513,7 +2513,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
   }
-  if (slippi_patches < 0 || (slippi_patches & ~MSL_PATCH_FD_BACKGROUND_FROZEN)) {
+  if (slippi_patches < 0 ||
+      (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_RETAIL_SPAWNS))) {
     PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
     goto done;
   }
@@ -2685,7 +2686,8 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
   }
-  if (slippi_patches < 0 || (slippi_patches & ~MSL_PATCH_FD_BACKGROUND_FROZEN)) {
+  if (slippi_patches < 0 ||
+      (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_RETAIL_SPAWNS))) {
     PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
     goto done;
   }
