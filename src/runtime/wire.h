@@ -149,6 +149,9 @@ typedef struct MslCoreMatchConfig {
 enum {
     // External/Frozen All/Core/2.asm: nop the call at 0x8021AAE4.
     MSL_PATCH_FD_BACKGROUND_FROZEN = 1 << 0,
+    // External/PreventWobbling: Init Wobble Count at 0x800DB880/0x800DBBD4,
+    // Wobble Check at 0x8008F090.
+    MSL_PATCH_PREVENT_WOBBLING = 1 << 1,
 };
 
 enum {
