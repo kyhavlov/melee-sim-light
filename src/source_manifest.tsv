@@ -7,6 +7,9 @@ src/MSL/float.c	src/MSL/float.c	Matching	none	compiled directly from canonical s
 src/MSL/math_1.c	src/MSL/math_1.c	Matching	none	compiled directly from canonical source by Makefile
 src/MSL/math_data.c	src/MSL/math_data.c	Matching	none	compiled directly from canonical source by Makefile
 src/MSL/trigf.c	src/MSL/trigf.c	Matching	none	compiled directly from canonical source by Makefile
+src/melee/ef/efalt.c	src/melee/ef/efalt.c	Matching	canonical-deltas	viewer-track dispatch: compiled only inside runtime/effect_pieces.c (MSL_EF_DISPATCH, efLib makers renamed to recorders); empty otherwise
+src/melee/ef/efasync.c	src/melee/ef/efasync.c	NonMatching	canonical-deltas	viewer-track dispatch: compiled only inside runtime/effect_pieces.c (MSL_EF_DISPATCH, efLib makers renamed to recorders); empty otherwise
+src/melee/ef/efsync.c	src/melee/ef/efsync.c	NonMatching	canonical-deltas	viewer-track dispatch: compiled only inside runtime/effect_pieces.c (MSL_EF_DISPATCH, efLib makers renamed to recorders); empty otherwise
 src/melee/ft/chara/ftCaptain/ftCa_Init.c	src/melee/ft/chara/ftCaptain/ftCa_Init.c	Matching	captain-source-packet	compiled canonical Captain Falcon lifecycle, state registry, and data-owner callbacks
 src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c	src/melee/ft/chara/ftCaptain/ftCa_SpecialHi.c	Matching	captain-source-packet	compiled canonical Captain Falcon up-special and capture/release owner
 src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c	src/melee/ft/chara/ftCaptain/ftCa_SpecialLw.c	Matching	captain-source-packet	compiled canonical Captain Falcon down-special owner

@@ -41,6 +41,7 @@
 #ifdef MSL_CORE_HOSTED
 #include <runtime/context.h>
 #include <runtime/source_state.h>
+#include <runtime/viewer_track.h>
 #endif
 
 /// context stuff
@@ -359,6 +360,19 @@ void grIzumi_801CBE64(Ground_GObj* gobj)
     gp->gv.izumi.xC4 = NULL;
     gp->gv.izumi.xC8 = NULL;
     gp->gv.izumi.xCC = NULL;
+#if MSL_VISUAL_TRACK_BUILD
+    // The two generators the block above makes in the game: grlib.c's
+    // hosted grLib_801C96F8 makes none, and writes them to a viewer track.
+    if (msl_viewer_track_on()) {
+        Vec3 x = { 0, 0, 0 };
+        Vec3 y = { 0, 1, -27 };
+        grLib_801C96F8(0x7534, 0x1E, &x);
+        y.x *= Ground_801C0498();
+        y.y *= Ground_801C0498();
+        y.z *= Ground_801C0498();
+        grLib_801C96F8(0x7536, 0x1E, &y);
+    }
+#endif // MSL_VISUAL_TRACK_BUILD
 #endif
 #ifndef MSL_CORE_HOSTED
     gp->gv.izumi.xCC = grIzumi_801CBCE8(2);

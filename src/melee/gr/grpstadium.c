@@ -40,6 +40,7 @@
 #ifdef MSL_CORE_HOSTED
 #include <runtime/context.h>
 #include <runtime/source_state.h>
+#include <runtime/viewer_track.h>
 #endif
 
 typedef struct StadiumParams {
@@ -476,6 +477,15 @@ void grStadium_801D1808(Ground_GObj* gobj)
     if (gp->u.stadium9.xC8 != NULL) {
         grLib_801C9834(gp->u.stadium9.xC8);
     }
+#if MSL_VISUAL_TRACK_BUILD
+#ifdef MSL_CORE_HOSTED
+    // (the hosted build keeps no generator here, so the call above is never
+    // made: a viewer track is told the game's end all the same)
+    else if (msl_viewer_track_on()) {
+        grLib_801C9834(NULL);
+    }
+#endif
+#endif // MSL_VISUAL_TRACK_BUILD
     mpLib_80057BC0(5);
 }
 
@@ -665,8 +675,19 @@ void grStadium_801D1E20(void)
     // The fly-by is presentation-only, but its source RNG advances remain
     // gameplay-visible to later consumers within a frame.
     if (HSD_Randi(200) == 0) {
+#if MSL_VISUAL_TRACK_BUILD
+        int a = HSD_Randi(2);
+        int b = HSD_Randi(200);
+        if (msl_viewer_track_on()) {
+            Vec3 spC = { 0, -100, -660 };
+            spC.x += (a * 2 - 1) * (b + 100);
+            mul_vec(&spC, Ground_801C0498());
+            msl_viewer_track_sgen(0x1E, 0x7530, &spC, NULL, NULL);
+        }
+#else // !MSL_VISUAL_TRACK_BUILD
         (void) HSD_Randi(2);
         (void) HSD_Randi(200);
+#endif // MSL_VISUAL_TRACK_BUILD
     }
 #else
     if (HSD_Randi(200) == 0) {
@@ -1200,6 +1221,13 @@ void grStadium_801D2528(Ground_GObj* gobj, int arg1, int arg2)
     if (arg2 != 0) {
         gp->u.display.xE0 = arg2;
     }
+#if MSL_VISUAL_TRACK_BUILD
+#ifdef MSL_CORE_HOSTED
+    if (msl_viewer_track_on()) {
+        msl_viewer_track_stadscreen(gp->u.display.xE4, gp->u.display.xEE);
+    }
+#endif
+#endif // MSL_VISUAL_TRACK_BUILD
 }
 
 void grStadium_801D2A60(Ground_GObj* gobj)

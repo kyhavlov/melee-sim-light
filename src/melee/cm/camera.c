@@ -5106,3 +5106,15 @@ void Camera_800313E0(HSD_GObj* gobj, u64 prios)
     }
     HSD_GObj_80390ED0(gobj, 4);
 }
+#if MSL_VISUAL_TRACK_BUILD
+
+// Viewer track (runtime/viewer_track.c): the quake translation and the
+// background color, read only.
+void msl_camera_track_extras(Vec2* translation, u8* background_rgb)
+{
+    *translation = cm_80452C68.translation;
+    background_rgb[0] = cm_80452C68.background_r;
+    background_rgb[1] = cm_80452C68.background_g;
+    background_rgb[2] = cm_80452C68.background_b;
+}
+#endif // MSL_VISUAL_TRACK_BUILD

@@ -290,9 +290,13 @@ VALIDATION_NATIVE_SRC := $(ROOT)/tools/validation/native.c
 VALIDATION_NATIVE := $(VALIDATION_BUILD)/_msl_replay_validate.so
 
 MSL_REPLAY_ARITHMETIC ?= 0
+# 1: the viewer track (agent_docs/VIEWER_TRACK.md) for viewers, validation
+# and CI; 0, the default, compiles none of it.
+MSL_VISUAL_TRACK_BUILD ?= 0
 
 CPPFLAGS := \
 	-DMSL_REPLAY_ARITHMETIC=$(MSL_REPLAY_ARITHMETIC) \
+	-DMSL_VISUAL_TRACK_BUILD=$(MSL_VISUAL_TRACK_BUILD) \
 	-DBUGFIX \
 	-include $(CORE)/platform/compat.h \
 	-I$(CORE) \
@@ -502,6 +506,15 @@ $(PPC_BUILD)/replay-arithmetic.stamp $(PYTHON_BUILD)/replay-arithmetic.stamp $(W
 $(PPC_OBJS) $(PPC_SMOKE_OBJS): $(PPC_BUILD)/replay-arithmetic.stamp
 $(PYTHON_CORE_OBJS): $(PYTHON_BUILD)/replay-arithmetic.stamp
 $(WASM_CORE_OBJS): $(WASM_BUILD)/replay-arithmetic.stamp
+
+$(PPC_BUILD)/visual-track.stamp $(PYTHON_BUILD)/visual-track.stamp $(WASM_BUILD)/visual-track.stamp: FORCE
+	@mkdir -p "$(@D)"
+	@printf '%s\n' '$(MSL_VISUAL_TRACK_BUILD)' > "$@.tmp"
+	@cmp -s "$@.tmp" "$@" && rm "$@.tmp" || mv "$@.tmp" "$@"
+
+$(PPC_OBJS) $(PPC_SMOKE_OBJS): $(PPC_BUILD)/visual-track.stamp
+$(PYTHON_CORE_OBJS): $(PYTHON_BUILD)/visual-track.stamp
+$(WASM_CORE_OBJS): $(WASM_BUILD)/visual-track.stamp
 
 $(VIEWER_SCHEMA_TOOL): $(ROOT)/tools/viewer/schema.c $(CORE)/runtime/wire.h
 	@mkdir -p "$(@D)"
@@ -928,7 +941,7 @@ validation-supported-domain:
 		VALIDATION_SUITE=replays/suites/melee_core_aggregate.json
 
 validation-release-supported-domain: validator
-	@$(MAKE) --no-print-directory native-release MSL_REPLAY_ARITHMETIC=1
+	@$(MAKE) --no-print-directory native-release MSL_REPLAY_ARITHMETIC=1 MSL_VISUAL_TRACK_BUILD=1
 	@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" \
 		MSL_CORE_NATIVE_BINARY="$(NATIVE_RELEASE_BUILD)/melee-core-native" \
 		"$(PY)" -m tools.validation.validate_replay \
@@ -936,7 +949,7 @@ validation-release-supported-domain: validator
 		--workers "$(VALIDATION_WORKERS)" --no-build
 
 test: source-check native-smoke python-library validator
-	@$(MAKE) --no-print-directory native ppc MSL_REPLAY_ARITHMETIC=1
+	@$(MAKE) --no-print-directory native ppc MSL_REPLAY_ARITHMETIC=1 MSL_VISUAL_TRACK_BUILD=1
 	@"$(PY)" -m pytest -q
 
 # Sequence gates that rebuild shared objects with different arithmetic modes.
