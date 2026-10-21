@@ -101,6 +101,8 @@ typedef struct MslCoreMatchConfig {
     uint8_t is_teams;
     uint8_t friendly_fire;
     uint8_t stock_count;
+    // Presentation requests; gameplay never reads this byte. Bit 7 is
+    // MSL_VISUAL_TRACK (below), the rest is the camera mode, unread by the core.
     uint8_t camera_mode;
     // Runtime capabilities are explicit because scene major alone does not
     // distinguish Slippi's offline Dolphin patch set from Nintendont retail.
@@ -149,6 +151,13 @@ typedef struct MslCoreMatchConfig {
 enum {
     // External/Frozen All/Core/2.asm: nop the call at 0x8021AAE4.
     MSL_PATCH_FD_BACKGROUND_FROZEN = 1 << 0,
+};
+
+enum {
+    // camera_mode's top bit: keep a viewer track for this match
+    // (runtime/viewer_track.h, agent_docs/VIEWER_TRACK.md). Only a build with
+    // MSL_VISUAL_TRACK_BUILD=1 has one; others refuse the bit.
+    MSL_VISUAL_TRACK = 1 << 7,
 };
 
 enum {

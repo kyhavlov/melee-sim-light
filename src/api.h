@@ -286,6 +286,31 @@ MSL_API MslResult msl_batch_save(const MslBatch* batch, uint32_t env_index, void
                                  size_t buffer_size, size_t* written);
 MSL_API MslResult msl_batch_restore(MslBatch* batch, uint32_t env_index, const void* buffer,
                                     size_t buffer_size);
+#if MSL_VISUAL_TRACK_BUILD
+
+// A replay viewer: one match replayed from a recording the way the replay
+// runner replays it (runtime/main.c --stream), keeping the viewer track
+// (agent_docs/VIEWER_TRACK.md). The arguments are the runner's wire rows
+// (runtime/wire.h): the match config (MslCoreMatchConfig; the viewer turns
+// MSL_VISUAL_TRACK on in its camera_mode byte), the input before the first
+// frame (MslCoreInput), then one MslCoreStreamFrame per step. Each viewer
+// loads its own game data, with the visual banks the track needs; it does not
+// share the batches' data. Synchronize access to each viewer.
+typedef struct MslViewer MslViewer;
+
+MSL_API MslResult msl_viewer_create(const char* data_root, const void* config,
+                                    size_t config_size, const void* previous_input,
+                                    size_t input_size, MslViewer** out_viewer);
+MSL_API void msl_viewer_destroy(MslViewer* viewer);
+MSL_API MslResult msl_viewer_step(MslViewer* viewer, const void* frame, size_t frame_size);
+// The track lines written since the last step or since create (the match's
+// setup), NUL-terminated, `size` bytes without the NUL. Valid until the next
+// step.
+MSL_API const char* msl_viewer_track(MslViewer* viewer, size_t* size);
+// The simulation's output after the last step (MslCoreCompare), as the
+// runner writes it for each frame.
+MSL_API const void* msl_viewer_output(const MslViewer* viewer, size_t* size);
+#endif // MSL_VISUAL_TRACK_BUILD
 
 #ifdef __cplusplus
 }

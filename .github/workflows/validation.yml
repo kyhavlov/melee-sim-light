@@ -126,7 +126,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          make native validator -j4 PY=python3 MSL_REPLAY_ARITHMETIC=1
+          make native validator -j4 PY=python3 MSL_REPLAY_ARITHMETIC=1 MSL_VISUAL_TRACK_BUILD=1
           make python-library -j4 PY=python3
 
       - name: Check source inventory

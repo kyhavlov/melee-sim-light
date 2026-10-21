@@ -1,0 +1,96 @@
+{
+  "name": "visual_state",
+  "notes": "Recordings whose viewer track (agent_docs/VIEWER_TRACK.md) is checked: each passes strict gameplay validation with the track on, and visual_state_locks.json locks the track.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/pikachu/97280_diamond-platinum-a313b0df5d11e8fb163d6c9b.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Pikachu",
+        "2": "Peach"
+      },
+      "played_on": "network"
+    },
+    {
+      "replay": "replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Fox",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/marios/platinum-platinum-3d9c7e1486bef415564c4005.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Dr. Mario"
+      },
+      "played_on": "network"
+    },
+    {
+      "replay": "replays/validation/icies/master-platinum-9718e1fa01455e35446f7ae7.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Ice Climbers",
+        "2": "Falco"
+      },
+      "played_on": "network"
+    },
+    {
+      "replay": "replays/validation/icies/master-master-11064a828d78625eda78bbac.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Dr. Mario",
+        "2": "Ice Climbers"
+      },
+      "played_on": "network"
+    },
+    {
+      "replay": "replays/validation/dk/slippi-2025-02_Game_20250204T170214.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Donkey Kong",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/ness/49422_Game_20250130T192133.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 31,
+      "characters": {
+        "1": "Captain Falcon",
+        "2": "Ness"
+      }
+    }
+  ]
+}
