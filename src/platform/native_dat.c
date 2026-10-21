@@ -1482,7 +1482,13 @@ static void* translate_fighter_common_public(MslNativeArchive* context,
         // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_800D4FF4
         msl_dat_root_Fighter_804D6534_t,
         msl_dat_root_MslDatVec2Pointer,
-        msl_dat_root_MslDatByte,
+        // Pointers 10 and 11 are one (list, length) pair each: the shake of
+        // a held fighter that mashes and of a smash charge. As bytes the pair
+        // kept the file's 32-bit words and ftCommon_InitGrab read its length
+        // past them.
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_InitGrab,
+        //   ftCommon_GrabMash,ftCommon_8008021C}
+        msl_dat_root_Fighter_804D6528_t,
         msl_dat_root_Fighter_804D6528_t,
         msl_dat_root_Fighter_804D6524_t,
         msl_dat_root_Fighter_804D6520_t,
@@ -1506,6 +1512,25 @@ static void* translate_fighter_common_public(MslNativeArchive* context,
                             ? translate_fighter_cpu_tables(context, target)
                             : translate_target(context, target,
                                                element_types[i]);
+        }
+    }
+    // Pointer 9 (Fighter_804D6530, the hit's model shake) is three pairs of
+    // a table and its length: air, ground, electric. As pointers the lengths
+    // (plain words) came out null, so the shake stood on its table's first
+    // entry; they are the file's own words, in the odd slots as the game's
+    // code reads them. Only the model's shake reads this.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::{
+    //   ftCo_8009064C,ftCo_80090690}
+    {
+        uint32_t target = raw_pointer(context, offset + 9 * 4);
+        void** pairs = result[9];
+        if (target != UINT32_MAX && pairs != NULL &&
+            next_boundary(context, target) - target >= 24)
+        {
+            for (i = 0; i < 3; ++i) {
+                pairs[i * 2 + 1] = (void*) (uintptr_t) read_be32(
+                    context->data + target + (i * 2 + 1) * 4);
+            }
         }
     }
     return result;

@@ -1,6 +1,9 @@
 #include "api.h"
 
 #include "runtime/batch.h"
+#include "runtime/scalar.h"
+#include "runtime/viewer_track.h"
+#include "runtime/wire.h"
 
 #include <math.h>
 #if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
@@ -557,3 +560,98 @@ MslResult msl_batch_restore(MslBatch* batch, uint32_t env_index, const void* buf
   batch->viewpoint_players[env_index] = header.viewpoint_player;
   return MSL_OK;
 }
+#if MSL_VISUAL_TRACK_BUILD
+
+struct MslViewer {
+  MslCoreGameData game_data;
+  MslCoreMatch match;
+  int match_ready;
+};
+
+MslResult msl_viewer_create(const char* data_root, const void* config_wire,
+                            size_t config_size, const void* previous_input,
+                            size_t input_size, MslViewer** out_viewer) {
+  MslCoreMatchConfig config;
+  MslCoreInput previous;
+  MslViewer* viewer;
+  int loaded;
+
+  if (out_viewer != NULL) {
+    *out_viewer = NULL;
+  }
+  if (data_root == NULL || config_wire == NULL || previous_input == NULL ||
+      out_viewer == NULL || config_size != sizeof(MslCoreMatchConfig) ||
+      input_size != sizeof(MslCoreInput)) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  viewer = calloc(1, sizeof(*viewer));
+  if (viewer == NULL) {
+    return MSL_OUT_OF_MEMORY;
+  }
+  msl_core_decode_match_config(&config, config_wire);
+  config.camera_mode |= MSL_VISUAL_TRACK;
+  memcpy(&previous, previous_input, sizeof(previous));
+  loaded = msl_core_game_data_init(&viewer->game_data, data_root) == 0;
+  if (!loaded) {
+    free(viewer);
+    return MSL_INVALID_STATE;
+  }
+  if (msl_core_match_init(&viewer->match, &viewer->game_data, &config, &previous) != 0) {
+    msl_core_game_data_deinit(&viewer->game_data);
+    free(viewer);
+    return MSL_INVALID_STATE;
+  }
+  viewer->match_ready = 1;
+  *out_viewer = viewer;
+  return MSL_OK;
+}
+
+void msl_viewer_destroy(MslViewer* viewer) {
+  if (viewer == NULL) {
+    return;
+  }
+  if (viewer->match_ready) {
+    msl_core_match_destroy(&viewer->match);
+  }
+  msl_core_game_data_deinit(&viewer->game_data);
+  free(viewer);
+}
+
+MslResult msl_viewer_step(MslViewer* viewer, const void* frame_wire, size_t frame_size) {
+  MslCoreStreamFrame frame;
+  MslCoreStageEvents stage_events;
+
+  if (viewer == NULL || frame_wire == NULL || frame_size != sizeof(frame)) {
+    return MSL_INVALID_ARGUMENT;
+  }
+  memcpy(&frame, frame_wire, sizeof(frame));
+  msl_core_decode_stage_events(&stage_events, (const uint8_t*) &frame.stage_events);
+  if (msl_core_match_step(&viewer->match, &frame.input,
+                          msl_core_get_le32(&frame.frame_pre_random_seed),
+                          &stage_events) != 0) {
+    return MSL_INVALID_STATE;
+  }
+  return MSL_OK;
+}
+
+const char* msl_viewer_track(MslViewer* viewer, size_t* size) {
+  if (size != NULL) {
+    *size = 0;
+  }
+  if (viewer == NULL || size == NULL) {
+    return NULL;
+  }
+  return msl_core_match_viewer_track(&viewer->match, size);
+}
+
+const void* msl_viewer_output(const MslViewer* viewer, size_t* size) {
+  if (size != NULL) {
+    *size = 0;
+  }
+  if (viewer == NULL || size == NULL) {
+    return NULL;
+  }
+  *size = sizeof(MslCoreCompare);
+  return msl_core_match_output(&viewer->match);
+}
+#endif // MSL_VISUAL_TRACK_BUILD

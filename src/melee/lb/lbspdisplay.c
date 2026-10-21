@@ -50,6 +50,9 @@
 #endif
 #ifdef MSL_CORE_NATIVE
 #include <platform/memory.h>
+#if MSL_VISUAL_TRACK_BUILD
+#include "runtime/viewer_track.h"
+#endif // MSL_VISUAL_TRACK_BUILD
 
 bool msl_dynamics_angle_greater(Vec3* a, Vec3* b, float threshold,
                                 u32 cutoff);
@@ -156,10 +159,54 @@ void lb_8000FCDC(void)
     lb_8000FA94();
 }
 
+#if MSL_VISUAL_TRACK_BUILD
+// A chain's copy for the viewer track (msl_viewer_track_keep_dynamics): its
+// links in one array of the match's memory, typed as the pool's are (so a
+// savestate or a match copy carries it), and not the pool's: lb_8000FD18
+// lets go of it without putting it on the free list.
+struct DynamicsData* msl_viewer_track_copy_dynamics(
+    const struct DynamicsData* head)
+{
+    const struct DynamicsData* link;
+    struct DynamicsData* out;
+    uint32_t count = 0;
+    uint32_t i;
+    for (link = head; link != NULL; link = link->next) {
+        ++count;
+    }
+    if (count == 0) {
+        return NULL;
+    }
+#ifdef MSL_CORE_NATIVE
+    out = HSD_MemAllocReloc(count * sizeof(*out), MSL_RELOC_LB_DYNAMICS_DATA,
+                            count, sizeof(*out), 0);
+#else
+    out = HSD_MemAlloc(count * sizeof(*out));
+#endif
+    if (out == NULL) {
+        return NULL;
+    }
+    for (link = head, i = 0; link != NULL; link = link->next, ++i) {
+        out[i] = *link;
+        out[i].next = i + 1 < count ? &out[i + 1] : NULL;
+    }
+    return out;
+}
+#endif // MSL_VISUAL_TRACK_BUILD
+
 void lb_8000FD18(DynamicsDesc* desc)
 {
     struct DynamicsData *temp, *cur, *next;
 
+#if MSL_VISUAL_TRACK_BUILD
+    if (msl_viewer_track_on() && desc->data != NULL &&
+        (desc->data < &lb_804D63A0->entries[0] ||
+         desc->data >= &lb_804D63A0->entries[LB_DYNAMICS_ENTRY_COUNT]))
+    {
+        desc->data = NULL;
+        return;
+    }
+#endif // MSL_VISUAL_TRACK_BUILD
     for (cur = desc->data; cur != NULL; cur = next) {
         next = cur->next;
         temp = cur_data;

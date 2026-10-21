@@ -366,7 +366,9 @@ void ftNs_AttackHi4_YoyoApplySmash(HSD_GObj* gobj)
     fp->smash_attrs.x2118_frames = 0.0f;
     fp->smash_attrs.x211C_holdFrame = 60.0f;
     fp->smash_attrs.x212C = (u8) 0;
-    fp->smash_attrs.x212D = (u8) ((struct Unknown*) Fighter_804D6528)->x4;
+    // The count through the table's own type: the two-word cast read the
+    // upper half of the 64-bit table pointer.
+    fp->smash_attrs.x212D = (u8) Fighter_804D6528->x4;
     fp->smash_attrs.x2128 = colAnimID;
     smashColAnimID = smash_attr->x2128;
 

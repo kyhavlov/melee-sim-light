@@ -3,6 +3,7 @@
 - [Active work](ACTIVE_WORK.md)
 - [Host setup](ENVIRONMENT.md)
 - [Replay validation](VALIDATION.md)
+- [Viewer track: visual-only state](VIEWER_TRACK.md)
 - [Benchmark reference](performance/BASELINE.md)
 
 `validation/*.json` contains capture provenance and admission records used by

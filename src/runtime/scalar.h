@@ -119,6 +119,12 @@ typedef struct MslCoreMatch {
     uint8_t follower_output_render_visibility[MSL_CORE_MAX_PLAYERS];
     uint32_t random_seed;
     MslCoreCompare output;
+#if MSL_VISUAL_TRACK_BUILD
+    // runtime/viewer_track.h: NULL unless the config sets MSL_VISUAL_TRACK.
+    // Heap memory outside the arena; a restore or copy keeps the
+    // destination's own.
+    struct MslViewerTrack* viewer_track;
+#endif // MSL_VISUAL_TRACK_BUILD
 } MslCoreMatch;
 
 int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root);
