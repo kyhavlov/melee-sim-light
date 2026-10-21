@@ -116,6 +116,9 @@
 #include <MSL/math.h>
 #include <MSL/math_ppc.h>
 #include <MSL/trigf.h>
+#if MSL_VISUAL_TRACK_BUILD
+#include "runtime/viewer_track.h"
+#endif // MSL_VISUAL_TRACK_BUILD
 
 #ifndef MSL_CORE_HOSTED
 extern struct UnkCostumeList CostumeListsForeachCharacter[FTKIND_MAX];
@@ -1071,6 +1074,14 @@ Fighter_GObj* Fighter_Create(struct plAllocInfo* input)
     Fighter_HeadlessPrunePose(gobj);
 #endif
 #ifdef MSL_CORE_HOSTED
+#if MSL_VISUAL_TRACK_BUILD
+    // With a viewer track the chains the prune drops (hair, capes, dresses:
+    // no gameplay reader is on or under one) are solved too, as copies kept
+    // apart from the dynamics pool, for the track's poses.
+    if (msl_viewer_track_on()) {
+        msl_viewer_track_keep_dynamics(fp);
+    } else
+#endif // MSL_VISUAL_TRACK_BUILD
     ftCo_HeadlessPruneDynamics(fp);
     // Retain the source camera subject and callback slot: the renderer itself
     // is headless, but ftLib_80086A8C publishes gameplay-visible x221F_b0 from

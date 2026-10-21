@@ -1,4 +1,5 @@
 #include "db/db.h"
+#include "runtime/viewer_track.h"
 #include "ft/types.h"
 
 #include "ftCommon/forward.h"
@@ -177,7 +178,13 @@ int un_80322598(int spawn_id, float pos_y)
 // real prototypes because Wasm validates every direct-call signature.
 void efLib_DestroyAll(HSD_GObj* gobj)
 {
+#if MSL_VISUAL_TRACK_BUILD
+    if (msl_viewer_track_on()) {
+        msl_viewer_track_fxend(gobj);
+    }
+#else // !MSL_VISUAL_TRACK_BUILD
     (void) gobj;
+#endif // MSL_VISUAL_TRACK_BUILD
 }
 void efLib_PauseAll(HSD_GObj* gobj)
 {

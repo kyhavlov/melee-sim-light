@@ -2,6 +2,7 @@
 #include "runtime/context.h"
 
 #include "runtime/scalar.h"
+#include "runtime/viewer_track.h"
 
 #include <stdlib.h>
 
@@ -57,6 +58,9 @@ void msl_core_bind_game_data(MslCoreGameData* game_data)
 #if MSL_REPLAY_ARITHMETIC
     msl_jit_split_fma = 0;
 #endif
+#if MSL_VISUAL_TRACK_BUILD
+    msl_core_context_viewer_track = NULL;
+#endif // MSL_VISUAL_TRACK_BUILD
     msl_core_context_game_data = game_data;
     msl_core_context_random = &game_data->bootstrap_random;
     msl_core_context_objalloc = &game_data->bootstrap_objalloc;
@@ -110,6 +114,9 @@ void msl_core_bind_match(MslCoreMatch* match)
     msl_jit_split_fma =
         (match->config.arithmetic_flags & MSL_ARITHMETIC_SPLIT_FMA) != 0;
 #endif
+#if MSL_VISUAL_TRACK_BUILD
+    msl_core_context_viewer_track = match->viewer_track;
+#endif // MSL_VISUAL_TRACK_BUILD
     msl_core_context_game_data = match->game_data;
     msl_core_context_random = &match->random;
     msl_core_context_objalloc = &match->objalloc;

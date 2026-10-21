@@ -231,6 +231,16 @@ typedef struct StreamState {
   MslCoreMatchConfig config;
   MslCoreInput previous;
   uint8_t signed_zero_equal;
+  // MSL_VISUAL_TRACK: each output row is followed by a little-endian u32 size
+  // and that many bytes of viewer track lines (runtime/main.c), kept here.
+  uint8_t visual;
+  uint8_t visual_word[4];
+  size_t visual_word_have;
+  size_t visual_left;
+  uint8_t visual_phase;
+  char* visual_text;
+  size_t visual_size;
+  size_t visual_capacity;
   ValidationResult result;
 } StreamState;
 
@@ -1888,9 +1898,60 @@ static void refill_write_buffer(StreamState* state) {
   }
 }
 
+// The viewer track bytes after a row: its size word, then the lines.
+static int consume_visual(StreamState* state, const uint8_t** data, size_t* size, char* error,
+                          size_t error_size) {
+  if (state->visual_phase == 1) {
+    while (*size != 0 && state->visual_word_have < 4) {
+      state->visual_word[state->visual_word_have++] = **data;
+      ++*data;
+      --*size;
+    }
+    if (state->visual_word_have == 4) {
+      state->visual_left = (size_t)state->visual_word[0] | ((size_t)state->visual_word[1] << 8) |
+                           ((size_t)state->visual_word[2] << 16) |
+                           ((size_t)state->visual_word[3] << 24);
+      state->visual_phase = state->visual_left != 0 ? 2 : 0;
+    }
+    return 0;
+  }
+  {
+    size_t take = *size < state->visual_left ? *size : state->visual_left;
+    if (state->visual_size + take + 1 > state->visual_capacity) {
+      size_t capacity = state->visual_capacity != 0 ? state->visual_capacity : 1 << 20;
+      char* grown;
+      while (capacity < state->visual_size + take + 1) {
+        capacity *= 2;
+      }
+      grown = realloc(state->visual_text, capacity);
+      if (grown == NULL) {
+        snprintf(error, error_size, "viewer track: out of memory");
+        return -1;
+      }
+      state->visual_text = grown;
+      state->visual_capacity = capacity;
+    }
+    memcpy(state->visual_text + state->visual_size, *data, take);
+    state->visual_size += take;
+    *data += take;
+    *size -= take;
+    state->visual_left -= take;
+    if (state->visual_left == 0) {
+      state->visual_phase = 0;
+    }
+  }
+  return 0;
+}
+
 static int consume_output(StreamState* state, const uint8_t* data, size_t size, char* error,
                           size_t error_size) {
   while (size != 0) {
+    if (state->visual_phase != 0) {
+      if (consume_visual(state, &data, &size, error, error_size) != 0) {
+        return -1;
+      }
+      continue;
+    }
     size_t remaining = sizeof(state->output_row) - state->output_have;
     size_t take = size < remaining ? size : remaining;
     memcpy(state->output_row + state->output_have, data, take);
@@ -1925,6 +1986,10 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
         }
       }
       state->output_have = 0;
+      if (state->visual) {
+        state->visual_phase = 1;
+        state->visual_word_have = 0;
+      }
     }
   }
   return 0;
@@ -2258,6 +2323,10 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
              state->output_rows, state->process_end_pos, state->output_have);
     goto done;
   }
+  if (state->visual_phase != 0) {
+    snprintf(error, error_size, "core runner's viewer track ended inside a block");
+    goto done;
+  }
   result = 0;
 
 done:
@@ -2402,6 +2471,10 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
     goto fail;
   }
   Py_DECREF(mismatch_fields);
+  if (state->visual) {
+    PUT("visual_track", PyBytes_FromStringAndSize(state->visual_text != NULL ? state->visual_text : "",
+                                                  (Py_ssize_t)state->visual_size));
+  }
 #undef PUT
   return out;
 
@@ -2437,6 +2510,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "fnmsubs_profile",
       "slippi_patches",
       "jit_arithmetic",
+      "visual_track",
       NULL,
   };
   PyObject* frames_obj;
@@ -2462,6 +2536,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   const char* fnmsubs_profile = NULL;
   int slippi_patches = 0;
   int jit_arithmetic = 0;
+  int visual_track = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2480,13 +2555,17 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiizii:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiziip:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &slippi_patches,
-          &jit_arithmetic)) {
+          &jit_arithmetic, &visual_track)) {
+    return NULL;
+  }
+  if (visual_track && runner_stdin >= 0) {
+    PyErr_SetString(PyExc_ValueError, "visual_track needs a one-shot runner");
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2552,6 +2631,10 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     PyErr_SetString(PyExc_ValueError, error);
     goto done;
   }
+  if (visual_track) {
+    state.config.camera_mode |= MSL_VISUAL_TRACK;
+  }
+  state.visual = visual_track != 0;
   if (start_frame_obj != Py_None) {
     long long requested = PyLong_AsLongLong(start_frame_obj);
     if (requested == -1 && PyErr_Occurred()) {
@@ -2616,6 +2699,7 @@ done:
     free(rows.follower_present[i]);
   }
   free(rows.raw);
+  free(state.visual_text);
   Py_XDECREF(arrow_pair);
   return result;
 }

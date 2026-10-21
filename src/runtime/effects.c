@@ -7,8 +7,11 @@
 #include "gr/ground.h"
 #include "lb/lb_00B0.h"
 #include "lb/lbarchive.h"
+#include "runtime/effect_pieces.h"
+#include "runtime/viewer_track.h"
 
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +34,63 @@ static _Thread_local MslCoreEffectState* msl_bound_effect_state;
 
 static void msl_effect_consume_bank_command(
     const MslCoreEffectGeneratorBank* data, int index);
+#if MSL_VISUAL_TRACK_BUILD
+
+// The viewer track's random state counts the draws the game makes that the
+// simulator leaves out (runtime/viewer_track.c): for those it needs every
+// file of the game's own effect list (efAsync_DatEntries: slot, file, table),
+// the ones gameplay's list leaves out loaded beside it, and each model's
+// first animation step's draws. Loaded only by msl_core_game_data_init_visual;
+// gameplay's banks and draws are untouched. (The menu's file, slot 31, is not
+// a match's.)
+// refs/melee/src/melee/ef/efasync.c::efAsync_DatEntries
+enum { MSL_EFFECT_MODELS_PER_FILE = 16 };
+// psInitDataBankLoad's slot for the stage archive's map_ptcl.
+// refs/melee/src/melee/gr/ground.c::Ground_801C0800
+enum { MSL_EFFECT_STAGE_BANK = 0x1E };
+struct MslCoreEffectVisual {
+    MslCoreEffectGeneratorBank view_banks[MSL_CORE_EFFECT_VISUAL_BANKS];
+    EF_EffectDesc* models[MSL_CORE_EFFECT_VISUAL_BANKS];
+    u8 model_draws[MSL_CORE_EFFECT_VISUAL_BANKS][MSL_EFFECT_MODELS_PER_FILE];
+};
+static const struct {
+    int slot;
+    const char* file;
+    const char* table;
+} msl_effect_game_files[] = {
+    { 0, "/EfCoData.dat", "effCommonDataTable" }, { 1, "/EfMrData.dat", "effMarioDataTable" },
+    { 2, "/EfSsData.dat", "effSamusDataTable" }, { 3, "/EfFxData.dat", "effFoxDataTable" },
+    { 4, "/EfCaData.dat", "effCaptainDataTable" }, { 5, "/EfKbData.dat", "effKirbyDataTable" },
+    { 6, "/EfLkData.dat", "effLinkDataTable" }, { 7, "/EfPkData.dat", "effPikachuDataTable" },
+    { 8, "/EfDkData.dat", "effDonkeyDataTable" }, { 9, "/EfYsData.dat", "effYoshiDataTable" },
+    { 10, "/EfNsData.dat", "effNessDataTable" }, { 11, "/EfPrData.dat", "effPurinDataTable" },
+    { 12, "/EfKpData.dat", "effKoopaDataTable" }, { 13, "/EfMtData.dat", "effMewtwoDataTable" },
+    { 14, "/EfIcData.dat", "effIceclimberDataTable" }, { 15, "/EfPeData.dat", "effPeachDataTable" },
+    { 16, "/EfMsData.dat", "effMarsDataTable" }, { 17, "/EfZdData.dat", "effZeldaDataTable" },
+    { 18, "/EfLgData.dat", "effLuigiDataTable" }, { 19, "/EfGnData.dat", "effGanonDataTable" },
+    { 20, "/EfKbMs.dat", "effKirbyMarsDataTable" }, { 21, "/EfKbZd.dat", "effKirbyZeldaDataTable" },
+    { 32, "/EfKbMr.dat", "effKirbyMarioDataTable" }, { 33, "/EfKbFx.dat", "effKirbyFoxDataTable" },
+    { 34, "/EfKbSs.dat", "effKirbySamusDataTable" }, { 36, "/EfKbPk.dat", "effKirbyPikachuDataTable" },
+    { 37, "/EfKbLg.dat", "effKirbyLuigiDataTable" }, { 38, "/EfKbCa.dat", "effKirbyCaptainDataTable" },
+    { 39, "/EfKbDk.dat", "effKirbyDonkeyDataTable" }, { 41, "/EfKbKp.dat", "effKirbyKoopaDataTable" },
+    { 46, "/EfKbIc.dat", "effKirbyIceDataTable" }, { 47, "/EfKbGn.dat", "effKirbyGanonDataTable" },
+    { 48, "/EfKbFe.dat", "effKirbyEmblemDataTable" }, { 49, "/EfFeData.dat", "effEmblemDataTable" },
+};
+// How many entries each file's model table has (an audit of the files: 36,
+// 41 and 46 have one entry with no model in it).
+static const u8 msl_effect_model_counts[MSL_CORE_EFFECT_VISUAL_BANKS] = {
+    [0] = 47, [1] = 2, [2] = 3, [3] = 6, [4] = 6, [5] = 9, [6] = 4, [7] = 5, [8] = 7,
+    [9] = 1, [10] = 3, [11] = 1, [12] = 3, [13] = 4, [14] = 1, [15] = 1,
+    [16] = 2, [17] = 7, [18] = 2, [19] = 6, [20] = 2, [21] = 2, [32] = 1,
+    [33] = 1, [34] = 1, [36] = 1, [37] = 1, [38] = 2, [39] = 2, [41] = 1,
+    [46] = 1, [47] = 2, [48] = 2, [49] = 2,
+};
+// Set while a model's first step is counted (msl_effect_game_data_init_visual).
+static _Thread_local u8* msl_effect_recording_draws;
+// Set while msl_effect_game_data_init_visual loads: the common file's table
+// is translated whole (a table is translated once, at the first count asked).
+static _Thread_local int msl_effect_loading_visual;
+#endif // MSL_VISUAL_TRACK_BUILD
 
 static void msl_effect_record_model_generator(int link_no, int bank,
                                               int gfx_id, HSD_JObj* jobj)
@@ -41,6 +101,14 @@ static void msl_effect_record_model_generator(int link_no, int bank,
 
     (void) link_no;
     (void) jobj;
+#if MSL_VISUAL_TRACK_BUILD
+    if (msl_effect_recording_draws != NULL) {
+        if (msl_effect_generator_draws(bank, gfx_id)) {
+            ++*msl_effect_recording_draws;
+        }
+        return;
+    }
+#endif // MSL_VISUAL_TRACK_BUILD
     if (data == NULL || data->recording_common_model < 0 ||
         data->recording_common_model >= MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY)
     {
@@ -99,7 +167,12 @@ static void msl_effect_load_bank(MslCoreEffectData* data, int bank,
         effect_bank->models =
             msl_native_effect_models(
                 effect_bank->archive, symbol,
+#if MSL_VISUAL_TRACK_BUILD
+                msl_effect_loading_visual ? msl_effect_model_counts[0]
+                                          : MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY);
+#else // !MSL_VISUAL_TRACK_BUILD
                 MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY);
+#endif // MSL_VISUAL_TRACK_BUILD
         if (effect_bank->models == NULL) {
             fprintf(stderr, "%s has invalid common effect model data\n",
                     filename);
@@ -254,6 +327,154 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     }
     HSD_JObjSetDPtclCallback(NULL);
 }
+#if MSL_VISUAL_TRACK_BUILD
+
+#ifdef MSL_CORE_NATIVE
+int msl_effect_game_data_init_visual(MslCoreEffectData* data)
+{
+    MslCoreEffectVisual* visual;
+    size_t k;
+
+    msl_effect_loading_visual = 1;
+    msl_effect_game_data_init(data);
+    msl_effect_loading_visual = 0;
+    visual = calloc(1, sizeof(*visual));
+    if (visual == NULL) {
+        return -1;
+    }
+    data->visual = visual;
+    for (k = 0; k < sizeof(msl_effect_game_files) / sizeof(msl_effect_game_files[0]); ++k) {
+        int slot = msl_effect_game_files[k].slot;
+        HSD_Archive* archive;
+        if (slot < MSL_CORE_EFFECT_BANK_CAPACITY && data->banks[slot].archive != NULL) {
+            archive = data->banks[slot].archive;
+        } else {
+            MslCoreEffectGeneratorBank* view = &visual->view_banks[slot];
+            view->archive = archive = lbArchive_LoadArchive(msl_effect_game_files[k].file);
+            if (archive == NULL) {
+                continue;
+            }
+            if (msl_native_effect_bank(archive, msl_effect_game_files[k].table, &view->count,
+                                       &view->id_base, &view->commands) != 0)
+            {
+                view->count = 0;
+                view->commands = NULL;
+            }
+        }
+        if (msl_effect_model_counts[slot] != 0) {
+            visual->models[slot] = msl_native_effect_models(
+                archive, msl_effect_game_files[k].table, msl_effect_model_counts[slot]);
+        }
+    }
+    msl_effect_projection_bind(data, NULL);
+    HSD_JObjSetDPtclCallback(msl_effect_record_model_generator);
+    for (int bank = 0; bank < MSL_CORE_EFFECT_VISUAL_BANKS; ++bank) {
+        const EF_EffectDesc* table = visual->models[bank];
+        // (the common file's first 0x28 are the simulator's own)
+        int first = bank == 0 ? MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY : 0;
+        for (int model = first; table != NULL && model < msl_effect_model_counts[bank] &&
+                                model - first < MSL_EFFECT_MODELS_PER_FILE;
+             ++model)
+        {
+            const EF_EffectDesc* desc = &table[model];
+            HSD_JObj* jobj;
+            if (desc->model_desc.joint == NULL ||
+                (jobj = HSD_JObjLoadJoint(desc->model_desc.joint)) == NULL)
+            {
+                continue;
+            }
+            HSD_JObjAddAnimAll(jobj, desc->model_desc.animjoint, desc->model_desc.matanim_joint,
+                               desc->model_desc.shapeanim_joint);
+            HSD_JObjReqAnimAll(jobj, 0.0F);
+            msl_effect_recording_draws = &visual->model_draws[bank][model - first];
+            HSD_JObjAnimAll(jobj);
+            msl_effect_recording_draws = NULL;
+            HSD_JObjRemoveAll(jobj);
+        }
+    }
+    HSD_JObjSetDPtclCallback(NULL);
+    return 0;
+}
+#endif
+
+void msl_effect_game_data_visual_deinit(MslCoreEffectData* data)
+{
+    free(data->visual);
+    data->visual = NULL;
+}
+
+// A bank as the game's particle code finds it: the running stage's map_ptcl,
+// a file gameplay does not load, or gameplay's own.
+static const MslCoreEffectGeneratorBank* msl_effect_visual_bank(int bank)
+{
+    const MslCoreEffectVisual* visual =
+        msl_bound_effect_data != NULL ? msl_bound_effect_data->visual : NULL;
+    if (bank == MSL_EFFECT_STAGE_BANK) {
+#ifdef MSL_CORE_NATIVE
+        if (msl_bound_effect_data == NULL ||
+            (u32) stage_info.internal_stage_id >=
+                sizeof(msl_bound_effect_data->stage_banks) /
+                    sizeof(msl_bound_effect_data->stage_banks[0]))
+        {
+            return NULL;
+        }
+        return &msl_bound_effect_data->stage_banks[stage_info.internal_stage_id];
+#else
+        return NULL;
+#endif
+    }
+    if (visual != NULL && bank > 0 && bank < MSL_CORE_EFFECT_VISUAL_BANKS &&
+        visual->view_banks[bank].archive != NULL)
+    {
+        return &visual->view_banks[bank];
+    }
+    if (msl_bound_effect_data == NULL || bank < 0 || bank >= MSL_CORE_EFFECT_BANK_CAPACITY) {
+        return NULL;
+    }
+    return &msl_effect_banks[bank];
+}
+
+int msl_effect_view_only(int bank)
+{
+    const MslCoreEffectVisual* visual =
+        msl_bound_effect_data != NULL ? msl_bound_effect_data->visual : NULL;
+    return visual != NULL && bank > 0 && bank < MSL_CORE_EFFECT_VISUAL_BANKS &&
+           visual->view_banks[bank].archive != NULL;
+}
+
+int msl_effect_generator_draws(int bank, int generator_id)
+{
+    const MslCoreEffectGeneratorBank* data = msl_effect_visual_bank(bank);
+    const HSD_PSCmdList* command;
+
+    // (indexed by the full generator id: hsd_8039F05C)
+    if (data == NULL || data->commands == NULL || generator_id < data->id_base ||
+        generator_id >= data->count)
+    {
+        return 0;
+    }
+    command = data->commands[generator_id - data->id_base];
+    return command != NULL && !(command->kind & 0x100) && command->random >= 0.0F;
+}
+
+int msl_effect_model_first_draws(int model_id)
+{
+    const MslCoreEffectVisual* visual =
+        msl_bound_effect_data != NULL ? msl_bound_effect_data->visual : NULL;
+    int bank = model_id / 1000;
+    int index = model_id % 1000;
+    // (the common file's from 0x28 on, kept from 0)
+    if (bank == 0) {
+        index -= MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY;
+    }
+    if (visual == NULL || model_id < 0 || index < 0 || bank >= MSL_CORE_EFFECT_VISUAL_BANKS ||
+        index >= MSL_EFFECT_MODELS_PER_FILE)
+    {
+        return 0;
+    }
+    return visual->model_draws[bank][index];
+}
+#endif // MSL_VISUAL_TRACK_BUILD
 
 #ifndef MSL_CORE_NATIVE
 // psInitDataBankLoad's header parse for an in-place command bank; entries
@@ -307,6 +528,13 @@ int msl_effect_load_stage_bank(MslCoreEffectData* data,
 static void msl_effect_match_dptcl(int link_no, int bank, int gfx_id,
                                    HSD_JObj* jobj)
 {
+#if MSL_VISUAL_TRACK_BUILD
+        // (a stage's key is drawn for below; another file's is a draw the
+        // simulator leaves out)
+        if (bank != 0x1E) {
+            msl_viewer_track_skipped(bank, gfx_id);
+        }
+#endif // MSL_VISUAL_TRACK_BUILD
     if (bank != 0x1E || msl_bound_effect_state == NULL) {
         return;
     }
@@ -579,9 +807,120 @@ static void msl_effect_consume_common_dispatch_generator(s32 gfx_id)
     }
 }
 
+#if MSL_VISUAL_TRACK_BUILD
+// The random numbers a real creation of this generator, or of this common
+// model, draws (runtime/effect_pieces.c).
+void msl_effect_pieces_consume_generator(s32 generator_id)
+{
+    msl_effect_consume_generator_rng(generator_id);
+}
+
+void msl_effect_pieces_consume_model(int model_id)
+{
+    msl_effect_consume_common_model_start(model_id);
+}
+
+#endif // MSL_VISUAL_TRACK_BUILD
+#if MSL_VISUAL_TRACK_BUILD
+// A vararg that should be a pointer, or NULL when it cannot be one. A float
+// passed by value arrives as a double whose bits are far above user-space
+// addresses; NULL and misaligned values are out.
+static const void* msl_effect_plausible(void* p)
+{
+    uintptr_t v = (uintptr_t) p;
+    if (v < 0x10000U || (v & 3U) != 0) {
+        return NULL;
+    }
+#if UINTPTR_MAX > 0xFFFFFFFFU
+    if (v >= ((uintptr_t) 1 << 47)) {
+        return NULL;
+    }
+#endif
+    return p;
+}
+
+// A float vararg slot. Retail passes f32*; some decomp call sites pass the
+// float itself, which arrives promoted to double. A plausible pointer is read
+// through; otherwise the slot is taken as a double when that gives a finite,
+// reasonably sized value.
+static float msl_effect_float_arg(uint64_t bits)
+{
+    const void* p = msl_effect_plausible((void*) (uintptr_t) bits);
+    double d;
+    if (p != NULL) {
+        return *(const f32*) p;
+    }
+    memcpy(&d, &bits, sizeof(d));
+    if (d == d && d > -1.0e7 && d < 1.0e7) {
+        return (float) d;
+    }
+    return 0.0F;
+}
+
+#if UINTPTR_MAX == 0xFFFFFFFFU
+// 32-bit hosts (wasm32): a pointer is a 4-byte vararg slot and a promoted
+// float an 8-byte one, so the slot is looked at as a pointer first and taken
+// as one only when it is plausible; otherwise it is read as the double. A
+// float promoted to double has its low 29 bits clear, so a "pointer" whose
+// low 29 bits are clear is the double's low word, not a pointer.
+static float msl_effect_float_vararg(va_list* args)
+{
+    va_list peek;
+    void* p;
+    double d;
+    va_copy(peek, *args);
+    p = va_arg(peek, void*);
+    va_end(peek);
+    if (msl_effect_plausible(p) != NULL && ((uintptr_t) p & 0x1FFFFFFFU) != 0
+#ifdef __wasm__
+        && (uintptr_t) p < (uintptr_t) __builtin_wasm_memory_size(0) * 65536U
+#endif
+    ) {
+        (void) va_arg(*args, void*);
+        return *(const f32*) p;
+    }
+    d = va_arg(*args, double);
+    return d == d && d > -1.0e7 && d < 1.0e7 ? (float) d : 0.0F;
+}
+#define MSL_EFFECT_FLOAT_VARARG(args) msl_effect_float_vararg(&(args))
+#else
+#define MSL_EFFECT_FLOAT_VARARG(args) msl_effect_float_arg(va_arg(args, uint64_t))
+#endif
+
+// Set while a queued efAsync spawn is processed: its "fx" was written when
+// it was queued.
+static _Thread_local int msl_effect_processing_queued;
+
+#endif // MSL_VISUAL_TRACK_BUILD
 void* efSync_Spawn(s32 gfx_id, HSD_GObj* gobj, ...)
 {
+#if MSL_VISUAL_TRACK_BUILD
+    if (msl_viewer_track_on() && !msl_effect_processing_queued) {
+        va_list args;
+        void* first;
+        va_start(args, gobj);
+        first = va_arg(args, void*);
+        va_end(args);
+        // Generators take a position (efLib_CreateGenerator); the other
+        // dispatches take the joint they attach to first.
+        if (gfx_id < 0x250 || gfx_id / 1000 == 0x1E) {
+            msl_viewer_track_fx(gobj, gfx_id, NULL, msl_effect_plausible(first),
+                                0.0F, 0.0F);
+        } else {
+            msl_viewer_track_fx(gobj, gfx_id, (HSD_JObj*) first, NULL, 0.0F,
+                                0.0F);
+        }
+#else // !MSL_VISUAL_TRACK_BUILD
     (void) gobj;
+#endif // MSL_VISUAL_TRACK_BUILD
+#if MSL_VISUAL_TRACK_BUILD
+        va_start(args, gobj);
+        msl_effect_pieces(gfx_id, gobj, args);
+        va_end(args);
+#endif // MSL_VISUAL_TRACK_BUILD
+#if MSL_VISUAL_TRACK_BUILD
+    }
+#endif // MSL_VISUAL_TRACK_BUILD
     // Visual objects are excluded, but immediate generator initialization and
     // explicit dispatch randomness share the gameplay HSD stream. The lookup
     // above reads `kind` and `random` directly from EfCoData/EfFxData and
@@ -753,9 +1092,30 @@ static void msl_effect_process(HSD_GObj* gobj, MslCoreEffectQueueNode* node)
         Vec3 position;
         lb_8000B1CC(node->jobj, &node->params, &position);
         Camera_80030E44(node->gfx_id, &position);
+#if MSL_VISUAL_TRACK_BUILD
+    } else if (msl_viewer_track_on()) {
+#else // !MSL_VISUAL_TRACK_BUILD
     } else {
         efSync_Spawn(node->gfx_id, gobj);
     }
+#endif // MSL_VISUAL_TRACK_BUILD
+#if MSL_VISUAL_TRACK_BUILD
+        const float* args =
+            msl_viewer_track_queued_args((int) (node - msl_effect_nodes));
+        if (args != NULL) {
+            Vec3 params = { args[0], args[1], args[2] };
+            msl_effect_pieces_deferred(gobj, node->gfx_id, node->spawn_kind,
+                                       node->jobj, &params, args[3], args[4]);
+        }
+#endif // MSL_VISUAL_TRACK_BUILD
+#if MSL_VISUAL_TRACK_BUILD
+        msl_effect_processing_queued = 1;
+        efSync_Spawn(node->gfx_id, gobj);
+        msl_effect_processing_queued = 0;
+    } else {
+        efSync_Spawn(node->gfx_id, gobj);
+    }
+#endif // MSL_VISUAL_TRACK_BUILD
 }
 
 void efAsync_QueueFlush(HSD_GObj* gobj, void* queue_head)
@@ -789,6 +1149,64 @@ void efAsync_Spawn(HSD_GObj* gobj, void* queue_head, u32 spawn_kind,
     node->spawn_kind = spawn_kind;
     node->gfx_id = gfx_id;
     node->jobj = jobj;
+#if MSL_VISUAL_TRACK_BUILD
+    if (msl_viewer_track_on()) {
+        // The arguments as efasync.c::efAsync_Spawn reads them per kind.
+        // Some decomp call sites pass floats (promoted to double) where
+        // retail passes f32*; msl_effect_float_arg takes either. A Vec3 the
+        // call passes by value arrives by reference on this ABI.
+        va_list args;
+        const Vec3* at = NULL;
+        float a0 = 0.0F;
+        float a1 = 0.0F;
+        va_start(args, jobj);
+        switch (spawn_kind) {
+        case EF_SPAWN_POS_OFFSET:
+        case EF_SPAWN_ATTACH_OFFSET:
+        case EF_SPAWN_CAMERA_SHAKE:
+            at = msl_effect_plausible(va_arg(args, void*));
+            break;
+        case EF_SPAWN_ATTACH_PARAM:
+        case EF_SPAWN_POS_PARAM:
+            a0 = MSL_EFFECT_FLOAT_VARARG(args);
+            break;
+        case EF_SPAWN_POS_OFFSET_PARAM:
+            at = msl_effect_plausible(va_arg(args, void*));
+            a0 = MSL_EFFECT_FLOAT_VARARG(args);
+            break;
+        case EF_SPAWN_POS_OFFSET_PARAM2:
+            at = msl_effect_plausible(va_arg(args, void*));
+            a0 = MSL_EFFECT_FLOAT_VARARG(args);
+            a1 = MSL_EFFECT_FLOAT_VARARG(args);
+            break;
+        default:
+            break;
+        }
+        va_end(args);
+        msl_viewer_track_fx(gobj, (s32) gfx_id, jobj, at, a0, a1);
+#endif // MSL_VISUAL_TRACK_BUILD
+#if MSL_VISUAL_TRACK_BUILD
+        {
+            // (kept for the pieces the spawn makes when it is processed)
+            float* kept =
+                msl_viewer_track_queued_args((int) (node - msl_effect_nodes));
+            if (kept != NULL) {
+                kept[0] = at != NULL ? at->x : 0.0F;
+                kept[1] = at != NULL ? at->y : 0.0F;
+                kept[2] = at != NULL ? at->z : 0.0F;
+                if (spawn_kind == EF_SPAWN_ATTACH_PARAM ||
+                    spawn_kind == EF_SPAWN_POS_PARAM)
+                {
+                    kept[0] = a0;
+                }
+                kept[3] = a0;
+                kept[4] = a1;
+            }
+        }
+#endif // MSL_VISUAL_TRACK_BUILD
+#if MSL_VISUAL_TRACK_BUILD
+    }
+#endif // MSL_VISUAL_TRACK_BUILD
     if (spawn_kind == EF_SPAWN_CAMERA_SHAKE) {
         va_list args;
         va_start(args, jobj);

@@ -35,6 +35,7 @@
 #include "runtime/effects.h"
 #include "runtime/match.h"
 #include "runtime/subsystem_profile.h"
+#include "runtime/viewer_track.h"
 #include "runtime/wire.h"
 
 #include <errno.h>
@@ -684,6 +685,12 @@ static int validate_config(MslCoreMatchConfig* config)
     if (config->num_players == 0) {
         config->num_players = 2;
     }
+#if !MSL_VISUAL_TRACK_BUILD
+    if (config->camera_mode & MSL_VISUAL_TRACK) {
+        fprintf(stderr, "a viewer track requires MSL_VISUAL_TRACK_BUILD=1\n");
+        return -1;
+    }
+#endif
     for (i = 0; i < config->num_players; ++i) {
         if (config->players[i].char_id != MSL_CORE_CHAR_MARIO &&
             config->players[i].char_id != MSL_CORE_CHAR_DRMARIO &&
@@ -751,7 +758,12 @@ static int validate_config(MslCoreMatchConfig* config)
     return 0;
 }
 
+#if MSL_VISUAL_TRACK_BUILD
+static int game_data_init(MslCoreGameData* game_data, const char* data_root,
+                          int visual)
+#else // !MSL_VISUAL_TRACK_BUILD
 int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
+#endif // MSL_VISUAL_TRACK_BUILD
 {
     size_t length;
 
@@ -855,7 +867,23 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     msl_host_set_data_root(game_data->root);
     msl_core_fighter_animation_data_init();
     init_hsd();
+#if MSL_VISUAL_TRACK_BUILD
+#ifdef MSL_CORE_NATIVE
+    if (visual) {
+        if (msl_effect_game_data_init_visual(&game_data->effects) != 0) {
+            fprintf(stderr, "viewer track effect data failed to load\n");
+            return -1;
+        }
+    } else {
+        msl_effect_game_data_init(&game_data->effects);
+    }
+#else
+    (void) visual;
     msl_effect_game_data_init(&game_data->effects);
+#endif
+#else // !MSL_VISUAL_TRACK_BUILD
+    msl_effect_game_data_init(&game_data->effects);
+#endif // MSL_VISUAL_TRACK_BUILD
 #ifdef MSL_CORE_NATIVE
     // These source loaders publish immutable GameData, not Match state.
     // Run them once before constructing the preload matches.
@@ -881,12 +909,28 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     msl_effect_install_match_callbacks();
     return 0;
 }
+#if MSL_VISUAL_TRACK_BUILD
+
+int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
+{
+    return game_data_init(game_data, data_root, 0);
+}
+
+int msl_core_game_data_init_visual(MslCoreGameData* game_data,
+                                   const char* data_root)
+{
+    return game_data_init(game_data, data_root, 1);
+}
+#endif // MSL_VISUAL_TRACK_BUILD
 
 void msl_core_game_data_deinit(MslCoreGameData* game_data)
 {
     if (game_data == NULL) {
         return;
     }
+#if MSL_VISUAL_TRACK_BUILD
+    msl_effect_game_data_visual_deinit(&game_data->effects);
+#endif // MSL_VISUAL_TRACK_BUILD
 #ifdef MSL_CORE_NATIVE
     msl_fighter_pose_programs_deinit(&game_data->fighter_pose_programs);
     msl_native_dat_context_destroy(&game_data->native_dat);
@@ -971,6 +1015,10 @@ int msl_core_match_init(MslCoreMatch* match, const MslCoreGameData* game_data,
     result = match_construct(match, game_data, config, previous_input);
     if (result != 0) {
         msl_memory_context_destroy(&match->memory);
+#if MSL_VISUAL_TRACK_BUILD
+        msl_viewer_track_destroy(match->viewer_track);
+        match->viewer_track = NULL;
+#endif // MSL_VISUAL_TRACK_BUILD
     }
     return result;
 }
@@ -1015,6 +1063,9 @@ int msl_core_match_reset(MslCoreMatch* match, const MslCoreGameData* game_data,
     arena = match->memory.arena;
     capacity = match->memory.capacity;
     arena_owned = match->memory.arena_owned;
+#if MSL_VISUAL_TRACK_BUILD
+    msl_viewer_track_destroy(match->viewer_track);
+#endif // MSL_VISUAL_TRACK_BUILD
     memset(match, 0, sizeof(*match));
     msl_memory_context_reuse_match(&match->memory, arena, capacity,
                                    arena_owned);
@@ -1027,6 +1078,9 @@ void msl_core_match_destroy(MslCoreMatch* match)
         return;
     }
     msl_memory_context_destroy(&match->memory);
+#if MSL_VISUAL_TRACK_BUILD
+    msl_viewer_track_destroy(match->viewer_track);
+#endif // MSL_VISUAL_TRACK_BUILD
     memset(match, 0, sizeof(*match));
 }
 
@@ -1058,6 +1112,21 @@ static int match_construct(MslCoreMatch* match,
     if (validate_config(&match->config) != 0) {
         return -1;
     }
+#if MSL_VISUAL_TRACK_BUILD
+    if (match->config.camera_mode & MSL_VISUAL_TRACK) {
+        if (game_data->effects.visual == NULL) {
+            fprintf(stderr, "a viewer track needs game data loaded by "
+                            "msl_core_game_data_init_visual\n");
+            return -1;
+        }
+        match->viewer_track = msl_viewer_track_create();
+        if (match->viewer_track == NULL) {
+            fprintf(stderr, "viewer track: out of memory\n");
+            return -1;
+        }
+        msl_core_context_viewer_track = match->viewer_track;
+    }
+#endif // MSL_VISUAL_TRACK_BUILD
 #ifdef MSL_CORE_NATIVE
     msl_reloc_begin_match(match);
 #endif
@@ -2603,6 +2672,11 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
     // source match owner advances it only after those processes have run.
     msl_core_advance_match_frame();
     match->random_seed = *seed_ptr;
+#if MSL_VISUAL_TRACK_BUILD
+    if (match->viewer_track != NULL) {
+        msl_viewer_track_frame(match);
+    }
+#endif // MSL_VISUAL_TRACK_BUILD
 #ifdef MSL_SUBSYSTEM_PROFILE
     msl_profile_add(MSL_PROFILE_FINISH,
                          msl_profile_cycles() - finish_started);

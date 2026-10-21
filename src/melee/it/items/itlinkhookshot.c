@@ -105,12 +105,29 @@ void it_802A2428(HSD_GObj* obj)
 
     item = GET_ITEM(obj);
     jobj = HSD_GObjGetHSDObj(obj);
+#ifdef MSL_CORE_HOSTED
+    // The owner is Link, a fighter: retail loads the float at its user_data
+    // + 0x38, Fighter x34_scale.y (as itLinkHookshot_Logic20_PickedUp reads
+    // it). Read through Item, a 64-bit host finds Item.scl at + 0x40 instead,
+    // Fighter facing_dir, and the hookshot's root got the fighter's facing
+    // (-1) for its size.
+    (void) item_owner;
+    {
+        Fighter* fp = item->owner->user_data;
+        if (fp != NULL) {
+            temp_f1 = fp->x34_scale.y * item->xCC_item_attr->x60_scale;
+            item->scl = temp_f1;
+            it_80272F7C(jobj, temp_f1);
+        }
+    }
+#else
     item_owner = GET_ITEM(item->owner);
     if (item_owner != NULL) {
         temp_f1 = item_owner->scl * item->xCC_item_attr->x60_scale;
         item->scl = temp_f1;
         it_80272F7C(jobj, temp_f1);
     }
+#endif
 }
 
 void it_802A2474(void* arg0)

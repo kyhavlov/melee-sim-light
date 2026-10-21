@@ -291,6 +291,7 @@ def build_validation(*, backend: str, jobs: int = 4) -> None:
             "Makefile",
             f"-j{max(1, jobs)}",
             "MSL_REPLAY_ARITHMETIC=1",
+            "MSL_VISUAL_TRACK_BUILD=1",
             *targets,
         ],
         cwd=ROOT,
@@ -329,6 +330,7 @@ def validate_one(
     jit_arithmetic: str | None = None,
     runner: _NativeRunner | None = None,
     diagnostic: bool = False,
+    visual_track: bool = False,
 ) -> dict[str, object]:
     # Python owns only the replay-loading boundary. The native extension consumes
     # Peppi's Arrow buffers through the Arrow C Data Interface without NumPy or
@@ -367,6 +369,10 @@ def validate_one(
             runner_stdout=runner.stdout_fd if runner is not None else -1,
             slippi_patches=slippi_patches(codes),
             jit_arithmetic=1 if jit_arithmetic == "split-fma" else 0,
+            # MSL_VISUAL_TRACK (runtime/wire.h, a runner built with
+            # MSL_VISUAL_TRACK_BUILD=1): the result carries the viewer track's
+            # lines as "visual_track" (tools/validation/visual_state.py).
+            visual_track=visual_track,
         )
     result["admitted"] = not diagnostic
     result["diagnostic"] = diagnostic or signed_zero_equal or frames != 0 or start_frame is not None

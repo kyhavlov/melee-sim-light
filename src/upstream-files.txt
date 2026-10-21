@@ -86,8 +86,13 @@ src/melee/cm/forward.h
 src/melee/cm/types.h
 src/melee/db/db.h
 src/melee/db/dbsound.h
+src/melee/ef/efalt.c
+src/melee/ef/efalt.h
+src/melee/ef/efasync.c
 src/melee/ef/efasync.h
+src/melee/ef/efdata.h
 src/melee/ef/eflib.h
+src/melee/ef/efsync.c
 src/melee/ef/efsync.h
 src/melee/ef/forward.h
 src/melee/ef/types.h
