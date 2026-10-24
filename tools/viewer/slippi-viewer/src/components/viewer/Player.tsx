@@ -2,6 +2,7 @@ import { createMemo, For, Show } from "solid-js";
 import { characterNameByExternalId } from "~/common/ids";
 import { RenderData } from "~/common/types";
 import { access } from "~/state/accessor";
+import { showHitboxes } from "~/state/displayStore";
 import { getPlayerOnFrame, getStartOfAction } from "~/viewer/viewerUtil";
 
 export function Players() {
@@ -19,6 +20,7 @@ export function Players() {
             />
             <Shield renderData={renderData} />
             <Shine renderData={renderData} />
+            <Hitboxes renderData={renderData} />
           </>
         )}
       </For>
@@ -128,6 +130,31 @@ function Shine(props: { renderData: RenderData }) {
         />
       </Show>
     </>
+  );
+}
+
+// Active fighter hitboxes from the wire (up to four per fighter, world
+// space, radius already scaled by the projection). Off by default; toggled
+// with H, the control-bar button, or the live page's checkbox.
+function Hitboxes(props: { renderData: RenderData }) {
+  const hitboxes = createMemo(() =>
+    showHitboxes() ? props.renderData.playerState.hitboxes ?? [] : []
+  );
+  return (
+    <For each={hitboxes()}>
+      {(hitbox) => (
+        <circle
+          cx={hitbox.x}
+          cy={hitbox.y}
+          r={hitbox.radius}
+          fill="#ef4444"
+          fill-opacity={0.22}
+          stroke="#b91c1c"
+          stroke-opacity={0.6}
+          stroke-width={0.4}
+        />
+      )}
+    </For>
   );
 }
 

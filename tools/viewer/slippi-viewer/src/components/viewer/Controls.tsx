@@ -1,3 +1,4 @@
+import { showHitboxes, toggleHitboxes } from "~/state/displayStore";
 import { onCleanup, onMount, Show } from "solid-js";
 import { MinusIcon, PlusIcon } from "~/components/common/icons";
 import {
@@ -87,6 +88,10 @@ export function Controls() {
       case "F":
         toggleFullscreen();
         break;
+      case "h":
+      case "H":
+        toggleHitboxes();
+        break;
     }
   }
 
@@ -173,6 +178,15 @@ export function Controls() {
         max={replayStore.replayData!.frames.length - 1}
         onInput={() => jump(seekbarInput.valueAsNumber)}
       />
+      <div
+        class="material-icons cursor-pointer text-[32px]"
+        onClick={() => toggleHitboxes()}
+        aria-label="Toggle hitbox display"
+        aria-pressed={showHitboxes()}
+        title="Show hitboxes (H)"
+      >
+        {showHitboxes() ? "radio_button_checked" : "radio_button_unchecked"}
+      </div>
       <div
         class="material-icons cursor-pointer text-[32px]"
         onClick={() => toggleFullscreen()}
