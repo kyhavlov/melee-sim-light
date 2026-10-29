@@ -854,6 +854,7 @@ native-smoke: thread-smoke fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke 
 wasm-smoke: data-check $(WASM_MODULE) $(NATIVE_WASM_PARITY)
 	@MSL_CORE_NATIVE_DIGEST="$$($(NATIVE_WASM_PARITY) "$(DATA)")" \
 		node "$(ROOT)/tests/melee_core/wasm_api_smoke.mjs" "$(WASM_MODULE)"
+	@node "$(ROOT)/tests/melee_core/wasm_bowser_callback_smoke.mjs" "$(WASM_MODULE)"
 
 viewer-smoke: wasm-smoke viewer-schema-check
 	+@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" \
