@@ -756,6 +756,67 @@ static void translate_value(MslNativeArchive* context,
             }
             return;
         }
+        if (strcmp(type->name, "ftDynamics") == 0) {
+            // ftDynamics::x10 is declared FigaTree***, but the archive's
+            // table holds, per animation blend slot, a pointer to plain
+            // 32-bit counts: how many leading chain joints the animation
+            // drives. ftCo_8009E4A8 and ftCo_8009E7B4 pass tree[i] to
+            // ftCo_8009CB40, which compares it as (s32) arg3 against the
+            // chain index. The counts are not relocated, so following the
+            // declared pointer type turned every one into NULL (0): each
+            // chain joint was then left to the physics. Keep the declared
+            // host shape (pointer-sized slots) and carry each count in its
+            // slot, as the PPC word it is; a slot without a relocation stays
+            // NULL, as ftCo_8009E7B4's checks expect.
+            // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009CB40,
+            //   ftCo_8009E4A8,ftCo_8009E7B4}
+            for (i = 0; i < type->field_count; ++i) {
+                const MslDatField* field = &type->fields[i];
+                uint32_t field_source = source_offset + field->source_offset;
+                if (field->source_offset == 0x10 &&
+                    field->type->kind == MSL_DAT_POINTER)
+                {
+                    uint32_t table = raw_pointer(context, field_source);
+                    void** slots = NULL;
+                    if (table != UINT32_MAX) {
+                        uint32_t slot_count =
+                            (next_boundary(context, table) - table) / 4;
+                        uint32_t s;
+                        if (slot_count == 0) {
+                            slot_count = 1;
+                        }
+                        slots = native_alloc((size_t) slot_count *
+                                             sizeof(*slots));
+                        for (s = 0; s < slot_count; ++s) {
+                            uint32_t counts =
+                                raw_pointer(context, table + s * 4);
+                            uintptr_t* words;
+                            uint32_t n;
+                            uint32_t k;
+                            if (counts == UINT32_MAX) {
+                                continue;
+                            }
+                            n = (next_boundary(context, counts) - counts) / 4;
+                            if (n == 0) {
+                                n = 1;
+                            }
+                            words = native_alloc((size_t) n * sizeof(*words));
+                            for (k = 0; k < n; ++k) {
+                                words[k] = read_be32(context->data + counts +
+                                                     k * 4);
+                            }
+                            slots[s] = words;
+                        }
+                    }
+                    memcpy((uint8_t*) native + field->native_offset, &slots,
+                           sizeof(slots));
+                    continue;
+                }
+                translate_value(context, field->type, field_source,
+                                (uint8_t*) native + field->native_offset);
+            }
+            return;
+        }
         if (strcmp(type->name, "DynamicsDesc") == 0) {
             const MslDatType* source_element = NULL;
             uint32_t count;

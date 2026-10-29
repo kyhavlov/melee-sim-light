@@ -215,6 +215,7 @@ NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/kirby_moves_smoke.c \
 	$(ROOT)/tests/melee_core/cpu_replay_smoke.c \
 	$(ROOT)/tests/melee_core/fnmsubs_smoke.c \
+	$(ROOT)/tests/melee_core/dynamics_counts_smoke.c \
 	$(ROOT)/tests/melee_core/batch_api_smoke.c \
 	$(ROOT)/tests/melee_core/public_api_smoke.c \
 	$(ROOT)/tests/melee_core/context_smoke.c \
@@ -794,6 +795,7 @@ $(eval $(call link_native_smoke,$(NATIVE_BUILD)/pichu-moves-smoke,$(NATIVE_OBJ_D
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/kirby-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/kirby_moves_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/cpu-replay-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/cpu_replay_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/fnmsubs-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/fnmsubs_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/dynamics-counts-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/dynamics_counts_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/pool-chaos-soak,$(NATIVE_OBJ_DIR)/tests/melee_core/pool_chaos_soak.o))
 $(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
 $(eval $(call link_native_smoke,$(NATIVE_LIFECYCLE_BENCH),$(NATIVE_OBJ_DIR)/tests/melee_core/lifecycle_bench.o))
@@ -835,7 +837,7 @@ ifeq ($(UNAME_S)/$(HOST_TARGET_ARCH),Linux/x86_64)
 thread-smoke: $(NATIVE_SHARED_WRITE_AUDIT)
 endif
 
-native-smoke: thread-smoke fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke kirby-smoke data-check $(NATIVE_BUILD)/cpu-replay-smoke $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
+native-smoke: thread-smoke fnmsubs-smoke dynamics-counts-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke kirby-smoke data-check $(NATIVE_BUILD)/cpu-replay-smoke $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
 	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -970,6 +972,10 @@ gamewatch-smoke: data-check $(NATIVE_BUILD)/gamewatch-moves-smoke
 .PHONY: fnmsubs-smoke
 fnmsubs-smoke: $(NATIVE_BUILD)/fnmsubs-smoke
 	@$(TIMEOUT) 10s "$(NATIVE_BUILD)/fnmsubs-smoke"
+
+.PHONY: dynamics-counts-smoke
+dynamics-counts-smoke: $(NATIVE_BUILD)/dynamics-counts-smoke
+	@$(TIMEOUT) 10s "$(NATIVE_BUILD)/dynamics-counts-smoke"
 
 .PHONY: roy-smoke
 roy-smoke: data-check $(NATIVE_BUILD)/roy-moves-smoke
