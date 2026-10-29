@@ -6,6 +6,17 @@
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 CORE := $(ROOT)/src
 BUILD_ROOT := $(ROOT)/build/melee_core
+# MSL_GX_RECORD=1 selects the viewer build: the headless simulator plus the
+# game's own display code, which records the GX command stream the game sends.
+# It builds into its own tree. The default, 0, is the headless simulator, and
+# the flag then adds nothing to any command line.
+MSL_GX_RECORD ?= 0
+ifeq ($(filter 0 1,$(MSL_GX_RECORD)),)
+$(error MSL_GX_RECORD must be 0 or 1, not '$(MSL_GX_RECORD)')
+endif
+ifeq ($(MSL_GX_RECORD),1)
+BUILD_ROOT := $(ROOT)/build/melee_core-gx
+endif
 PPC_BUILD := $(BUILD_ROOT)/ppc
 NATIVE_BUILD := $(BUILD_ROOT)/native
 NATIVE_RELEASE_BUILD := $(BUILD_ROOT)/native-release
@@ -302,6 +313,9 @@ CPPFLAGS := \
 	-I$(CORE)/sysdolphin \
 	-I$(CORE)/Runtime \
 	-I$(CORE)/extern/dolphin/include
+ifeq ($(MSL_GX_RECORD),1)
+CPPFLAGS += -DMSL_GX_RECORD=1
+endif
 NATIVE_CPPFLAGS := $(CPPFLAGS) -DMSL_CORE_NATIVE -I$(NATIVE_GENERATED_DIR)
 PYTHON_CPPFLAGS := $(NATIVE_CPPFLAGS) -DMSL_CORE_SHARED
 WASM_CPPFLAGS := $(CPPFLAGS) -I$(WASM_GENERATED_DIR) \
@@ -438,6 +452,19 @@ extract:
 ppc: $(BINARY)
 
 native: $(NATIVE_BINARY)
+
+# The headless build must stay the same with every viewer-only change: build
+# the native objects of FLAG_OFF_BASE and of HEAD in one tree, at one path, and
+# compare them with their debug information stripped. FLAG_OFF_EXPECT names
+# objects a change is meant to alter (a fix of the headless build itself).
+FLAG_OFF_BASE ?= origin/main
+FLAG_OFF_JOBS ?= 4
+FLAG_OFF_EXPECT ?=
+.PHONY: flag-off-check
+flag-off-check:
+	@"$(PY)" "$(ROOT)/tools/build/flag_off_check.py" run --base "$(FLAG_OFF_BASE)" \
+		--jobs "$(FLAG_OFF_JOBS)" --host-cc "$(HOST_CC)" \
+		$(foreach o,$(FLAG_OFF_EXPECT),--expect "$(o)")
 
 python-library: $(PYTHON_LIBRARY)
 
