@@ -404,7 +404,11 @@ struct gmm_x0 {
 STATIC_ASSERT(sizeof(struct gmm_x0) == 0x8518);
 
 struct lbl_8046B6A0_24C_t {
-    UNK_T x0;
+    // A word, not UNK_T (void*): this is the same memory as MatchEnd, whose
+    // x0 is a u32. The pointer widens to eight bytes on a hosted build, which
+    // moved every later field by 4 (x4 to +0x8, x58 to +0x5C, x44C to +0x450)
+    // away from the MatchEnd view of the same bytes.
+    u32 x0;
     u8 x4; ///< MatchOutcome
     u8 x5; ///< match mode
     u8 is_teams;
@@ -685,6 +689,14 @@ struct MatchEnd {
     /* 0x186C */ u8 pad_x186C[0x227C - 0x186C];
 };
 STATIC_ASSERT(sizeof(struct MatchEnd) == 0x227C);
+STATIC_ASSERT(offsetof(struct lbl_8046B6A0_24C_t, x4) ==
+              offsetof(struct MatchEnd, result));
+STATIC_ASSERT(offsetof(struct lbl_8046B6A0_24C_t, x8) ==
+              offsetof(struct MatchEnd, frame_count));
+STATIC_ASSERT(offsetof(struct lbl_8046B6A0_24C_t, x58) ==
+              offsetof(struct MatchEnd, player_standings));
+STATIC_ASSERT(offsetof(struct lbl_8046B6A0_24C_t, x44C) ==
+              offsetof(struct MatchEnd, x44C));
 
 struct MatchExitInfo {
     int x0;
