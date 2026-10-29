@@ -152,5 +152,10 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed);
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match);
 int msl_core_write_items_into_zeroed(
     const MslCoreMatch* match, MslCoreItem items[MSL_CORE_MAX_ITEMS]);
+// Slippi's State Bit Flags 1..5 as the fighter holds them. The compare writer
+// and the observation both replace bit 0x80 of the last byte with the
+// visibility captured at the recorder's post-frame boundary.
+void msl_core_pack_fighter_state_flags(
+    const Fighter* fp, uint8_t flags[MSL_CORE_STATE_FLAGS_BYTES]);
 
 #endif
