@@ -10,6 +10,39 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if MSL_SOUND
+#include "sound/sound.h"
+
+// The Wasm build's sound core (src/sound/README.md) follows one match. A
+// reset, restore, copy over or destroy of that match turns it off; the host
+// starts it again. Its per-frame calls wrap that match's step.
+static void sound_release(const MslCoreMatch* match)
+{
+    if (match == msl_sound_match) {
+        msl_sound_stop();
+    }
+}
+#define SOUND_RELEASE(match) sound_release(match)
+#define SOUND_FRAME_BEGIN(match)                                              \
+    do {                                                                      \
+        if ((match) == msl_sound_match) {                                     \
+            msl_core_bind_match(match);                                       \
+            msl_sound_frame_begin();                                          \
+        }                                                                     \
+    } while (0)
+#define SOUND_FRAME_END(match)                                                \
+    do {                                                                      \
+        if ((match) == msl_sound_match) {                                     \
+            msl_core_bind_match(match);                                       \
+            msl_sound_frame_end();                                            \
+        }                                                                     \
+    } while (0)
+#else
+#define SOUND_RELEASE(match) ((void) 0)
+#define SOUND_FRAME_BEGIN(match) ((void) 0)
+#define SOUND_FRAME_END(match) ((void) 0)
+#endif
+
 enum { MSL_CORE_BATCH_MATCH_LIMIT = 16384 };
 
 struct MslCoreBatch {
@@ -197,6 +230,7 @@ void msl_core_batch_destroy(MslCoreBatch* batch)
     }
     if (batch->matches != NULL) {
         for (i = 0; i < batch->match_count; ++i) {
+            SOUND_RELEASE(&batch->matches[i]);
             msl_core_match_destroy(&batch->matches[i]);
         }
     }
@@ -261,6 +295,7 @@ MslCoreResult msl_core_batch_reset_matches(
             uint32_t slot =
                 hash_config(config) & (batch->reset_index_capacity - 1);
             uint32_t source = UINT32_MAX;
+            SOUND_RELEASE(&batch->matches[i]);
             while (batch->reset_index[slot] != 0) {
                 uint32_t candidate = batch->reset_index[slot] - 1;
                 if (memcmp(config, &batch->matches[candidate].config,
@@ -321,11 +356,13 @@ MslCoreResult msl_core_batch_step_matches(
         if (selected(match_mask, mask_stride, i)) {
             MslCoreMatch* match = &batch->matches[i];
             uint32_t frame_seed = match->random_seed;
+            SOUND_FRAME_BEGIN(match);
             if (msl_core_match_step(match, row_const(inputs, input_stride, i),
                                     frame_seed, &no_stage_events) != 0)
             {
                 return MSL_CORE_INVALID_STATE;
             }
+            SOUND_FRAME_END(match);
         }
     }
 #ifdef MSL_SUBSYSTEM_PROFILE
@@ -514,6 +551,7 @@ MslCoreResult msl_core_batch_copy_matches(
         MslCoreMatch* dst = &destination->matches[destination_indices[i]];
         const MslCoreMatch* src = &source->matches[source_indices[i]];
         if (dst != src) {
+            SOUND_RELEASE(dst);
             dst->game_data = destination->game_data;
             if (msl_core_match_copy(dst, src) != 0) {
                 return MSL_CORE_INCOMPATIBLE;
@@ -564,6 +602,7 @@ MslCoreResult msl_core_batch_restore_match(
         return MSL_CORE_INVALID_ARGUMENT;
     }
     match = &batch->matches[match_index];
+    SOUND_RELEASE(match);
     match->game_data = batch->game_data;
     if (msl_core_match_restore(match, buffer, buffer_size) != 0) {
         return MSL_CORE_INCOMPATIBLE;
@@ -571,3 +610,41 @@ MslCoreResult msl_core_batch_restore_match(
     batch->initialized[match_index] = 1;
     return MSL_CORE_OK;
 }
+
+#if MSL_SOUND
+// Start the game's sound for one match, right after its reset and before its
+// first step: the game's sound start-up for a VS match, reading the sound
+// files under sound_root in the module's file system. *missing is 0 when it
+// started, else the number of files it needs (msl_sound_need(i) names them,
+// relative to sound_root): the host writes them, resets the match and starts
+// again. The PCM of each step of that match is then msl_sound_pcm() and
+// msl_sound_pcm_frames() (interleaved stereo 16-bit at 32 kHz).
+MslCoreResult msl_core_batch_sound_start(MslCoreBatch* batch,
+                                         uint32_t match_index,
+                                         const char* sound_root,
+                                         int32_t* missing)
+{
+    MslCoreMatch* match;
+    int result;
+    if (batch == NULL || sound_root == NULL || missing == NULL ||
+        match_index >= batch->match_count)
+    {
+        return MSL_CORE_INVALID_ARGUMENT;
+    }
+    if (!batch->initialized[match_index]) {
+        return MSL_CORE_INVALID_STATE;
+    }
+    match = &batch->matches[match_index];
+    msl_sound_stop();
+    msl_core_bind_match(match);
+    result = msl_sound_start(sound_root);
+    if (result < 0) {
+        return MSL_CORE_OUT_OF_MEMORY;
+    }
+    *missing = result;
+    if (result == 0) {
+        msl_sound_match = match;
+    }
+    return MSL_CORE_OK;
+}
+#endif

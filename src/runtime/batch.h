@@ -64,5 +64,12 @@ MslCoreResult msl_core_batch_save_match(
 MslCoreResult msl_core_batch_restore_match(
     MslCoreBatch* batch, uint32_t match_index, const void* buffer,
     size_t buffer_size);
+#if MSL_SOUND
+// The Wasm build's sound core (src/sound/README.md, src/runtime/batch.c).
+MslCoreResult msl_core_batch_sound_start(MslCoreBatch* batch,
+                                         uint32_t match_index,
+                                         const char* sound_root,
+                                         int32_t* missing);
+#endif
 
 #endif

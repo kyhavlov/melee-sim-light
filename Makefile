@@ -323,6 +323,8 @@ WASM_CPPFLAGS := $(CPPFLAGS) -I$(WASM_GENERATED_DIR) \
 	-DMSL_CORE_NATIVE -DMSL_CORE_WASM
 ifeq ($(MSL_SOUND),1)
 WASM_CPPFLAGS += -DMSL_SOUND=1
+WASM_SOUND_RUNTIME_METHODS := ,"FS"
+WASM_SOUND_EXPORTS := ,"_msl_core_batch_sound_start","_msl_sound_need_count","_msl_sound_need","_msl_sound_pcm","_msl_sound_pcm_frames","_msl_sound_set_music","_msl_sound_info","_msl_sound_log","_msl_sound_log_count","_msl_sound_stop"
 endif
 CFLAGS := \
 	-O0 -g -std=gnu11 -fgnu89-inline -fno-short-enums \
@@ -750,8 +752,8 @@ $(WASM_MODULE): $(WASM_CORE_OBJS) $(wildcard $(DATA)/*)
 		-sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 \
 		-sINITIAL_MEMORY=536870912 -sMAXIMUM_MEMORY=1073741824 \
 		-sGROWABLE_ARRAYBUFFERS=0 \
-		-sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_core_game_data_create","_msl_core_game_data_destroy","_msl_core_batch_create","_msl_core_batch_destroy","_msl_core_batch_match_count","_msl_core_batch_reset_matches","_msl_core_batch_step_matches","_msl_core_batch_write_state","_msl_core_batch_write_observation","_msl_core_batch_write_terminal","_msl_core_batch_write_viewer","_msl_core_batch_copy_matches","_msl_core_batch_match_save_size","_msl_core_batch_save_match","_msl_core_batch_restore_match"]' \
-		-sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
+		-sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_core_game_data_create","_msl_core_game_data_destroy","_msl_core_batch_create","_msl_core_batch_destroy","_msl_core_batch_match_count","_msl_core_batch_reset_matches","_msl_core_batch_step_matches","_msl_core_batch_write_state","_msl_core_batch_write_observation","_msl_core_batch_write_terminal","_msl_core_batch_write_viewer","_msl_core_batch_copy_matches","_msl_core_batch_match_save_size","_msl_core_batch_save_match","_msl_core_batch_restore_match"$(WASM_SOUND_EXPORTS)]' \
+		-sEXPORTED_RUNTIME_METHODS='["HEAPU8"$(WASM_SOUND_RUNTIME_METHODS)]' \
 		--preload-file "$(DATA)@/data/raw" -o "$@" 2>"$$log"; then \
 		cat "$$log" >&2; exit 1; \
 	fi; \

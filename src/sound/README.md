@@ -38,6 +38,26 @@ for it before the match: not in the replay; the main track plays).
 Sound objects (`lbAudioAx_800263E8`) are HSD GObjs in the game. Here they live in `core.c`'s pool: the game's GObj lists, object
 heaps and procs stay the simulator's. Their proc runs after the frame's own procs (the game gives it s_link 23).
 
+## The host's side
+
+The module's sound calls (`make wasm MSL_SOUND=1` exports them; the module also exports `FS`):
+
+1. `msl_core_batch_sound_start(batch, match_index, sound_root, &missing)` right after that match's reset, before its first step.
+   `missing` is 0 when the sound started, else the number of files it needs: `msl_sound_need(i)` names them relative to
+   `sound_root` (e.g. `audio/us/smash2.sem`, `audio/us/main.ssm`, `audio/sp_zako.hps`, the disc's paths). The host writes them into
+   the module's file system there (`FS.writeFile`), resets the match and starts again. The files come from the user's own disc; none
+   is in this repository.
+2. After each step of that match: `msl_sound_pcm()` and `msl_sound_pcm_frames()` give that frame's sound, interleaved stereo 16-bit
+   at 32 kHz (480 or 640 stereo samples; 533.87 on average). Other matches of the batch step as before.
+3. `msl_sound_set_music(0/1)`: the music heard or not (its voices play on either way: the state stays the game's).
+4. A reset, restore, copy over or destroy of the sound's match turns the sound off (`msl_sound_stop()` does it directly); the sound's
+   state is not part of a saved match, so after a restore the host starts it again. While it is off every stub is the no-op it was.
+5. For checks: `msl_sound_log()` / `msl_sound_log_count()` list the sounds the game started (8 int32 each: frame, kind (1 a sound, 2
+   the music), sound id, volume, pan, track, channel, voice), `msl_sound_info(i)` the voices playing and the AX frames so far.
+
+The game's sound calls reach the core through the gameplay stubs in `src/stubs/headless_exclusions.c` (`snd_route.h`); calls made
+only by the game's display code (the announcer, the HUD's sounds) are not compiled in this build and stay silent.
+
 ## Credits
 
 The decomp of Super Smash Bros. Melee and its Dolphin SDK libraries: doldecomp/melee contributors. The DSP-ADPCM format as

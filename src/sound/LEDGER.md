@@ -48,3 +48,10 @@ For WebAssembly and this build:
 Outside src/sound:
 - `Makefile`: `MSL_SOUND` (0 or 1, default 0). With 1 the Wasm build compiles this folder with `-DMSL_SOUND=1 -Isrc/sound` into
   `build/melee_core/wasm-sound`; every other target and the default Wasm build are unchanged (`make -n -B` the same line for line).
+  It also exports the sound calls and `FS`.
+- `src/stubs/headless_exclusions.c`: the game's function while the sound core is on (`snd_route.h`); `lbAudioAx_800263E8` draws its
+  random roll where it always did and hands it to the game's `fn_80025FAC`.
+- `src/melee/lb/lbaudio_ax.h`: with `MSL_SOUND`, `lbAudioAx_800264E4` returns int (the decomp's type: a voice id); its stub still
+  returns 1 while the sound is off, which is what its `bool` -1 was. Without `MSL_SOUND` both are as they were.
+- `src/runtime/batch.c`: `msl_core_batch_sound_start`; the sound's per-frame calls around its match's step; a reset, restore, copy
+  over or destroy of that match turns the sound off.
