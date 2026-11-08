@@ -2451,8 +2451,12 @@ void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
 
                 switch (sfx_id) {
                 case 0x3E8:
+                    // The game truncates the DmgLog damage to a whole number
+                    // first (u32 u_dmg = (u32) entry->x20 in the decomp),
+                    // and efAsync 0x3E8 sizes the spark from it (0.04 * dmg
+                    // + 0.3): a staled 12.61 makes a 12 spark, not 12.61.
                     ftColl_80078538(gobj, &entry->pos, hit->sfx_severity,
-                                    entry->x20, kb);
+                                    (u32) entry->x20, kb);
                     break;
                 case 0x3E9:
                 case 0x3EA:
@@ -2553,8 +2557,12 @@ void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
 
                 switch (sfx_id) {
                 case 0x3E8:
+                    // The game truncates the DmgLog damage to a whole number
+                    // first (u32 u_dmg = (u32) entry->x20 in the decomp),
+                    // and efAsync 0x3E8 sizes the spark from it (0.04 * dmg
+                    // + 0.3): a staled 12.61 makes a 12 spark, not 12.61.
                     ftColl_80078538(gobj, &entry->pos, hit->sfx_severity,
-                                    entry->x20, kb);
+                                    (u32) entry->x20, kb);
                     break;
                 case 0x3E9:
                 case 0x3EA:
