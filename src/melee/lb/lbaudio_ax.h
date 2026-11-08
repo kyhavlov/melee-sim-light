@@ -80,7 +80,11 @@
 /* 0263B4 */ void lbAudioAx_ObjFree(void* obj);
 /* 0263E8 */ HSD_GObj* lbAudioAx_800263E8(float, HSD_GObj*, int, int, int, int,
                                           int, int, int, int, int);
+#if MSL_SOUND
+/* 0264E4 */ int lbAudioAx_800264E4(void* data); /* the decomp's type: a voice id */
+#else
 /* 0264E4 */ bool lbAudioAx_800264E4(void* data);
+#endif
 /* 026510 */ bool lbAudioAx_80026510(HSD_GObj*);
 /* 0265C4 */ bool lbAudioAx_800265C4(HSD_GObj*, int sfx);
 /* 026650 */ s32 fn_80026650(void);

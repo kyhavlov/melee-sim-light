@@ -10,7 +10,17 @@ PPC_BUILD := $(BUILD_ROOT)/ppc
 NATIVE_BUILD := $(BUILD_ROOT)/native
 NATIVE_RELEASE_BUILD := $(BUILD_ROOT)/native-release
 SUBSYSTEM_PROFILE_BUILD := $(BUILD_ROOT)/subsystem-profile
+# MSL_SOUND=1 adds the game's sound code (src/sound/README.md) to the Wasm
+# module only, built into its own directory; the default build is unchanged.
+MSL_SOUND ?= 0
+ifeq ($(filter 0 1,$(MSL_SOUND)),)
+$(error MSL_SOUND must be 0 or 1, not '$(MSL_SOUND)')
+endif
+ifeq ($(MSL_SOUND),1)
+WASM_BUILD := $(BUILD_ROOT)/wasm-sound
+else
 WASM_BUILD := $(BUILD_ROOT)/wasm
+endif
 PYTHON_BUILD := $(BUILD_ROOT)/python
 VALIDATION_BUILD := $(BUILD_ROOT)/validation
 PPC_OBJ_DIR := $(PPC_BUILD)/obj
@@ -193,6 +203,11 @@ NATIVE_CORE_OBJS := $(NATIVE_UPSTREAM_OBJS) $(NATIVE_LOCAL_OBJS) \
 WASM_CORE_OBJS := $(WASM_UPSTREAM_OBJS) $(WASM_LOCAL_OBJS) \
 	$(WASM_PLATFORM_OBJS) $(WASM_DAT_LAYOUT_OBJ) \
 	$(WASM_MATCH_RELOC_LAYOUT_OBJ)
+ifeq ($(MSL_SOUND),1)
+SOUND_SRCS := $(filter $(CORE)/sound/%.c,$(MSL_SRC_FILES))
+WASM_SOUND_OBJS := $(patsubst $(ROOT)/%.c,$(WASM_OBJ_DIR)/%.o,$(SOUND_SRCS))
+WASM_CORE_OBJS += $(WASM_SOUND_OBJS)
+endif
 PYTHON_CORE_OBJS := $(PYTHON_UPSTREAM_OBJS) $(PYTHON_LOCAL_OBJS) \
 	$(PYTHON_DAT_LAYOUT_OBJ) $(PYTHON_MATCH_RELOC_LAYOUT_OBJ)
 MAIN_SRC := $(CORE)/runtime/main.c
@@ -306,6 +321,11 @@ NATIVE_CPPFLAGS := $(CPPFLAGS) -DMSL_CORE_NATIVE -I$(NATIVE_GENERATED_DIR)
 PYTHON_CPPFLAGS := $(NATIVE_CPPFLAGS) -DMSL_CORE_SHARED
 WASM_CPPFLAGS := $(CPPFLAGS) -I$(WASM_GENERATED_DIR) \
 	-DMSL_CORE_NATIVE -DMSL_CORE_WASM
+ifeq ($(MSL_SOUND),1)
+WASM_CPPFLAGS += -DMSL_SOUND=1
+WASM_SOUND_RUNTIME_METHODS := ,"FS"
+WASM_SOUND_EXPORTS := ,"_msl_core_batch_sound_start","_msl_sound_need_count","_msl_sound_need","_msl_sound_pcm","_msl_sound_pcm_frames","_msl_sound_set_music","_msl_sound_info","_msl_sound_log","_msl_sound_log_count","_msl_sound_stop"
+endif
 CFLAGS := \
 	-O0 -g -std=gnu11 -fgnu89-inline -fno-short-enums \
 	-fno-strict-aliasing -ffp-contract=off -ffunction-sections \
@@ -583,6 +603,11 @@ $(WASM_OBJ_DIR)/%.o: $(ROOT)/%.c
 	@mkdir -p "$(@D)"
 	@"$(EMCC)" $(WASM_CPPFLAGS) $(WASM_CFLAGS) -MMD -MP -c "$<" -o "$@"
 
+ifeq ($(MSL_SOUND),1)
+# The sound core's copies of the SDK and decomp headers it needs (src/sound).
+$(WASM_SOUND_OBJS): WASM_CPPFLAGS += -I$(CORE)/sound
+endif
+
 $(WASM_OBJ_DIR)/gameplay/melee/ft/ftaction.o \
 $(WASM_OBJ_DIR)/gameplay/melee/it/itanimlist.o \
 $(WASM_OBJ_DIR)/gameplay/melee/lb/lbcommand.o \
@@ -727,8 +752,8 @@ $(WASM_MODULE): $(WASM_CORE_OBJS) $(wildcard $(DATA)/*)
 		-sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 \
 		-sINITIAL_MEMORY=536870912 -sMAXIMUM_MEMORY=1073741824 \
 		-sGROWABLE_ARRAYBUFFERS=0 \
-		-sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_core_game_data_create","_msl_core_game_data_destroy","_msl_core_batch_create","_msl_core_batch_destroy","_msl_core_batch_match_count","_msl_core_batch_reset_matches","_msl_core_batch_step_matches","_msl_core_batch_write_state","_msl_core_batch_write_observation","_msl_core_batch_write_terminal","_msl_core_batch_write_viewer","_msl_core_batch_copy_matches","_msl_core_batch_match_save_size","_msl_core_batch_save_match","_msl_core_batch_restore_match"]' \
-		-sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
+		-sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_core_game_data_create","_msl_core_game_data_destroy","_msl_core_batch_create","_msl_core_batch_destroy","_msl_core_batch_match_count","_msl_core_batch_reset_matches","_msl_core_batch_step_matches","_msl_core_batch_write_state","_msl_core_batch_write_observation","_msl_core_batch_write_terminal","_msl_core_batch_write_viewer","_msl_core_batch_copy_matches","_msl_core_batch_match_save_size","_msl_core_batch_save_match","_msl_core_batch_restore_match"$(WASM_SOUND_EXPORTS)]' \
+		-sEXPORTED_RUNTIME_METHODS='["HEAPU8"$(WASM_SOUND_RUNTIME_METHODS)]' \
 		--preload-file "$(DATA)@/data/raw" -o "$@" 2>"$$log"; then \
 		cat "$$log" >&2; exit 1; \
 	fi; \
