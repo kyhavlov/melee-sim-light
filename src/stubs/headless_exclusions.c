@@ -14,6 +14,7 @@
 #include "gr/ground.h"
 
 #include "lb/lbaudio_ax.h"
+#include "sound/snd_route.h" /* MSL_SOUND=1: the game's own sound functions while the sound core is on */
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -145,6 +146,7 @@ bool it_8026D324(int kind)
 
 int lbAudioAx_80023870(int sfx_id, int sfx_vol, int sfx_pan, int arg3)
 {
+    SND_ROUTE(msl_snd_lbAudioAx_80023870(sfx_id, sfx_vol, sfx_pan, arg3));
     (void) sfx_id;
     (void) sfx_vol;
     (void) sfx_pan;
@@ -273,27 +275,43 @@ HSD_GObj* lbAudioAx_800263E8(float direction, HSD_GObj* entity,
     // gameplay consumers such as DamageFlyRoll, so retain it headlessly.
     // refs/melee/src/melee/{ft/ftaction.c::ftAction_80072320,
     // lb/lbaudio_ax.c::{lbAudioAx_800263E8,fn_80025FAC}}
+#if MSL_SOUND
+    if (msl_sound_on) {
+        msl_snd_randi_next = direction == 0.0F ? HSD_Randi(2) : -1;
+        msl_sound_count_request(__func__);
+        return msl_snd_lbAudioAx_800263E8(direction, entity, behavior, sfx_id, start_value, end_value, pan_left, pan_right,
+                                          end_frame, channel, arg10);
+    }
+#endif
     if (direction == 0.0F) {
         (void) HSD_Randi(2);
     }
     return NULL;
 }
 
+#if MSL_SOUND
+int lbAudioAx_800264E4(void* data)
+#else
 bool lbAudioAx_800264E4(void* data)
+#endif
 {
+    SND_ROUTE(msl_snd_lbAudioAx_800264E4((HSD_GObj*) data));
     (void) data;
     // Source returns -1 for the absent audio owner. Fighter fields receiving
     // the handle remain in their canonical inactive state.
     // refs/melee/src/melee/lb/lbaudio_ax.c::lbAudioAx_800264E4
-    return -1;
+    // As bool that is 1, which the sound build keeps while its sound is off.
+    return (bool) -1;
 }
 
 int lbAudioAx_800236B8(int arg0)
 {
+    SND_ROUTE(msl_snd_lbAudioAx_800236B8(arg0));
     return (void) arg0, 0;
 }
 int lbAudioAx_800237A8(enum_t id, int volume, int pan)
 {
+    SND_ROUTE(msl_snd_lbAudioAx_800237A8(id, volume, pan));
     (void) id;
     (void) volume;
     (void) pan;
@@ -301,6 +319,7 @@ int lbAudioAx_800237A8(enum_t id, int volume, int pan)
 }
 int lbAudioAx_80024184(int arg0, int arg1, int arg2, int arg3)
 {
+    SND_ROUTE(msl_snd_lbAudioAx_80024184(arg0, arg1, arg2, arg3));
     (void) arg0;
     (void) arg1;
     (void) arg2;
@@ -309,34 +328,41 @@ int lbAudioAx_80024184(int arg0, int arg1, int arg2, int arg3)
 }
 int lbAudioAx_80024304(int arg0)
 {
+    SND_ROUTE(msl_snd_lbAudioAx_80024304(arg0));
     return (void) arg0, 0;
 }
 int lbAudioAx_80024B94(int arg0, int arg1)
 {
+    SND_ROUTE(msl_snd_lbAudioAx_80024B94(arg0, arg1));
     (void) arg0;
     (void) arg1;
     return 0;
 }
 void lbAudioAx_80024DC4(int arg0)
 {
+    SND_ROUTE_VOID(msl_snd_lbAudioAx_80024DC4(arg0));
     (void) arg0;
 }
-void lbAudioAx_80024FDC(void) {}
-void lbAudioAx_80024FF4(void) {}
+void lbAudioAx_80024FDC(void) { SND_ROUTE_VOID(msl_snd_lbAudioAx_80024FDC()); }
+void lbAudioAx_80024FF4(void) { SND_ROUTE_VOID(msl_snd_lbAudioAx_80024FF4()); }
 void lbAudioAx_8002500C(int arg0)
 {
+    SND_ROUTE_VOID(msl_snd_lbAudioAx_8002500C(arg0));
     (void) arg0;
 }
 void lbAudioAx_80025038(int arg0)
 {
+    SND_ROUTE_VOID(msl_snd_lbAudioAx_80025038(arg0));
     (void) arg0;
 }
 bool lbAudioAx_80026510(HSD_GObj* gobj)
 {
+    SND_ROUTE(msl_snd_lbAudioAx_80026510(gobj));
     return (void) gobj, false;
 }
 bool lbAudioAx_800265C4(HSD_GObj* gobj, int sfx)
 {
+    SND_ROUTE(msl_snd_lbAudioAx_800265C4(gobj, sfx));
     (void) gobj;
     (void) sfx;
     return false;
