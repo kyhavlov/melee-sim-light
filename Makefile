@@ -441,7 +441,7 @@ endif
 
 NATIVE_FLAGS_SIGNATURE := $(NATIVE_CPPFLAGS)|$(NATIVE_BASE_CFLAGS)|$(NATIVE_LINK_FLAGS)|$(NATIVE_RELEASE_PROFILE)|$(NATIVE_SUBSYSTEM_PROFILE)|$(NATIVE_RELEASE_O0_OBJS)|$(NATIVE_RELEASE_O1_OBJS)|$(NATIVE_RELEASE_O2_OBJS)|$(NATIVE_RELEASE_OPT_OBJS)
 
-.PHONY: ppc-layout ppc-layout-check all bootstrap extract ppc native python-library native-release native-release-benchmark runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain validation-release-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
+.PHONY: ppc-layout ppc-layout-check all bootstrap extract ppc native python-library native-release native-release-benchmark runtime-census large-batch-smoke benchmark-prepare benchmark-native subsystem-profile benchmark-9950x3d-vcache-256 benchmark-9950x3d-vcache-512 benchmark-9950x3d-frequency-256 benchmark-9950x3d-frequency-512 wasm wasm-smoke wasm-sound-smoke viewer-build viewer viewer-smoke viewer-production-smoke viewer-schema viewer-schema-check lifecycle-benchmark source-check validator validation-suite validation-supported-domain validation-release-supported-domain clean toolchain data-check ppc-smoke native-smoke test test-full format-check slpz-convert FORCE
 
 all: native python-library
 
@@ -879,6 +879,14 @@ native-smoke: thread-smoke fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke 
 wasm-smoke: data-check $(WASM_MODULE) $(NATIVE_WASM_PARITY)
 	@MSL_CORE_NATIVE_DIGEST="$$($(NATIVE_WASM_PARITY) "$(DATA)")" \
 		node "$(ROOT)/tests/melee_core/wasm_api_smoke.mjs" "$(WASM_MODULE)"
+
+# The Wasm module with the sound core (src/sound/README.md). Set
+# MSL_SOUND_FILES to a folder holding the disc's audio/ folder for the
+# full check; without it only the checks that need no sound files run.
+wasm-sound-smoke: data-check
+	+@$(MAKE) --no-print-directory wasm MSL_SOUND=1
+	@node "$(ROOT)/tests/melee_core/sound_wasm_smoke.mjs" \
+		"$(BUILD_ROOT)/wasm-sound/melee-core.js"
 
 viewer-smoke: wasm-smoke viewer-schema-check
 	+@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" \

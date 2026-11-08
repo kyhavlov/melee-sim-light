@@ -58,6 +58,15 @@ The module's sound calls (`make wasm MSL_SOUND=1` exports them; the module also 
 The game's sound calls reach the core through the gameplay stubs in `src/stubs/headless_exclusions.c` (`snd_route.h`); calls made
 only by the game's display code (the announcer, the HUD's sounds) are not compiled in this build and stay silent.
 
+## Checks
+
+`make wasm-sound-smoke` builds the module with `MSL_SOUND=1` and runs `tests/melee_core/sound_wasm_smoke.mjs` on it. Without sound
+files it checks that the start names the files it reads and stays off. With `MSL_SOUND_FILES` set to a folder holding the disc's
+`audio/` folder (read there, written nowhere) it also checks each frame's PCM length, that the same match sounds the same twice and
+after a restart, that the game's state is the same frame for frame with the sound on and off, and that the requests are the
+decomp's: each fighter's entry sound (`ft_0C31.c`: `lbAudioAx_80024304(0x8B)`, volume and pan doubled by `fn_80023750`, track 0x16,
+channel 7) and the stage's music before the first frame.
+
 ## Credits
 
 The decomp of Super Smash Bros. Melee and its Dolphin SDK libraries: doldecomp/melee contributors. The DSP-ADPCM format as
