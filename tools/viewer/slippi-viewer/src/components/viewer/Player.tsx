@@ -82,6 +82,12 @@ function Shield(props: { renderData: RenderData }) {
       ? r
       : props.renderData.characterData.shieldSize * shieldSizeMultiplier();
   });
+  // A light shield is larger and fainter. The sim publishes the alpha the
+  // game gives the bubble; sources without it draw the bubble as before.
+  const shieldAlpha = createMemo(() => {
+    const alpha = props.renderData.playerState.shieldAlpha;
+    return typeof alpha === "number" && Number.isFinite(alpha) ? alpha : 1;
+  });
   return (
     <>
       <Show
@@ -94,7 +100,7 @@ function Shield(props: { renderData: RenderData }) {
           cy={shieldY()}
           r={shieldRadius()}
           fill={props.renderData.innerColor}
-          opacity={0.6}
+          opacity={0.6 * shieldAlpha()}
         />
       </Show>
     </>
