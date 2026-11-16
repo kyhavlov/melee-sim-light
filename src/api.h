@@ -17,6 +17,7 @@ extern "C" {
 enum {
   MSL_MAX_PLAYERS = 4,
   MSL_MAX_ITEMS = 15,
+  MSL_CHECKPOINT_PAGE_SIZE = 4096,
 };
 
 typedef struct MslBatch MslBatch;
@@ -320,6 +321,22 @@ MSL_API MslResult msl_batch_observe(const MslBatch* batch, MslObservation observ
 MSL_API MslResult msl_batch_copy(MslBatch* destination, const MslBatch* source,
                                  const uint32_t destination_indices[],
                                  const uint32_t source_indices[], uint32_t count);
+// In-place checkpoint and rollback of one environment, for search. `pages` lists the
+// MSL_CHECKPOINT_PAGE_SIZE-byte pages of environment memory to copy; NULL copies all of them.
+// msl_batch_diff_pages sets page_flags[i] for each page that differs from the checkpoint. A
+// checkpoint is only valid for the environment it was taken from, until that environment is reset,
+// restored or copied into.
+MSL_API MslResult msl_batch_checkpoint_size(const MslBatch* batch, uint32_t env_index,
+                                            size_t* required_size);
+MSL_API MslResult msl_batch_checkpoint(const MslBatch* batch, uint32_t env_index, void* buffer,
+                                       size_t buffer_size, const uint32_t pages[],
+                                       uint32_t page_count);
+MSL_API MslResult msl_batch_rollback(MslBatch* batch, uint32_t env_index, const void* buffer,
+                                     size_t buffer_size, const uint32_t pages[],
+                                     uint32_t page_count);
+MSL_API MslResult msl_batch_diff_pages(const MslBatch* batch, uint32_t env_index,
+                                       const void* buffer, size_t buffer_size,
+                                       uint8_t page_flags[], uint32_t flag_count);
 MSL_API MslResult msl_batch_save_size(const MslBatch* batch, uint32_t env_index,
                                       size_t* required_size);
 MSL_API MslResult msl_batch_save(const MslBatch* batch, uint32_t env_index, void* buffer,

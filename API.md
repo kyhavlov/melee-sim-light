@@ -17,6 +17,7 @@ Use each batch from one thread at a time; synchronize both batches when copying 
 | `msl_batch_observe(batch, observations, terminals)` | project current state without advancing |
 | `msl_batch_copy(...)` | copy arbitrary environments between compatible batches |
 | `msl_batch_save(...)` / `msl_batch_restore(...)` | serialize or restore one complete environment |
+| `msl_batch_checkpoint(...)` / `msl_batch_rollback(...)` / `msl_batch_diff_pages(...)` | copy one environment out and back in place, whole or only chosen memory pages |
 
 `data_root` may be the extraction root or its `raw/` directory. A `NULL` reset mask selects every
 environment; otherwise each nonzero byte selects its corresponding row. Save artifacts include the
@@ -37,6 +38,27 @@ state = env.save(env_index)
 env.restore(env_index, state)
 env.copy_matches_from(source, destination_indices, source_indices)
 ```
+
+### Checkpoint and rollback
+
+Search that steps a match forward and takes the frames back can use an in-place checkpoint instead of
+`save`/`restore` or `copy_matches_from`. Nothing is serialized or relocated, so it is much cheaper,
+and a checkpoint is only valid for the match it was taken from, until that match is reset, restored
+or copied into.
+
+```python
+root = env.checkpoint(env_index)            # whole match, a uint8 array
+env.step()
+env.rollback(env_index, root)               # exact
+
+pages = env.changed_pages(env_index, root)  # uint32 indices of 4 KiB pages that differ from `root`
+env.checkpoint(env_index, out=node, pages=pages)
+env.rollback(env_index, node, pages=pages)  # copies only those pages
+```
+
+A frame writes a small, stable part of match memory, so a search can collect the pages its frames
+touch with `changed_pages` and pass them as `pages`. A partial rollback is exact only if every page
+changed since the checkpoint is listed; `changed_pages` against a full checkpoint is the check.
 
 ## Native Input And Match Config
 
