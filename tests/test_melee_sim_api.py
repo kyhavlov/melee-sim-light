@@ -327,6 +327,45 @@ def test_envbatch_controller_step_and_arbitrary_restore(monkeypatch) -> None:
         assert np.all(env.done_at(1) == 0)
 
 
+def test_envbatch_checkpoint_rolls_back_in_place(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=2, length=8) as env:
+        neutral = msl.neutral_controller((env.length, env.batch_size))
+        msl.write_controller(env.controller_action_view, neutral, player=0)
+        msl.write_controller(env.controller_action_view, neutral, player=1)
+        env.reset_all()
+        root = env.checkpoint(0)
+        assert env.changed_pages(0, root).size == 0
+
+        def play(frames: int) -> bytes:
+            env.reset_cursor()
+            env.observe()
+            for _ in range(frames):
+                env.step()
+            return env.current_frame[0].tobytes()
+
+        expected = play(3)
+        pages = env.changed_pages(0, root)
+        assert 0 < pages.size < root.nbytes // (4 * 4096)
+
+        env.rollback(0, root)
+        assert env.changed_pages(0, root).size == 0
+        assert play(3) == expected
+
+        # A partial rollback restores exactly the listed pages.
+        env.rollback(0, root, pages=pages)
+        assert env.changed_pages(0, root).size == 0
+        node = env.checkpoint(0, out=root.copy(), pages=pages)
+        assert play(3) == expected
+        env.rollback(0, node, pages=pages)
+        assert env.changed_pages(0, root).size == 0
+
+        with np.testing.assert_raises(RuntimeError):
+            env.rollback(1, root)
+        with np.testing.assert_raises(RuntimeError):
+            env.rollback(0, root[:-1])
+
+
 def test_match_config_preserves_per_environment_values(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=2, length=1) as env:
