@@ -77,6 +77,14 @@ def library() -> ctypes.CDLL:
     lib.msl_batch_save.restype = ctypes.c_int
     lib.msl_batch_restore.argtypes = [pointer, u32, pointer, size]
     lib.msl_batch_restore.restype = ctypes.c_int
+    lib.msl_batch_checkpoint_size.argtypes = [pointer, u32, ctypes.POINTER(size)]
+    lib.msl_batch_checkpoint_size.restype = ctypes.c_int
+    lib.msl_batch_checkpoint.argtypes = [pointer, u32, pointer, size, pointer, u32]
+    lib.msl_batch_checkpoint.restype = ctypes.c_int
+    lib.msl_batch_rollback.argtypes = [pointer, u32, pointer, size, pointer, u32]
+    lib.msl_batch_rollback.restype = ctypes.c_int
+    lib.msl_batch_diff_pages.argtypes = [pointer, u32, pointer, size, pointer, u32]
+    lib.msl_batch_diff_pages.restype = ctypes.c_int
     lib.msl_python_controller_inputs.argtypes = [pointer, size, pointer, size, u32]
     lib.msl_python_controller_inputs.restype = ctypes.c_int
     return lib

@@ -14,6 +14,7 @@ from .buffers import Buffers
 from .config import Character, MatchConfig, PlayerConfig
 
 
+CHECKPOINT_PAGE_SIZE = 4096  # MSL_CHECKPOINT_PAGE_SIZE
 _preloaded = False
 
 
@@ -423,6 +424,79 @@ class EnvBatch:
             ),
             "restore match",
         )
+
+    def checkpoint(
+        self,
+        match_index: int,
+        out: np.ndarray | None = None,
+        pages: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Copy one match into `out` for a later `rollback` of the same match.
+
+        `pages` (uint32 page indices, see `changed_pages`) limits the copy to
+        those pages of match memory; the rest of `out` is left as it was.
+        """
+        if out is None:
+            size = ctypes.c_size_t()
+            _native.check(
+                _native.library().msl_batch_checkpoint_size(
+                    self._handle, int(match_index), ctypes.byref(size)
+                ),
+                "measure checkpoint",
+            )
+            out = np.empty(size.value, dtype=np.uint8)
+        _native.check(
+            _native.library().msl_batch_checkpoint(
+                self._handle,
+                int(match_index),
+                _native.pointer(out),
+                out.nbytes,
+                _native.pointer(pages),
+                0 if pages is None else pages.size,
+            ),
+            "checkpoint match",
+        )
+        return out
+
+    def rollback(
+        self,
+        match_index: int,
+        checkpoint: np.ndarray,
+        pages: np.ndarray | None = None,
+    ) -> None:
+        """Put a match back to a checkpoint taken from it, in place.
+
+        With `pages`, only those pages are copied back: exact only if every
+        page changed since the checkpoint is listed. The checkpoint stops
+        being valid once the match is reset, restored or copied into.
+        """
+        _native.check(
+            _native.library().msl_batch_rollback(
+                self._handle,
+                int(match_index),
+                _native.pointer(checkpoint),
+                checkpoint.nbytes,
+                _native.pointer(pages),
+                0 if pages is None else pages.size,
+            ),
+            "roll back match",
+        )
+
+    def changed_pages(self, match_index: int, checkpoint: np.ndarray) -> np.ndarray:
+        """Indices of the match memory pages that differ from a full checkpoint."""
+        flags = np.zeros(checkpoint.nbytes // CHECKPOINT_PAGE_SIZE + 1, dtype=np.uint8)
+        _native.check(
+            _native.library().msl_batch_diff_pages(
+                self._handle,
+                int(match_index),
+                _native.pointer(checkpoint),
+                checkpoint.nbytes,
+                _native.pointer(flags),
+                flags.size,
+            ),
+            "compare match with checkpoint",
+        )
+        return np.flatnonzero(flags).astype(np.uint32)
 
     def _inputs_for_frame(self, frame: int) -> np.ndarray:
         action = self.buffers.action[frame]
