@@ -390,17 +390,24 @@ void msl_ucf_apply_pad_buffer(Fighter* fp)
 
 void msl_ucf_apply_dashback(Fighter* fp)
 {
-    float stick_x = fp->input.lstick.x;
-
-    // Direct C translation of UCF 0.84/UCF/UCF Dashback.asm at the
-    // ftCo_Turn_IASA 0x800C9A44 injection. The assembly reads the physical
-    // current and two-frames-past raw X samples from HSD's five-entry ring.
     if (fp->x221F_b4 || fp->cur_anim_frame != 2.0F ||
-        stick_x * fp->facing_dir < p_ftCommonData->x3C ||
         fp->x670_timer_lstick_tilt_x > 1)
     {
         return;
     }
+
+    // The classic shield drop selects the shipped UCF bundle. Dashback
+    // tests stick magnitude in 0.8 and input toward the new facing in 0.84.
+    // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF DB.asm
+    // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Dashback.asm
+    float stick_x = fp->input.lstick.x;
+    float dash_input = msl_ucf_shield_drop_084_enabled
+                           ? stick_x * fp->facing_dir
+                           : msl_absf(stick_x);
+    if (dash_input < p_ftCommonData->x3C) {
+        return;
+    }
+    // The hook at 0x800C9A44 checks physical X now and two frames ago.
     if (msl_ucf_check_xsmash(fp)) {
         fp->mv.co.turn.has_turned = 1;
         fp->mv.co.turn.just_turned = 1;
@@ -536,9 +543,10 @@ bool msl_ucf_pass_oos_stick_check(const Fighter* fp)
 
 float msl_ucf_squatrv_threshold(const Fighter* fp, float vanilla_threshold)
 {
-    // refs/ucf/src/dbooc/dbooc.S. Raise SquatRv's release threshold only for
-    // a one-frame rim input; 0.5900 is the UCF 0.84 IC-safe value.
+    // Only the 0.84 bundle raises the release threshold for a one-frame
+    // rim input (UCF DBOOC SquatRv Fix.asm at 0x800D65EC).
     if (fp->x670_timer_lstick_tilt_x < 1 &&
+        msl_ucf_shield_drop_084_enabled &&
         msl_ucf_is_rim_coord(fp->input.lstick))
     {
         return 0.5900F;
