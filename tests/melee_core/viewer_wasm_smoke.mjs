@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { GameCubeAdapterInput } from "../../tools/viewer/live/gamecube_adapter.js";
 import { MslWasmSim } from "../../tools/viewer/live/sim.js";
 import {
   BUTTONS,
@@ -134,6 +135,52 @@ try {
     }
   }
   assert(hitShyGuy, "live viewer never damaged Yoshi's Shy Guy");
+
+  // A hard shield is opaque; a light shield is larger and fainter. Analog-only
+  // shielding exercises the source light-shield amount rather than the button.
+  const shieldFor = (pad, character = CHAR_FOX) => {
+    reset({ p1Char: character });
+    let state;
+    for (let index = 0; index < 12; index += 1) {
+      state = step(controllers(pad)).players[0].state;
+    }
+    assert(state.isShieldActive && (state.shieldRadius ?? 0) > 0);
+    return state;
+  };
+  const hardShield = shieldFor({ ...neutral(), l: 1, buttons: BUTTONS.L });
+  const lightPad = { ...neutral(), l: 0.3 };
+  const lightShield = shieldFor(lightPad);
+  assert.equal(hardShield.shieldAlpha, 1);
+  assert(lightShield.shieldAlpha > 0 && lightShield.shieldAlpha < 1,
+    `light shield alpha ${lightShield.shieldAlpha}`);
+  assert(lightShield.shieldRadius > hardShield.shieldRadius);
+  // The trigger's travel past the game's clamp is a full press, not more.
+  const fullAnalogShield = shieldFor({ ...neutral(), l: 1 });
+  assert.equal(fullAnalogShield.shieldAlpha, 1);
+  assert(Math.abs(fullAnalogShield.shieldRadius - hardShield.shieldRadius) < 0.01,
+    `full analog shield radius ${fullAnalogShield.shieldRadius}`);
+  assert.equal(shieldFor(lightPad, CHAR_YOSHI).shieldAlpha, 1);
+  assert.equal(reset({ p1Char: CHAR_FOX }).players[0].state.shieldAlpha, undefined);
+
+  // Some gamepads report analog trigger travel before reporting a press.
+  const buttons = Array.from({ length: 17 }, () => ({ pressed: false, value: 0 }));
+  const gamepad = { id: "Smoke gamepad", buttons, axes: [0, 0, 0, 0] };
+  Object.defineProperty(navigator, "getGamepads", { configurable: true, value: () => [gamepad] });
+  globalThis.window = new EventTarget();
+  try {
+    const input = new GameCubeAdapterInput();
+    assert(input.startGamepadPolling());
+    for (const index of [6, 7]) {
+      buttons[index].value = 0.3;
+      assert.equal(shieldFor(input.readController()).shieldAlpha, lightShield.shieldAlpha);
+      buttons[index].pressed = true;
+      assert.equal(shieldFor(input.readController()).shieldAlpha, 1);
+      buttons[index] = { pressed: false, value: 0 };
+    }
+  } finally {
+    delete navigator.getGamepads;
+    delete globalThis.window;
+  }
 
   reset({ p1Char: CHAR_FOX });
   let sawHitbox = false;
