@@ -358,6 +358,9 @@ void ftCo_800A0CB0(Fighter* fp)
     }
 }
 
+#if defined(MSL_NATIVE_INLINE_FMADDS) && defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("O2")))
+#endif
 void ftCo_800A0DA4(Fighter* fp)
 {
     int i;

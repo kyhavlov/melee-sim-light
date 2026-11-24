@@ -3,6 +3,12 @@
 #include "runtime/scalar.h"
 
 #include "ft/fighter.h"
+#include "ft/chara/ftCommon/ftCo_Attack100.h"
+#include "ft/chara/ftCommon/forward.h"
+#include "ft/ftcommon.h"
+#include "ft/inlines.h"
+#include "it/inlines.h"
+#include "it/types.h"
 #include "ft/ftdevice.h"
 #include "ft/ftlib.h"
 #include "gm/forward.h"
@@ -115,6 +121,93 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
 bool msl_slippi_patch(int patch)
 {
     return (msl_core_active_match()->config.slippi_patches & patch) != 0;
+}
+
+// Slippi's PreventWobbling, from the code bytes the capture carries: the count
+// and the last move id live on the held victim at fp+0x2384 and fp+0x2386.
+// refs/slippi-ssbm-asm/External/PreventWobbling/{Wobble Check.asm,
+// Init Wobble Count Air.asm, Init Wobble Count Ground.asm}
+void msl_wobble_count_init(Fighter* fp)
+{
+    if (!msl_slippi_patch(MSL_PATCH_ALLOW_WOBBLING)) {
+        fp->mv.co.wobbling.count = 0;
+        fp->mv.co.wobbling.last_move = 0xFFFF;
+    }
+}
+
+// Runs on a held victim's hit, after ftCo_800C8D00 and before the victim's
+// CaptureDamage entry (the injection at 0x8008F090 in ftCo_8008EC90).
+bool msl_wobble_check(Fighter_GObj* gobj)
+{
+    Fighter* fp = GET_FIGHTER(gobj);
+    Fighter_GObj* grabber_gobj;
+    Fighter* grabber;
+    HSD_GObj* source;
+    u16 move;
+    u16 last;
+
+    if (msl_slippi_patch(MSL_PATCH_ALLOW_WOBBLING) ||
+        fp->motion_id < ftCo_MS_CapturePulledHi ||
+        fp->motion_id > ftCo_MS_CaptureDamageLw || fp->victim_gobj == NULL)
+    {
+        return false;
+    }
+    grabber_gobj = fp->victim_gobj;
+    grabber = GET_FIGHTER(grabber_gobj);
+    // fp+0x2222 & 0x04: the grabber leads a follower (Popo).
+    if (!grabber->x2222_b5) {
+        return false;
+    }
+    // The patch counts a hit attributed to the grabber or an item they own.
+    source = fp->dmg.x1868_source;
+    last = fp->mv.co.wobbling.last_move;
+    if (source == grabber_gobj) {
+        move = grabber->x2074.x2088;
+    } else {
+        Item* item;
+        // A hit with no recorded source reads the halfword at address 0,
+        // which the console maps to the start of RAM, not the item class.
+        if (source == NULL || source->classifier != HSD_GOBJ_CLASS_ITEM) {
+            return false;
+        }
+        item = GET_ITEM(source);
+        if (item->owner != grabber_gobj) {
+            return false;
+        }
+        move = item->xDA8_short;
+    }
+    if (move == last) {
+        return false;
+    }
+    fp->mv.co.wobbling.last_move = move;
+    fp->mv.co.wobbling.count++;
+    if (fp->mv.co.wobbling.count <= 3) {
+        return false;
+    }
+    ftCo_800DA698(grabber_gobj, last != 0);
+    {
+        HSD_GObj* nana_gobj =
+            Player_GetEntityAtIndex(grabber->player_id, 1);
+        Fighter* nana;
+        if (nana_gobj == NULL) {
+            return true;
+        }
+        nana = GET_FIGHTER(nana_gobj);
+        if (nana->x221F_b1 || nana->x2219_b5 || nana->x2070.x2071_b0_3 == 13) {
+            return true;
+        }
+        if (nana->ground_or_air == GA_Ground) {
+            ftCo_800DA698(nana_gobj, false);
+        } else {
+            ftCommon_8007D5D4(nana);
+            nana->self_vel.x = p_ftCommonData->x374 * -nana->facing_dir;
+            nana->self_vel.y = p_ftCommonData->x378;
+            nana->mv.ca.specials.grav = 0.0F;
+            Fighter_ChangeMotionState(nana_gobj, ftCo_MS_CaptureJump, 0, 0.0F,
+                                      1.0F, 0.0F, NULL);
+        }
+    }
+    return true;
 }
 
 bool msl_whispy_ignores_dead_fighters(void)

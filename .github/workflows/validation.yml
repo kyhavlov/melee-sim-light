@@ -36,8 +36,12 @@ jobs:
           cd "$(mktemp -d)"
           python -I -c 'from melee_sim import _native; _native.library()'
           python -I -m melee_sim.extract_data --help
-      - name: Check replay storage tooling without downloading replays
-        run: python -m pytest tests/test_slpz_replay_storage.py -q -k "not real_replay_payload"
+      - name: Check replay storage and fixture layout
+        run: >-
+          python -m pytest -q
+          tests/test_slpz_replay_storage.py
+          tests/test_vector_pool.py::VectorPoolTest::test_fixture_match_config_dtype
+          -k "not real_replay_payload"
 
   aggregate:
     # Only trusted main code receives the locally supplied game data.

@@ -391,6 +391,19 @@
    },
    "played_on": "network",
    "jit_arithmetic": "split-fma"
+  },
+  {
+   "replay": "replays/validation/icies/master-platinum-61896315f7e2f0eaf09974ae.slpz",
+   "ports": [
+    1,
+    2
+   ],
+   "stage_id": 31,
+   "characters": {
+    "1": "Ice Climbers",
+    "2": "Peach"
+   },
+   "played_on": "network"
   }
   ]
 }

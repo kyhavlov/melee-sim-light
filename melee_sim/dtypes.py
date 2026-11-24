@@ -119,7 +119,8 @@ def match_config_dtype() -> np.dtype:
             ("viewpoint_player", "u1"),
             ("ucf_cardinals", "u1"),
             ("players", match_player_config_dtype(), (MAX_PLAYERS,)),
-            ("_pad0", "u1", (2,)),
+            ("allow_wobbling", "u1"),
+            ("_pad0", "u1"),
         ],
         align=False,
     )
