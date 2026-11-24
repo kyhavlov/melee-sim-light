@@ -1565,6 +1565,15 @@
       }
     },
     {
+      "replay": "replays/validation/icies/master-platinum-61896315f7e2f0eaf09974ae.slpz",
+      "expected": {
+        "native": {
+          "frames": 6702,
+          "actual_output_fingerprint": "82b68c8ce1a1fe67"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/master-platinum-9718e1fa01455e35446f7ae7.slpz",
       "expected": {
         "native": {

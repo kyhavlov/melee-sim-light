@@ -1118,7 +1118,8 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
       (replay->jit_arithmetic ? MSL_ARITHMETIC_SPLIT_FMA : 0);
   config->brawl_offscreen_damage = replay->brawl_offscreen_damage;
   config->freeze_dead_up_fall_physics = replay->freeze_dead_up_fall_physics;
-  config->slippi_patches = replay->slippi_patches;
+  config->slippi_patches =
+      replay->slippi_patches | (replay->is_teams ? MSL_PATCH_ALLOW_WOBBLING : 0);
   config->whispy_dead_fighter_fix = replay->whispy_dead_fighter_fix;
   config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
   config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
@@ -2513,7 +2514,9 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
   }
-  if (slippi_patches < 0 || (slippi_patches & ~MSL_PATCH_FD_BACKGROUND_FROZEN)) {
+  if (slippi_patches < 0 ||
+      (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_ALLOW_WOBBLING |
+                          MSL_PATCH_RETAIL_SPAWNS))) {
     PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
     goto done;
   }
@@ -2685,7 +2688,9 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
   }
-  if (slippi_patches < 0 || (slippi_patches & ~MSL_PATCH_FD_BACKGROUND_FROZEN)) {
+  if (slippi_patches < 0 ||
+      (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_ALLOW_WOBBLING |
+                          MSL_PATCH_RETAIL_SPAWNS))) {
     PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
     goto done;
   }

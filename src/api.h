@@ -103,6 +103,12 @@ enum {
   MSL_CONTROLLER_PORT_AUTO = -1,
 };
 
+typedef enum MslWobbling {
+  MSL_WOBBLING_DEFAULT = 0,
+  MSL_WOBBLING_ALLOW = 1,
+  MSL_WOBBLING_PREVENT = 2,
+} MslWobbling;
+
 typedef struct MslPlayerConfig {
   uint8_t character;
   int8_t team;
@@ -125,6 +131,7 @@ typedef struct MslMatchConfig {
   uint8_t viewpoint_player;
   uint8_t ucf_cardinals;
   MslPlayerConfig players[MSL_MAX_PLAYERS];
+  uint8_t allow_wobbling;
 } MslMatchConfig;
 
 typedef struct MslInputPlayer {

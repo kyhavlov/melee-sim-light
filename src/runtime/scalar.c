@@ -1249,6 +1249,14 @@ static int match_construct(MslCoreMatch* match,
         const Vec3* spawn = match->config.is_teams
                                 ? &spec->teams_spawn[spawn_order]
                                 : &spec->singles_spawn[spawn_order];
+        Vec3 retail_spawn;
+        // Without Slippi's NeutralSpawn each fighter enters at the stage's
+        // spawn point for its own port (gmvs.c::getSpawnPoint, stage.c::Stage_80224E64).
+        if ((match->config.slippi_patches & MSL_PATCH_RETAIL_SPAWNS) &&
+            Ground_801C2D24(slot, &retail_spawn))
+        {
+            spawn = &retail_spawn;
+        }
         uint8_t encoded = match->config.players[i].facing_and_port;
 #ifdef MSL_CORE_NATIVE
         if (match->config.players[i].char_id == MSL_CORE_CHAR_SAMUS) {
