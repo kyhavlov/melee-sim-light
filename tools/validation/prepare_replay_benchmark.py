@@ -18,13 +18,13 @@ from tools.validation.validate_replay import (
     load_suite_cases,
     ReplayCase,
 )
-from tools.validation.admission import require_admissible
+from tools.validation.admission import gecko_codes, require_admissible, slippi_patches
 from tools.validation.slpz import replay_path_for_peppi
 
 
-FORMAT_VERSION = 3
+FORMAT_VERSION = 5
 # Export semantics can change without changing the tape layout.
-CACHE_VERSION = 3
+CACHE_VERSION = 9
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
 DEFAULT_OUTPUT = ROOT / "build/melee_core/benchmark/cases.tsv"
 
@@ -49,6 +49,8 @@ def _cache_key(case: ReplayCase) -> str:
     )
     if case.fnmsubs_profile is not None:
         identity += "\0fnmsubs=" + case.fnmsubs_profile
+    if case.jit_arithmetic is not None:
+        identity += "\0jit=" + case.jit_arithmetic
     return hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
@@ -60,7 +62,7 @@ def _cached_frame_count(path: Path) -> int | None:
     except (OSError, struct.error):
         return None
     if (
-        magic != b"MSLRPB03"
+        magic != b"MSLRPB05"
         or version != FORMAT_VERSION
         or header_size < 24
         or input_size != 52
@@ -85,16 +87,22 @@ def prepare(args: argparse.Namespace) -> None:
     built = 0
     reused = 0
     skipped_cpu = 0
+    skipped_arithmetic = 0
     for case in cases:
         # Admission applies even when a tape is cached: a stale export cannot
         # bypass a changed capture rule or provenance record.
         with replay_path_for_peppi(case.replay) as peppi_path:
             game = _read_slippi(str(peppi_path), False)
             require_admissible(game, peppi_path, played_on=case.played_on,
-                               fnmsubs_profile=case.fnmsubs_profile)
+                               fnmsubs_profile=case.fnmsubs_profile,
+                               jit_arithmetic=case.jit_arithmetic)
             if any(player["type"] == "Cpu" for player in game.start["players"]):
                 print(f"skipping CPU recording (controller-only benchmark): {case.display_path}")
                 skipped_cpu += 1
+                continue
+            if case.jit_arithmetic == "split-fma" and not args.replay_arithmetic:
+                print(f"skipping replay-only arithmetic: {case.display_path}")
+                skipped_arithmetic += 1
                 continue
             case_path = case_dir / f"{_cache_key(case)}.mslrpb"
             frame_count = None if args.force else _cached_frame_count(case_path)
@@ -113,6 +121,8 @@ def prepare(args: argparse.Namespace) -> None:
                         ucf_shield_drop_extended_enabled=case.ucf_shield_drop_extended_enabled,
                         ucf_shield_drop_084_enabled=case.ucf_shield_drop_084_enabled,
                         fnmsubs_profile=case.fnmsubs_profile,
+                        slippi_patches=slippi_patches(gecko_codes(peppi_path.read_bytes())),
+                        jit_arithmetic=1 if case.jit_arithmetic == "split-fma" else 0,
                     )
                     os.replace(temporary, case_path)
                 finally:
@@ -135,7 +145,7 @@ def prepare(args: argparse.Namespace) -> None:
         temporary_manifest.unlink(missing_ok=True)
     print(
         f"benchmark cases: selected={len(rows)} skipped_cpu={skipped_cpu} frames={total_frames:,} "
-        f"built={built} reused={reused} manifest={output}"
+        f"skipped_arithmetic={skipped_arithmetic} built={built} reused={reused} manifest={output}"
     )
 
 
@@ -148,6 +158,8 @@ def main() -> None:
     parser.add_argument("--characters", default=DEFAULT_CHARACTERS)
     parser.add_argument("--stages", default=DEFAULT_STAGES)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--replay-arithmetic", action="store_true",
+                        help="Include tapes requiring MSL_REPLAY_ARITHMETIC=1.")
     prepare(parser.parse_args())
 
 

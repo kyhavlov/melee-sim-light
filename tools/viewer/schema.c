@@ -32,7 +32,7 @@ int main(void)
     FIELD(MslCoreMatchConfig, friendly_fire, "friendlyFire");
     FIELD(MslCoreMatchConfig, stock_count, "stockCount");
     FIELD(MslCoreMatchConfig, camera_mode, "cameraMode");
-    FIELD(MslCoreMatchConfig, online_fnmsubs_zero, "onlineFnmsubsZero");
+    FIELD(MslCoreMatchConfig, arithmetic_flags, "arithmeticFlags");
     FIELD(MslCoreMatchConfig, brawl_offscreen_damage, "brawlOffscreenDamage");
     FIELD(MslCoreMatchConfig, freeze_dead_up_fall_physics,
           "freezeDeadUpFallPhysics");

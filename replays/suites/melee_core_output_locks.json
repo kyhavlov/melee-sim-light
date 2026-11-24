@@ -133,6 +133,15 @@
       }
     },
     {
+      "replay": "replays/validation/bowser/MildMurkyNewt.slpz",
+      "expected": {
+        "native": {
+          "frames": 14105,
+          "actual_output_fingerprint": "7859618af448e748"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/bowser/MustyGummyLemur.slpz",
       "expected": {
         "native": {
@@ -245,6 +254,24 @@
         "ppc": {
           "frames": 12707,
           "actual_output_fingerprint": "569e8dcb4ea18845"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/diamond-platinum-540a552e00244ab564885561.slpz",
+      "expected": {
+        "native": {
+          "frames": 11096,
+          "actual_output_fingerprint": "2f077221e01b8c03"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/bowser/master-platinum-fc8b52d1589bdae714c2901c.slpz",
+      "expected": {
+        "native": {
+          "frames": 8249,
+          "actual_output_fingerprint": "48b8784f86d6a718"
         }
       }
     },
@@ -1511,11 +1538,47 @@
       }
     },
     {
+      "replay": "replays/validation/icies/master-diamond-52318ed052aa47b823e4d641.slpz",
+      "expected": {
+        "native": {
+          "frames": 13690,
+          "actual_output_fingerprint": "8e4967f9b77e2104"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/master-fox-2026-03_Game_20260315T195912.slpz",
       "expected": {
         "native": {
           "frames": 8610,
           "actual_output_fingerprint": "3b917465fcb83dcc"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/master-master-11064a828d78625eda78bbac.slpz",
+      "expected": {
+        "native": {
+          "frames": 8548,
+          "actual_output_fingerprint": "38992f16c6315f85"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/master-platinum-61896315f7e2f0eaf09974ae.slpz",
+      "expected": {
+        "native": {
+          "frames": 6702,
+          "actual_output_fingerprint": "82b68c8ce1a1fe67"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/master-platinum-9718e1fa01455e35446f7ae7.slpz",
+      "expected": {
+        "native": {
+          "frames": 6128,
+          "actual_output_fingerprint": "4e12a33904f456b8"
         }
       }
     },
@@ -1543,6 +1606,15 @@
         "native": {
           "frames": 14608,
           "actual_output_fingerprint": "1193fab90228ad32"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/platinum-platinum-9dc16c938bf8ed578f6d43dd.slpz",
+      "expected": {
+        "native": {
+          "frames": 12846,
+          "actual_output_fingerprint": "0b6471786b3c3d7d"
         }
       }
     },
@@ -2562,6 +2634,15 @@
       }
     },
     {
+      "replay": "replays/validation/luigi/master-master-cbc2979c9def2b8e8168b60c.slpz",
+      "expected": {
+        "native": {
+          "frames": 11127,
+          "actual_output_fingerprint": "fd470cbc861f5e1f"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/luigi/medium-falco_Game_20251031T000610.slpz",
       "expected": {
         "native": {
@@ -3050,6 +3131,15 @@
       }
     },
     {
+      "replay": "replays/validation/marios/platinum-platinum-3d9c7e1486bef415564c4005.slpz",
+      "expected": {
+        "native": {
+          "frames": 13498,
+          "actual_output_fingerprint": "3a47eb7e3705bfb1"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/marios/silver-fox-2026-06_Game_20260615T232450.slpz",
       "expected": {
         "native": {
@@ -3131,6 +3221,15 @@
         "ppc": {
           "frames": 3899,
           "actual_output_fingerprint": "c32c8b2d16bc6fe7"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/mewtwo/master-platinum-3764cfdde76b6367c9b161d3.slpz",
+      "expected": {
+        "native": {
+          "frames": 7750,
+          "actual_output_fingerprint": "4c93ef11025ce087"
         }
       }
     },
@@ -4238,6 +4337,15 @@
       }
     },
     {
+      "replay": "replays/validation/samus/platinum-platinum-2e8c697ee6810b51ee334625.slpz",
+      "expected": {
+        "native": {
+          "frames": 4802,
+          "actual_output_fingerprint": "e1740dda05add93c"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/samus/ranked-marth-2025-09_Game_20250902T190726.slpz",
       "expected": {
         "native": {
@@ -4252,6 +4360,15 @@
         "native": {
           "frames": 7942,
           "actual_output_fingerprint": "fcb338da15554990"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/sheik/PaleMajorEchidna.slpz",
+      "expected": {
+        "native": {
+          "frames": 10638,
+          "actual_output_fingerprint": "e1f81ac8a331141f"
         }
       }
     },
@@ -4624,7 +4741,7 @@
       "expected": {
         "native": {
           "frames": 20259,
-          "actual_output_fingerprint": "d63ce878fb30431b"
+          "actual_output_fingerprint": "54a19586f5a91d5b"
         }
       }
     },

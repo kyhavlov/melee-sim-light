@@ -103,6 +103,12 @@ enum {
   MSL_CONTROLLER_PORT_AUTO = -1,
 };
 
+typedef enum MslWobbling {
+  MSL_WOBBLING_DEFAULT = 0,
+  MSL_WOBBLING_ALLOW = 1,
+  MSL_WOBBLING_PREVENT = 2,
+} MslWobbling;
+
 typedef struct MslPlayerConfig {
   uint8_t character;
   int8_t team;
@@ -125,6 +131,7 @@ typedef struct MslMatchConfig {
   uint8_t viewpoint_player;
   uint8_t ucf_cardinals;
   MslPlayerConfig players[MSL_MAX_PLAYERS];
+  uint8_t allow_wobbling;
 } MslMatchConfig;
 
 typedef struct MslInputPlayer {
@@ -255,6 +262,8 @@ MSL_API MslResult msl_game_data_acquire(const char* data_root);
 MSL_API void msl_game_data_release(void);
 MSL_API uint32_t msl_game_data_references(void);
 
+// Different batches may be used concurrently, including creation/destruction.
+// Synchronize access to each batch (both batches for copy) and caller buffers.
 // data_root is the extraction root or its raw/ directory.
 MSL_API MslResult msl_batch_create(const char* data_root, uint32_t batch_size,
                                    MslBatch** out_batch);

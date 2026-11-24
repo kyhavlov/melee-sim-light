@@ -17,14 +17,21 @@ extern f32 __sincos_poly[];
 
 const f32 tmp_float[] = { 0.25f, 0.0232393741608f, 1.70555722434e-7f,
                           1.86736494323e-11f };
+#ifdef MSL_CORE_HOSTED
+const f32 __four_over_pi_m1[] = { 0.25f, 0.0232393741608f,
+                                 1.70555722434e-7f, 1.86736494323e-11f };
+#else
 f32 __four_over_pi_m1[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+#endif
 
 void __sinit_trigf_c(void)
 {
+#ifndef MSL_CORE_HOSTED
     __four_over_pi_m1[0] = tmp_float[0];
     __four_over_pi_m1[1] = tmp_float[1];
     __four_over_pi_m1[2] = tmp_float[2];
     __four_over_pi_m1[3] = tmp_float[3];
+#endif
 }
 
 SECTION_CTORS void* const __sinit_trigf_c_reference = __sinit_trigf_c;

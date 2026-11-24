@@ -4,6 +4,7 @@
 #include "ef/efasync.h"
 #include "ef/efsync.h"
 #include "ef/types.h"
+#include "gr/ground.h"
 #include "lb/lb_00B0.h"
 #include "lb/lbarchive.h"
 
@@ -27,6 +28,9 @@ static _Thread_local MslCoreEffectState* msl_bound_effect_state;
 #define msl_effect_banks (msl_bound_effect_data->banks)
 #define msl_effect_nodes (msl_bound_effect_state->nodes)
 #define msl_effect_free (msl_bound_effect_state->free)
+
+static void msl_effect_consume_bank_command(
+    const MslCoreEffectGeneratorBank* data, int index);
 
 static void msl_effect_record_model_generator(int link_no, int bank,
                                               int gfx_id, HSD_JObj* jobj)
@@ -84,7 +88,7 @@ static void msl_effect_load_bank(MslCoreEffectData* data, int bank,
 #ifdef MSL_CORE_NATIVE
     effect_bank->archive = lbArchive_LoadArchive(filename);
     if (msl_native_effect_bank(effect_bank->archive, symbol,
-                               &effect_bank->count,
+                               &effect_bank->count, &effect_bank->id_base,
                                &effect_bank->commands) != 0)
     {
         fprintf(stderr, "%s has invalid %s command data\n", filename,
@@ -143,7 +147,7 @@ static void msl_effect_load_bank(MslCoreEffectData* data, int bank,
     case 0x43:
         effect_bank->count = command_bank[1] + command_bank[2];
         effect_bank->commands =
-            (HSD_PSCmdList**) (command_bank + 3 - command_bank[1]);
+            (HSD_PSCmdList**) (command_bank + 3);
         effect_bank->id_base = command_bank[1];
         break;
     default:
@@ -251,6 +255,78 @@ void msl_effect_game_data_init(MslCoreEffectData* data)
     HSD_JObjSetDPtclCallback(NULL);
 }
 
+#ifndef MSL_CORE_NATIVE
+// psInitDataBankLoad's header parse for an in-place command bank; entries
+// stay bank-relative (msl_effect_consume_bank_command relocates them).
+// refs/melee/src/sysdolphin/baselib/particle.c::psInitDataBankLoad
+static int msl_effect_parse_command_bank(MslCoreEffectGeneratorBank* bank,
+                                         int* command_bank)
+{
+    u16 version;
+
+    memset(bank, 0, sizeof(*bank));
+    if (command_bank == NULL) {
+        return 0;
+    }
+    version = *(u16*) command_bank;
+    bank->command_bank = command_bank;
+    if (version == 0) {
+        bank->count = command_bank[1];
+        bank->commands = (HSD_PSCmdList**) (command_bank + 2);
+    } else if (version >= 0x40 && version <= 0x43) {
+        bank->count = command_bank[1] + command_bank[2];
+        bank->commands = (HSD_PSCmdList**) (command_bank + 3);
+        bank->id_base = command_bank[1];
+    } else {
+        return -1;
+    }
+    return 0;
+}
+#endif
+
+#ifdef MSL_CORE_NATIVE
+int msl_effect_load_stage_bank(MslCoreEffectData* data,
+                               s32 internal_stage_id, HSD_Archive* archive)
+{
+    MslCoreEffectGeneratorBank* bank;
+
+    if ((u32) internal_stage_id >= sizeof(data->stage_banks) /
+                                      sizeof(data->stage_banks[0]))
+    {
+        return -1;
+    }
+    bank = &data->stage_banks[internal_stage_id];
+    bank->archive = archive;
+    return msl_native_particle_bank(archive, "map_ptcl", &bank->count,
+                                    &bank->id_base, &bank->commands);
+}
+#endif
+
+// efLib_Cb_DPtcl -> grLib_801C99C0 -> hsd_8039F05C: stage generators
+// consume gameplay RNG during joint animation, before fighter CPU decisions.
+static void msl_effect_match_dptcl(int link_no, int bank, int gfx_id,
+                                   HSD_JObj* jobj)
+{
+    if (bank != 0x1E || msl_bound_effect_state == NULL) {
+        return;
+    }
+#ifdef MSL_CORE_NATIVE
+    msl_effect_consume_bank_command(
+        &msl_bound_effect_data->stage_banks[stage_info.internal_stage_id],
+        gfx_id);
+#else
+    MslCoreEffectGeneratorBank data;
+    if (msl_effect_parse_command_bank(&data, (int*) stage_info.map_ptcl) == 0) {
+        msl_effect_consume_bank_command(&data, gfx_id);
+    }
+#endif
+}
+
+void msl_effect_install_match_callbacks(void)
+{
+    HSD_JObjSetDPtclCallback(msl_effect_match_dptcl);
+}
+
 void msl_effect_match_init(const MslCoreEffectData* data,
                            MslCoreEffectState* state)
 {
@@ -278,6 +354,40 @@ static MslCoreEffectQueueNode* msl_effect_alloc(void)
     return node;
 }
 
+u32 msl_effect_queue_used(void)
+{
+    u32 free_count = 0;
+    const MslCoreEffectQueueNode* node;
+    if (msl_bound_effect_state == NULL) {
+        return 0;
+    }
+    for (node = msl_effect_free; node != NULL; node = node->next) {
+        free_count += 1;
+    }
+    return (u32) MSL_CORE_EFFECT_QUEUE_CAPACITY - free_count;
+}
+
+void msl_effect_queue_dump(void)
+{
+    u8 is_free[MSL_CORE_EFFECT_QUEUE_CAPACITY] = {0};
+    const MslCoreEffectQueueNode* node;
+    int i;
+    if (msl_bound_effect_state == NULL) {
+        return;
+    }
+    for (node = msl_effect_free; node != NULL; node = node->next) {
+        is_free[node - msl_effect_nodes] = 1;
+    }
+    for (i = 0; i < MSL_CORE_EFFECT_QUEUE_CAPACITY; ++i) {
+        if (!is_free[i]) {
+            fprintf(stderr,
+                    "effect node %d checked out: spawn_kind=%u gfx_id=0x%x\n",
+                    i, msl_effect_nodes[i].spawn_kind,
+                    (unsigned) msl_effect_nodes[i].gfx_id);
+        }
+    }
+}
+
 static void msl_effect_release(MslCoreEffectQueueNode* node)
 {
     node->next = msl_effect_free;
@@ -287,23 +397,29 @@ static void msl_effect_release(MslCoreEffectQueueNode* node)
 static void msl_effect_consume_generator_rng(s32 generator_id)
 {
     int bank = generator_id / 1000;
-    int index = generator_id - bank * 1000;
-    const MslCoreEffectGeneratorBank* data;
-    HSD_PSCmdList* command;
+    // hsd_8039EFAC(linkNo, bank, id) indexes ptclref[bank] by the full
+    // generator id (Mario's fireball: bank 1, 0x3E9), and a version-0x4x bank
+    // lists [id_base, count) at those ids. The id modulo 1000 is below
+    // id_base for every such bank and found nothing.
+    // refs/melee/src/sysdolphin/baselib/generator.c::hsd_8039F05C
+    int index = generator_id;
 
     if (bank < 0 || bank >= (int) (sizeof(msl_effect_banks) /
                                    sizeof(msl_effect_banks[0])))
     {
         return;
     }
-    data = &msl_effect_banks[bank];
-    // Version-0x4x per-character banks store commands indexed by the full
-    // generator id: only [id_base, count) exists in the archive. The native
-    // translation exposes a dense array whose entries below id_base are NULL,
-    // and the recorded corpus is bit-exact with those lookups consuming
-    // nothing; mirror that boundary here instead of walking off the front of
-    // the source command table (the PPC oracle crashed dereferencing that
-    // garbage on Fox's 0xBC0 reflector generator).
+    msl_effect_consume_bank_command(&msl_effect_banks[bank], index);
+}
+
+// hsd_8039F05C's gate for one generator of a bank: a generator whose command
+// list is not a static kind and has a nonnegative random spread draws once.
+static void msl_effect_consume_bank_command(
+    const MslCoreEffectGeneratorBank* data, int index)
+{
+    HSD_PSCmdList* command;
+
+    // Only [id_base, count) is present in the immutable command array.
     if (index < data->id_base || index >= data->count ||
         data->commands == NULL)
     {
@@ -313,7 +429,7 @@ static void msl_effect_consume_generator_rng(s32 generator_id)
     // relocations. psInitDataBankLocate adds the command-bank base in place;
     // keep the immutable archive bytes and perform the same relocation here.
     // refs/melee/src/sysdolphin/baselib/particle.c::psInitDataBankLocate
-    command = data->commands[index];
+    command = data->commands[index - data->id_base];
 #ifndef MSL_CORE_NATIVE
     if (command != NULL) {
         command = (HSD_PSCmdList*) ((u8*) data->command_bank + (u32) command);

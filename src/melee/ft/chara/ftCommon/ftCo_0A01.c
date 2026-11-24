@@ -358,6 +358,9 @@ void ftCo_800A0CB0(Fighter* fp)
     }
 }
 
+#if defined(MSL_NATIVE_INLINE_FMADDS) && defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("O2")))
+#endif
 void ftCo_800A0DA4(Fighter* fp)
 {
     int i;
@@ -899,7 +902,7 @@ void ftCo_800A20A0(Fighter* fp)
         Fighter* other_fp = data->x44;
 
         if (ftCo_800A1AB4(fp, other_fp) <
-            2.0f * M2C_FIELD(Fighter_804D64FC, float**, 0x20)[fp->kind])
+            2.0f * Fighter_804D64FC->x20[fp->kind])
         {
             data->xF8_b6 = true;
         } else {
@@ -7695,12 +7698,12 @@ void ftCo_800B0AF4(Fighter* fp)
         data->ltrigger = data->x448->x4;
         data->rtrigger = data->x448->x5;
         if (fp->x2225_b3) {
-            // 800B0C34: fmul rounds 0.05*recorded once, then a single fmadd
+            // 800B0C48..58: fmul rounds 0.05*recorded once, then a single fmadd
             // fuses 0.95*cur with that product before frsp. Two rounded
             // products plus an add drifts 1 ulp against retail.
-            fp->cur_pos.x = (f32) __builtin_fma(
+            fp->cur_pos.x = (f32) msl_ppc_fma(
                 0.95, (f64) fp->cur_pos.x, 0.05 * (f64) data->x448->cur_pos.x);
-            fp->cur_pos.y = (f32) __builtin_fma(
+            fp->cur_pos.y = (f32) msl_ppc_fma(
                 0.95, (f64) fp->cur_pos.y, 0.05 * (f64) data->x448->cur_pos.y);
             if (fp->motion_id != ftPp_MS_SpecialLw &&
                 fp->motion_id != ftPp_MS_SpecialAirLw)

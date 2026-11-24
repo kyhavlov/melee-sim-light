@@ -24,4 +24,20 @@ float __fmadds(float a, float b, float c);
 float __fmsubs(float a, float b, float c);
 float __fnmsubs(float a, float b, float c);
 
+#if MSL_REPLAY_ARITHMETIC
+// Slippi Jit64 can split double fmadd into rounded multiply/add according
+// to its arithmetic setting. The default keeps retail's fused operation.
+extern _Thread_local int msl_jit_split_fma;
+static inline double msl_ppc_fma(double a, double b, double c)
+{
+    if (msl_jit_split_fma) {
+        volatile double product = a * b;
+        return product + c;
+    }
+    return __builtin_fma(a, b, c);
+}
+#else
+#define msl_ppc_fma __builtin_fma
+#endif
+
 #endif

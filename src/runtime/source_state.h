@@ -49,7 +49,6 @@ typedef struct MslSourceGameData {
         UnkCostumeStruct kirby_costumes[6];
         UnkCostumeStruct zelda_costumes[5];
         UnkCostumeStruct falco_costumes[4];
-        HSD_Joint* puff_hat_joints[6];
         /* refs/melee/src/melee/ft/chara/ftKirby/ftkirby.c::ft_80459B88: the
            copy-ability archives and hat structs, loaded at init. */
         struct ft_80459B88_t kirby_copy;

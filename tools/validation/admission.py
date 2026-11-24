@@ -26,6 +26,14 @@ OFFSCREEN_BODIES = {
 }
 
 
+# External/PreventWobbling: four-hit singles limit and CaptureWait resets.
+# Hash instruction bodies only; the Gecko return branch is relocated.
+PREVENT_WOBBLING_BODIES = {
+    0xC208F090: (496, "d5382be0df327bcfc7e379903064a02fd12a9b42c0d6c94917c3f1ef4df080c5"),
+    0xC20DB880: (32, "db2d14ce9fed80a7a34ac9fb911097d3e6b5a624fb2c58df662accea793da60f"),
+    0xC20DBBD4: (32, "db2d14ce9fed80a7a34ac9fb911097d3e6b5a624fb2c58df662accea793da60f"),
+}
+
 @lru_cache(maxsize=1)
 def evidence() -> dict:
     return json.loads(EVIDENCE.read_text())
@@ -78,8 +86,36 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
     return start.get("is_frozen_ps") is True or legacy_frozen
 
 
+# wire.h MSL_PATCH_*.
+PATCH_FD_BACKGROUND_FROZEN = 1 << 0
+PATCH_ALLOW_WOBBLING = 1 << 1
+PATCH_RETAIL_SPAWNS = 1 << 2
+
+
+def slippi_patches(codes: dict[int, bytes]) -> int:
+    """Identify supported Slippi patches from their recorded instructions."""
+    patches = 0
+    if codes.get(0x0421AAE4, b"")[4:8] == bytes.fromhex("60000000"):
+        patches |= PATCH_FD_BACKGROUND_FROZEN
+    if 0xC20DA9DC in codes:  # Earlier three-hit version.
+        raise ValueError("unsupported-prevent-wobbling-patch")
+    if any(address in codes for address in PREVENT_WOBBLING_BODIES):
+        for address, (size, digest) in PREVENT_WOBBLING_BODIES.items():
+            patch = codes.get(address, b"")
+            if (len(patch) != size or
+                    hashlib.sha256(patch[8:-4]).hexdigest() != digest or
+                    int.from_bytes(patch[-4:], "big") & 0xFC000003 != 0x48000000):
+                raise ValueError("unsupported-prevent-wobbling-patch")
+    elif codes:
+        patches |= PATCH_ALLOW_WOBBLING
+    if codes and 0xC216E510 not in codes:
+        patches |= PATCH_RETAIL_SPAWNS
+    return patches
+
+
 def capture_issues(game, raw: bytes, *, played_on: str | None = None,
-                   fnmsubs_profile: str | None = None) -> list[str]:
+                   fnmsubs_profile: str | None = None,
+                   jit_arithmetic: str | None = None) -> list[str]:
     """Return property violations without running or consulting simulator output."""
     issues = []
     identity = hashlib.sha256(raw).hexdigest()
@@ -87,6 +123,10 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
     if record is not None:
         issues.extend(record["reasons"])
     codes = gecko_codes(raw)
+    try:
+        slippi_patches(codes)
+    except ValueError as exc:
+        issues.append(str(exc))
     offscreen = codes.get(0xC206A880)
     if offscreen is None:
         issues.append("vanilla-magnifier")
@@ -128,7 +168,14 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
         issues.append("unestablished-arithmetic")
     if fnmsubs_profile is not None:
         profiles = json.loads((ROOT / "agent_docs/validation/arithmetic_provenance.json").read_text())
-        if not any(r["sha256_slp"] == identity and r["fnmsubs_profile"] == fnmsubs_profile
+        if not any(r["sha256_slp"] == identity and r.get("fnmsubs_profile") == fnmsubs_profile
+                   for r in profiles["captures"]):
+            issues.append("unestablished-arithmetic")
+    # The recording does not encode its double-FMA semantics. An override
+    # needs reviewed arithmetic evidence, not an inferred CPU identity.
+    if jit_arithmetic not in (None, "fma"):
+        profiles = json.loads((ROOT / "agent_docs/validation/arithmetic_provenance.json").read_text())
+        if not any(r["sha256_slp"] == identity and r.get("jit_arithmetic") == jit_arithmetic
                    for r in profiles["captures"]):
             issues.append("unestablished-arithmetic")
 
@@ -184,19 +231,14 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
             # has not run SlippiResetLCancelStatus at its first publication.
             if 7 in characters and 19 in characters:
                 issues.append("uninitialized-transform-lcancel")
-    items = game.frames.field("item").take(pa.array(rows)).values
-    kinds = items.field("type").to_numpy(zero_copy_only=False)
-    states = items.field("state").to_numpy(zero_copy_only=False)
-    # itseakchain.c: x18 is first assigned by it_802BC080 after the initial
-    # picked-up states. Do not condition this rule on the sampled misc3 value.
-    if np.any((kinds == 97) & (states < 3)):
-        issues.append("uninitialized-chain")
     return sorted(set(issues))
 
 
 def require_admissible(game, path: Path, *, played_on: str | None = None,
-                       fnmsubs_profile: str | None = None) -> None:
+                       fnmsubs_profile: str | None = None,
+                       jit_arithmetic: str | None = None) -> None:
     issues = capture_issues(game, path.read_bytes(), played_on=played_on,
-                            fnmsubs_profile=fnmsubs_profile)
+                            fnmsubs_profile=fnmsubs_profile,
+                            jit_arithmetic=jit_arithmetic)
     if issues:
         raise ValueError("ineligible capture: " + ", ".join(issues))

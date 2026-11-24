@@ -44,7 +44,6 @@ void lbArchive_LoadSections(HSD_Archive* archive, void** symbol, ...)
     va_start(symbols, symbol);
     for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
-        *symbol = NULL;
         *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);
         if (*symbol == NULL) {
             OSReport("Cannot find symbol %s.\n", symbol_name);
@@ -87,7 +86,6 @@ static inline void lbArchive_vLoadSectionsFatal(HSD_Archive* archive,
 
     for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
-        *symbol = NULL;
         *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);
         if (*symbol == NULL) {
             OSReport("Cannot find symbol %s.\n", symbol_name);
@@ -103,7 +101,6 @@ static inline void lbArchive_vLoadSections(HSD_Archive* archive, void** symbol,
 
     for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
-        *symbol = NULL;
         *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);
         if (*symbol == NULL) {
             OSReport("Cannot find symbol %s.\n", symbol_name);

@@ -7,6 +7,9 @@ import numpy as np
 import melee_sim as msl
 
 
+FIXTURE_PATH = Path(__file__).with_name('fixtures') / 'yoshi_vector_pool.npz'
+
+
 def _copy_recorded_fields(destination, source):
     for name in destination.dtype.names:
         if destination[name].dtype.names:
@@ -16,8 +19,12 @@ def _copy_recorded_fields(destination, source):
 
 
 class VectorPoolTest(unittest.TestCase):
+    def test_fixture_match_config_dtype(self):
+        with np.load(FIXTURE_PATH) as fixture:
+            self.assertEqual(fixture['config'].dtype, msl.match_config_dtype())
+
     def test_four_yoshis_materialize_hurtbox_scales_and_restore(self):
-        fixture = np.load(Path(__file__).with_name('fixtures') / 'yoshi_vector_pool.npz')
+        fixture = np.load(FIXTURE_PATH)
         prefix_frames = int(fixture['prefix_frames'])
         recorded_frame = np.zeros((), dtype=fixture['observation_schema'].dtype)
         digest = hashlib.sha256()

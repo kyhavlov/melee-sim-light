@@ -1180,12 +1180,13 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
 
         if (msl_fighter_part_can_animate(fp, i)) {
 #ifdef MSL_CORE_NATIVE
-            // The interpolation skeleton was reset to this static pose before
-            // its attached animation ran. Unattached joints are unchanged.
-            if (!msl_fighter_pose_has_animation(fp->parts[i].x4_jobj2)) {
+            // Presentation-only parts share a placeholder, not a live pose.
+            if (fp->parts[i].x4_jobj2->flags & JOBJ_MSL_GAMEPLAY_COLD) {
                 goto next_joint;
             }
 #endif
+            // Callers reset to the costume rest pose, then blend toward a
+            // different static pose. Unanimated joints still need blending.
             if (fp->parts[i].flags_b4) {
                 lb_8000B4FC(fp->parts[i].x4_jobj2, joint);
             } else {
@@ -1198,7 +1199,9 @@ void ftAnim_80070108(Fighter* fp, Fighter_Part start, float t, float t_inv,
 #endif
             }
         }
+#ifdef MSL_CORE_NATIVE
     next_joint:
+#endif
         i++;
         ftAnim_GetNextJointInTree(&joint, &sp1C);
     }

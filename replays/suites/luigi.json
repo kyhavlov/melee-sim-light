@@ -326,6 +326,19 @@
         "1": "Yoshi",
         "2": "Luigi"
       }
+    },
+    {
+      "replay": "replays/validation/luigi/master-master-cbc2979c9def2b8e8168b60c.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Luigi",
+        "2": "Peach"
+      },
+      "played_on": "network"
     }
   ]
 }

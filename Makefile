@@ -218,6 +218,8 @@ NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/batch_api_smoke.c \
 	$(ROOT)/tests/melee_core/public_api_smoke.c \
 	$(ROOT)/tests/melee_core/context_smoke.c \
+	$(ROOT)/tests/melee_core/thread_shared_state_smoke.c \
+	$(ROOT)/tests/melee_core/thread_batch_smoke.c \
 	$(ROOT)/tests/melee_core/data_load_smoke.c \
 	$(ROOT)/tests/melee_core/gameplay_parts_smoke.c \
 	$(ROOT)/tests/melee_core/article_pool_smoke.c \
@@ -228,6 +230,9 @@ NATIVE_SMOKE_SRCS := \
 	$(ROOT)/tests/melee_core/scheduler_smoke.c \
 	$(ROOT)/tests/melee_core/lifecycle_bench.c \
 	$(ROOT)/tests/melee_core/wasm_parity.c
+ifeq ($(UNAME_S)/$(HOST_TARGET_ARCH),Linux/x86_64)
+NATIVE_SMOKE_SRCS += $(ROOT)/tests/melee_core/shared_write_audit.c
+endif
 PPC_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(SMOKE_SRCS))
 NATIVE_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SMOKE_SRCS))
 NATIVE_REPLAY_BENCH_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
@@ -263,6 +268,9 @@ NATIVE_MODEL_SMOKE := $(NATIVE_BUILD)/model-animation-smoke
 NATIVE_SCHEDULER_SMOKE := $(NATIVE_BUILD)/scheduler-smoke
 NATIVE_SCALAR_API_SMOKE := $(NATIVE_BUILD)/scalar-api-smoke
 NATIVE_CONTEXT_SMOKE := $(NATIVE_BUILD)/context-smoke
+NATIVE_THREAD_SHARED_STATE_SMOKE := $(NATIVE_BUILD)/thread-shared-state-smoke
+NATIVE_THREAD_BATCH_SMOKE := $(NATIVE_BUILD)/thread-batch-smoke
+NATIVE_SHARED_WRITE_AUDIT := $(NATIVE_BUILD)/shared-write-audit
 NATIVE_BATCH_API_SMOKE := $(NATIVE_BUILD)/batch-api-smoke
 NATIVE_PUBLIC_API_SMOKE := $(NATIVE_BUILD)/public-api-smoke
 NATIVE_GAMEPLAY_PARTS_SMOKE := $(NATIVE_BUILD)/gameplay-parts-smoke
@@ -281,7 +289,10 @@ VIEWER_SCHEMA_JS := $(ROOT)/tools/viewer/live/schema.generated.js
 VALIDATION_NATIVE_SRC := $(ROOT)/tools/validation/native.c
 VALIDATION_NATIVE := $(VALIDATION_BUILD)/_msl_replay_validate.so
 
+MSL_REPLAY_ARITHMETIC ?= 0
+
 CPPFLAGS := \
+	-DMSL_REPLAY_ARITHMETIC=$(MSL_REPLAY_ARITHMETIC) \
 	-DBUGFIX \
 	-include $(CORE)/platform/compat.h \
 	-I$(CORE) \
@@ -321,6 +332,11 @@ NATIVE_RELEASE_CFLAGS := $(CFLAGS) -O1 -fno-pie -fomit-frame-pointer \
 	-DMSL_NATIVE_INLINE_FMADDS
 NATIVE_BASE_CFLAGS := $(NATIVE_CFLAGS)
 WASM_CFLAGS = $(CFLAGS) $(HOSTED_LEGACY_CFLAGS)
+NATIVE_LINK_FLAGS += -pthread
+SHARED_LIB_LINK_FLAGS += -pthread
+$(NATIVE_OBJ_DIR)/src/api.o: NATIVE_CFLAGS += -pthread
+$(PYTHON_OBJ_DIR)/src/api.o: PYTHON_CFLAGS += -pthread
+
 LDLIBS := -lm
 
 # Melee's matching MSL trig implementation intentionally compiles its nested
@@ -477,6 +493,15 @@ $(NATIVE_FLAGS_STAMP): FORCE
 	@cmp -s "$@.tmp" "$@" && rm "$@.tmp" || mv "$@.tmp" "$@"
 
 $(NATIVE_COMPILE_OBJS): $(NATIVE_FLAGS_STAMP)
+
+$(PPC_BUILD)/replay-arithmetic.stamp $(PYTHON_BUILD)/replay-arithmetic.stamp $(WASM_BUILD)/replay-arithmetic.stamp: FORCE
+	@mkdir -p "$(@D)"
+	@printf '%s\n' '$(MSL_REPLAY_ARITHMETIC)' > "$@.tmp"
+	@cmp -s "$@.tmp" "$@" && rm "$@.tmp" || mv "$@.tmp" "$@"
+
+$(PPC_OBJS) $(PPC_SMOKE_OBJS): $(PPC_BUILD)/replay-arithmetic.stamp
+$(PYTHON_CORE_OBJS): $(PYTHON_BUILD)/replay-arithmetic.stamp
+$(WASM_CORE_OBJS): $(WASM_BUILD)/replay-arithmetic.stamp
 
 $(VIEWER_SCHEMA_TOOL): $(ROOT)/tools/viewer/schema.c $(CORE)/runtime/wire.h
 	@mkdir -p "$(@D)"
@@ -734,7 +759,7 @@ endef
 define link_native_smoke
 $(1): $(NATIVE_CORE_OBJS) $(2)
 	@mkdir -p "$$(@D)"
-	@"$(HOST_CC)" $(NATIVE_EXE_LINK_FLAGS) $(NATIVE_LINK_FLAGS) $$^ $(LDLIBS) -o "$$@"
+	@"$(HOST_CC)" $(NATIVE_EXE_LINK_FLAGS) $(NATIVE_LINK_FLAGS) $$^ $$(LDLIBS) -o "$$@"
 endef
 
 $(eval $(call link_smoke,$(ARCHIVE_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/archive_smoke.o))
@@ -749,6 +774,14 @@ $(eval $(call link_native_smoke,$(NATIVE_MODEL_SMOKE),$(NATIVE_OBJ_DIR)/tests/me
 $(eval $(call link_native_smoke,$(NATIVE_SCHEDULER_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scheduler_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_SCALAR_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/context_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_THREAD_SHARED_STATE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/thread_shared_state_smoke.o))
+$(NATIVE_OBJ_DIR)/tests/melee_core/thread_shared_state_smoke.o: NATIVE_CFLAGS += -pthread
+$(eval $(call link_native_smoke,$(NATIVE_THREAD_BATCH_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/thread_batch_smoke.o))
+$(NATIVE_OBJ_DIR)/tests/melee_core/thread_batch_smoke.o: NATIVE_CFLAGS += -pthread
+ifeq ($(UNAME_S)/$(HOST_TARGET_ARCH),Linux/x86_64)
+$(eval $(call link_native_smoke,$(NATIVE_SHARED_WRITE_AUDIT),$(NATIVE_OBJ_DIR)/tests/melee_core/shared_write_audit.o))
+$(NATIVE_SHARED_WRITE_AUDIT): LDLIBS += -Wl,-z,now
+endif
 $(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/public_api_smoke.o))
 $(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
@@ -791,7 +824,18 @@ ppc-smoke: data-check $(ARCHIVE_SMOKE) $(DATA_SMOKE) $(MAP_SMOKE) $(MODEL_SMOKE)
 	@$(TIMEOUT) 10s "$(QEMU)" -L "$(QEMU_SYSROOT)" "$(SCALAR_API_SMOKE)" \
 		"$(DATA)" 32 4 16
 
-native-smoke: fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke kirby-smoke data-check $(NATIVE_BUILD)/cpu-replay-smoke $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
+.PHONY: thread-smoke
+thread-smoke: data-check $(NATIVE_THREAD_SHARED_STATE_SMOKE) $(NATIVE_THREAD_BATCH_SMOKE)
+	@$(TIMEOUT) 10s "$(NATIVE_THREAD_SHARED_STATE_SMOKE)" "$(DATA)"
+	@$(TIMEOUT) 60s "$(NATIVE_THREAD_BATCH_SMOKE)" "$(DATA)"
+ifeq ($(UNAME_S)/$(HOST_TARGET_ARCH),Linux/x86_64)
+	@$(TIMEOUT) 30s "$(NATIVE_SHARED_WRITE_AUDIT)" "$(DATA)" 3000
+endif
+ifeq ($(UNAME_S)/$(HOST_TARGET_ARCH),Linux/x86_64)
+thread-smoke: $(NATIVE_SHARED_WRITE_AUDIT)
+endif
+
+native-smoke: thread-smoke fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke kirby-smoke data-check $(NATIVE_BUILD)/cpu-replay-smoke $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
 	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -827,7 +871,8 @@ lifecycle-benchmark: data-check $(NATIVE_LIFECYCLE_BENCH)
 benchmark-prepare: validator
 	@"$(PY)" -m tools.validation.prepare_replay_benchmark \
 		--suite "$(VALIDATION_SUITE)" --output "$(BENCHMARK_MANIFEST)" \
-		--characters "$(VALIDATION_CHARACTERS)" --stages "$(VALIDATION_STAGES)"
+		--characters "$(VALIDATION_CHARACTERS)" --stages "$(VALIDATION_STAGES)" \
+		$(if $(filter 1,$(MSL_REPLAY_ARITHMETIC)),--replay-arithmetic,)
 
 benchmark-native: data-check benchmark-prepare native-release-benchmark
 	@taskset -c "$(BENCHMARK_CPU)" "$(NATIVE_RELEASE_REPLAY_BENCH)" \
@@ -882,17 +927,25 @@ validation-supported-domain:
 	@$(MAKE) --no-print-directory -f "$(ROOT)/Makefile" validation-suite \
 		VALIDATION_SUITE=replays/suites/melee_core_aggregate.json
 
-validation-release-supported-domain: validator native-release
+validation-release-supported-domain: validator
+	@$(MAKE) --no-print-directory native-release MSL_REPLAY_ARITHMETIC=1
 	@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" \
 		MSL_CORE_NATIVE_BINARY="$(NATIVE_RELEASE_BUILD)/melee-core-native" \
 		"$(PY)" -m tools.validation.validate_replay \
 		--suite replays/suites/melee_core_aggregate.json --backend native \
 		--workers "$(VALIDATION_WORKERS)" --no-build
 
-test: source-check native-smoke python-library validator native ppc
+test: source-check native-smoke python-library validator
+	@$(MAKE) --no-print-directory native ppc MSL_REPLAY_ARITHMETIC=1
 	@"$(PY)" -m pytest -q
 
-test-full: test ppc-smoke validation-supported-domain validation-release-supported-domain viewer-smoke
+# Sequence gates that rebuild shared objects with different arithmetic modes.
+test-full:
+	+@$(MAKE) --no-print-directory test
+	+@$(MAKE) --no-print-directory ppc-smoke
+	+@$(MAKE) --no-print-directory validation-supported-domain
+	+@$(MAKE) --no-print-directory validation-release-supported-domain
+	+@$(MAKE) --no-print-directory viewer-smoke
 
 format-check:
 	@git diff --check

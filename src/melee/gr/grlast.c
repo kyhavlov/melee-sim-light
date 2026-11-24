@@ -23,6 +23,10 @@
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbspdisplay.h>
 #include <melee/lb/lbvector.h>
+#ifdef MSL_CORE_HOSTED
+#include "runtime/match.h"
+#include "runtime/wire.h"
+#endif
 
 const Vec3 grLast_803B8480 = { 1, 1, 1 };
 const Vec3 grLast_803B848C = { 0, 1, 0 };
@@ -308,7 +312,14 @@ static void grLast_8021AAB0(Ground_GObj* gobj)
 {
     Ground* gp = GET_GROUND(gobj);
     if (!gp->u.map.xC4_b1 && !gp->u.map.xC4_b0) {
-        grLast_8021B2E8(gobj);
+#ifdef MSL_CORE_HOSTED
+        // Frozen All/Core/2.asm replaces only the call at 0x8021AAE4.
+        if (!msl_slippi_patch(MSL_PATCH_FD_BACKGROUND_FROZEN)) {
+#endif
+            grLast_8021B2E8(gobj);
+#ifdef MSL_CORE_HOSTED
+        }
+#endif
         if (gp->u.map.xC4_b26) {
             int tmp = grLast_8021B5C4(gobj);
             if (tmp != 0) {

@@ -12,6 +12,18 @@
       ],
       "replay": "replays/validation/sheik/StiffLustrousZebra.slpz",
       "stage_id": 31
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "2": "Falco"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/validation/sheik/PaleMajorEchidna.slpz",
+      "stage_id": 32
     }
   ],
   "ucf_cardinals_1_0_enabled": true,

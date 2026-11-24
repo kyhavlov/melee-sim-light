@@ -182,15 +182,18 @@ void Fighter_800679B0(void)
     HSD_ObjAllocInit(&fighter_dat_attrs_alloc_data, /*size*/ 0x424,
                      /*align*/ 4);
     ft_800852B0();
+#ifndef MSL_CORE_NATIVE
     Fighter_LoadCommonData();
+#endif
     ft_8008549C();
 #ifndef MSL_CORE_HOSTED
     // This owner initializes the scene light rig; the headless port has no
     // LObj graph and none of its writes are consumed by locomotion.
     ftCo_8009F4A4();
 #endif
-    ftCo_800C8064();
 #ifndef MSL_CORE_HOSTED
+    // This model supplies only the metal-fighter renderer's material.
+    ftCo_800C8064();
     // This source owner only installs the alternate renderer material used by
     // ftMaterial_800BF2B8. The headless runtime has no fighter draw traversal.
     // refs/melee/src/melee/ft/ft_0C8C.c::ftCo_800C8F6C
@@ -250,8 +253,6 @@ void Fighter_LoadCommonData(void)
         MslSourceGameData* source = msl_core_context_source_game_data;
         int kind;
 
-        memset(source->fighter.part_flags, 0,
-               sizeof(source->fighter.part_flags));
         for (kind = 0; kind < FTKIND_MAX; ++kind) {
             struct Fighter_804D6540_t* desc = Fighter_804D6540[kind];
             int i;

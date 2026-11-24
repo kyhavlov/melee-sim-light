@@ -51,9 +51,9 @@ static inline float msl_gekko_sqrtf(float x)
 {
     if (x > 0.0f) {
         double g = __frsqrte((double) x);
-        g = (0.5 * g) * __builtin_fma(-(double) x, g * g, 3.0);
-        g = (0.5 * g) * __builtin_fma(-(double) x, g * g, 3.0);
-        g = (0.5 * g) * __builtin_fma(-(double) x, g * g, 3.0);
+        g = (0.5 * g) * msl_ppc_fma(-(double) x, g * g, 3.0);
+        g = (0.5 * g) * msl_ppc_fma(-(double) x, g * g, 3.0);
+        g = (0.5 * g) * msl_ppc_fma(-(double) x, g * g, 3.0);
         return (float) ((double) x * g);
     }
     return x;

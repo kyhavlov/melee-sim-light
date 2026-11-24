@@ -6,6 +6,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from tools.validation import validate_replay
 
 
@@ -89,8 +91,8 @@ def test_melee_core_aggregate_filters_pending_characters_without_losing_inventor
     )
 
     assert suite.name == "melee_core_aggregate"
-    assert len(suite.replays) == 512
-    assert len(cases) == 78
+    assert len(suite.replays) == 525
+    assert len(cases) == 79
     assert all("Peach" not in case.characters for case in cases)
 
 
@@ -103,7 +105,9 @@ def test_suite_replay_execution_metadata_reaches_native_validator(
 
     @contextmanager
     def fake_replay_path(_path: Path):
-        yield tmp_path / "legacy.slp"
+        path = tmp_path / "legacy.slp"
+        path.touch()
+        yield path
 
     class FakeNative:
         @staticmethod
@@ -113,6 +117,7 @@ def test_suite_replay_execution_metadata_reaches_native_validator(
 
     monkeypatch.setattr(validate_replay, "replay_path_for_peppi", fake_replay_path)
     monkeypatch.setattr(validate_replay, "_read_slippi", lambda _path, _flag: game)
+    monkeypatch.setattr(validate_replay, "gecko_codes", lambda _raw: {})
     monkeypatch.setattr(validate_replay, "game_data_dir", lambda: tmp_path)
 
     validate_replay.validate_one(
@@ -139,8 +144,9 @@ def test_recovered_arithmetic_profiles_are_explicit() -> None:
         assert entry.fnmsubs_profile == "dolphin-legacy"
 
 
+@pytest.mark.parametrize("shutdown_warnings", [[], ["worker shutdown failed"]])
 def test_parallel_runner_preserves_manifest_order_and_isolates_errors(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, capsys, shutdown_warnings
 ) -> None:
     barrier = threading.Barrier(2)
     cases = [
@@ -170,8 +176,8 @@ def test_parallel_runner_preserves_manifest_order_and_isolates_errors(
         def discard(self, _runner) -> None:
             type(self).discarded = True
 
-        def close(self) -> None:
-            pass
+        def close(self) -> list[str]:
+            return shutdown_warnings
 
     monkeypatch.setattr(validate_replay, "validate_one", fake_validate_one)
     monkeypatch.setattr(validate_replay, "game_data_dir", lambda: tmp_path)
@@ -196,6 +202,9 @@ def test_parallel_runner_preserves_manifest_order_and_isolates_errors(
     assert [outcome.error is None for outcome in outcomes] == [True, True, False]
     assert outcomes[2].error == "RuntimeError: unsupported owner"
     assert FakeRunnerPool.discarded
+    assert capsys.readouterr().err == "".join(
+        f"warning: {warning}\n" for warning in shutdown_warnings
+    )
 
 
 def test_parallel_worker_auto_count_is_bounded(monkeypatch) -> None:
@@ -247,7 +256,6 @@ def test_mismatches_and_partial_runs_cannot_count_as_exact(capsys) -> None:
 
 
 def test_output_locks_require_full_strict_admitted_results(tmp_path: Path) -> None:
-    import pytest
     case = validate_replay.ReplayCase(Path("known.slpz"), "known.slpz")
     for changes in ({"admitted": False}, {"diagnostic": True}, {"pass": False}, {"total": 20}):
         result = {**_result(), **changes}

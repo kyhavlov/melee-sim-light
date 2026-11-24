@@ -127,6 +127,11 @@ u32 msl_item_reserve_runtime_pools(bool common_items, u32 stage_item_count,
     HSD_ObjAllocEnsureFree(&item_link_alloc_data, link_count);
     return item_count;
 }
+
+HSD_ObjAllocData* msl_item_runtime_pool(void)
+{
+    return &item_alloc_data;
+}
 #endif
 #ifndef MSL_CORE_HOSTED
 HSD_ObjAllocUnk Item_804A0C64;

@@ -14,6 +14,10 @@ after the first neutral tick. Its hash was recorded from a diagnostic build with
 only the vector reservation reverted to 128. That build still aborts on input
 2,260 through `lbColl_TransformHurt -> HSD_JObjMakeMatrix -> HSD_VecAlloc`, while
 the production build matches every preceding observation and completes the tape.
+Final Destination's own particle generator draws once from the gameplay RNG at
+frame -123 (the stage particle events), so the seed field of the first 117
+observations moved and the prefix hash was re-recorded; every later observation
+is unchanged.
 
 `legacy_prefix_sha256` preserves the original reference from unpatched main
 (`6d55f60e`, Linux x86-64, GCC 13.3 release build). A diagnostic build restoring

@@ -43,7 +43,7 @@ def game_data_loaded() -> bool:
 
 
 class EnvBatch:
-    """One single-threaded batch backed directly by ``src/api.h``."""
+    """One single-threaded batch; independent batches may run concurrently."""
 
     __slots__ = (
         "batch_size",
@@ -510,6 +510,8 @@ def _write_match_config(
     row["stocks"] = int(config.stocks)
     row["viewpoint_player"] = int(config.viewpoint_player)
     row["ucf_cardinals"] = bool(config.ucf_cardinals_1_0_enabled)
+    if config.allow_wobbling is not None:
+        row["allow_wobbling"] = 1 if config.allow_wobbling else 2
     for index, player in enumerate(players):
         team = -1 if player.team_id is None else int(player.team_id)
         facing = 0 if player.facing is None else (1 if player.facing else -1)

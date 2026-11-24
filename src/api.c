@@ -3,6 +3,9 @@
 #include "runtime/batch.h"
 
 #include <math.h>
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+#include <pthread.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -84,7 +87,8 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
       (source->num_players < 2 || source->num_players > 4) || !isfinite(source->damage_ratio) ||
       source->damage_ratio <= 0.0F || source->stocks == 0 ||
       source->viewpoint_player >= source->num_players || source->is_teams > 1 ||
-      source->friendly_fire > 1 || source->ucf_cardinals > 1) {
+      source->friendly_fire > 1 || source->ucf_cardinals > 1 ||
+      source->allow_wobbling > MSL_WOBBLING_PREVENT) {
     return -1;
   }
 
@@ -98,7 +102,7 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
   target->is_teams = source->is_teams;
   target->friendly_fire = source->friendly_fire;
   target->stock_count = source->stocks;
-  target->online_fnmsubs_zero = 1;
+  target->arithmetic_flags = MSL_ARITHMETIC_LEGACY_FNMSUBS;
   target->brawl_offscreen_damage = 1;
   target->freeze_dead_up_fall_physics = 1;
   target->whispy_dead_fighter_fix = 1;
@@ -107,6 +111,12 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
   target->ucf_sdi_enabled = 1;
   target->ucf_shield_drop_extended_enabled = 1;
   target->ucf_shield_drop_084_enabled = 1;
+  const int allow_wobbling = source->allow_wobbling == MSL_WOBBLING_DEFAULT
+                                 ? source->num_players == 4
+                                 : source->allow_wobbling == MSL_WOBBLING_ALLOW;
+  if (allow_wobbling) {
+    target->slippi_patches = MSL_PATCH_ALLOW_WOBBLING;
+  }
 
   for (player = 0; player < source->num_players; ++player) {
     const MslPlayerConfig* src = &source->players[player];
@@ -212,6 +222,31 @@ static struct {
   uint32_t references;
 } shared_game_data;
 
+#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_WASM)
+static pthread_mutex_t msl_game_data_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_once_t msl_game_data_fork_once = PTHREAD_ONCE_INIT;
+
+static void msl_game_data_fork_prepare(void) { pthread_mutex_lock(&msl_game_data_mutex); }
+static void msl_game_data_fork_resume(void) { pthread_mutex_unlock(&msl_game_data_mutex); }
+
+static void msl_game_data_register_fork(void) {
+  if (pthread_atfork(msl_game_data_fork_prepare, msl_game_data_fork_resume,
+                     msl_game_data_fork_resume) != 0) {
+    abort();
+  }
+}
+
+static void msl_game_data_lock(void) {
+  pthread_once(&msl_game_data_fork_once, msl_game_data_register_fork);
+  pthread_mutex_lock(&msl_game_data_mutex);
+}
+
+static void msl_game_data_unlock(void) { pthread_mutex_unlock(&msl_game_data_mutex); }
+#else
+static void msl_game_data_lock(void) {}
+static void msl_game_data_unlock(void) {}
+#endif
+
 static MslResult resolve_raw_root(const char* data_root, char* raw_root, size_t capacity) {
   size_t root_length;
   char* resolved;
@@ -257,34 +292,34 @@ static MslResult acquire_game_data(const char* data_root, MslCoreGameData** out_
   if (result != MSL_OK) {
     return result;
   }
+  msl_game_data_lock();
   if (shared_game_data.data != NULL) {
     if (strcmp(shared_game_data.raw_root, raw_root) != 0) {
-      return MSL_INVALID_STATE;
+      result = MSL_INVALID_STATE;
+    } else {
+      ++shared_game_data.references;
+      *out_game_data = shared_game_data.data;
     }
-    ++shared_game_data.references;
-    *out_game_data = shared_game_data.data;
-    return MSL_OK;
+  } else {
+    core_result = msl_core_game_data_create(raw_root, &shared_game_data.data);
+    result = public_result(core_result);
+    if (core_result == MSL_CORE_OK) {
+      memcpy(shared_game_data.raw_root, raw_root, strlen(raw_root) + 1);
+      shared_game_data.references = 1;
+      *out_game_data = shared_game_data.data;
+    }
   }
-  core_result = msl_core_game_data_create(raw_root, &shared_game_data.data);
-  if (core_result != MSL_CORE_OK) {
-    shared_game_data.data = NULL;
-    return public_result(core_result);
-  }
-  memcpy(shared_game_data.raw_root, raw_root, strlen(raw_root) + 1);
-  shared_game_data.references = 1;
-  *out_game_data = shared_game_data.data;
-  return MSL_OK;
+  msl_game_data_unlock();
+  return result;
 }
 
-static void release_game_data(MslCoreGameData* game_data) {
-  if (game_data == NULL || game_data != shared_game_data.data) {
-    return;
+static void release_game_data(void) {
+  msl_game_data_lock();
+  if (shared_game_data.data != NULL && --shared_game_data.references == 0) {
+    msl_core_game_data_destroy(shared_game_data.data);
+    memset(&shared_game_data, 0, sizeof(shared_game_data));
   }
-  if (--shared_game_data.references > 0) {
-    return;
-  }
-  msl_core_game_data_destroy(shared_game_data.data);
-  memset(&shared_game_data, 0, sizeof(shared_game_data));
+  msl_game_data_unlock();
 }
 
 MslResult msl_game_data_acquire(const char* data_root) {
@@ -293,11 +328,15 @@ MslResult msl_game_data_acquire(const char* data_root) {
 }
 
 void msl_game_data_release(void) {
-  release_game_data(shared_game_data.data);
+  release_game_data();
 }
 
 uint32_t msl_game_data_references(void) {
-  return shared_game_data.references;
+  uint32_t references;
+  msl_game_data_lock();
+  references = shared_game_data.references;
+  msl_game_data_unlock();
+  return references;
 }
 
 MslResult msl_batch_create(const char* data_root, uint32_t batch_size, MslBatch** out_batch) {
@@ -342,7 +381,9 @@ void msl_batch_destroy(MslBatch* batch) {
     return;
   }
   msl_core_batch_destroy(batch->runtime);
-  release_game_data(batch->game_data);
+  if (batch->game_data != NULL) {
+    release_game_data();
+  }
   free(batch->max_frames);
   free(batch->viewpoint_players);
   free(batch->inputs);

@@ -51,19 +51,15 @@
 #ifdef MSL_CORE_HOSTED
 #if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
 #include <runtime/context.h>
-#define msl_core_puff_hat_joints()                                            \
-    ((HSD_Joint**) msl_core_context_puff_hat_joints)
 #define msl_kirby_copy_table()                                           \
     ((struct ft_80459B88_t*) msl_context_kirby_copy)
 #define msl_kirby_costume_hat_table()                                    \
     ((void**) msl_context_kirby_costume_hat_table)
 #else
-HSD_Joint** msl_core_puff_hat_joints(void);
 struct ft_80459B88_t* msl_kirby_copy_table(void);
 void** msl_kirby_costume_hat_table(void);
 #endif
 HSD_Joint* msl_kirby_iso_joint_take(void);
-#define ft_8045A1E0 (msl_core_puff_hat_joints())
 #define ft_80459B88 (*msl_kirby_copy_table())
 #else
 /* 45A1E0 */ extern HSD_Joint* ft_8045A1E0[6];

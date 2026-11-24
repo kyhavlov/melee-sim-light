@@ -78,7 +78,11 @@ typedef struct BattlefieldParams {
 BattlefieldParams* grNBa_804D6ACC;
 #endif
 
+#ifdef MSL_CORE_HOSTED
+static const u8 isDemoFight = 0;
+#else
 static u8 isDemoFight;
+#endif
 
 static StageCallbacks grNBa_803E7DA0[7] = {
     {
@@ -150,7 +154,9 @@ StageData grNBa_803E7E38 = {
 
 static void grBattle_OnDemoInit(bool arg0)
 {
+#ifndef MSL_CORE_HOSTED
     isDemoFight = 1;
+#endif
 }
 
 static void grBattle_OnInit(void)
@@ -171,7 +177,9 @@ static void grBattle_OnInit(void)
     Ground_801C39C0();
     Ground_801C3BB4();
     grLib_801C9A10();
+#ifndef MSL_CORE_HOSTED
     isDemoFight = 0;
+#endif
 }
 
 static void grBattle_OnLoad(void) {}

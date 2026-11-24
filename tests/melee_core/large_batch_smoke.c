@@ -98,7 +98,7 @@ static void config_init(MslCoreMatchConfig* config, uint32_t index)
     config->match_damage_ratio = 1.0F;
     config->num_players = variant == 3 ? 4 : 2;
     config->stock_count = 4;
-    config->online_fnmsubs_zero = 1;
+    config->arithmetic_flags = MSL_ARITHMETIC_LEGACY_FNMSUBS;
     config->brawl_offscreen_damage = 1;
     config->freeze_dead_up_fall_physics = 1;
     config->whispy_dead_fighter_fix = 1;

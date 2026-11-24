@@ -433,7 +433,10 @@ union ftCommon_MotionVars {
     struct {
         /* fp+2340 */ int x40;
         /* fp+2344 */ int x44;
-        /* fp+2348 */ u8 pad_x48[0x4C - 0x48];
+        // Slippi Online's InitHitVelocity.asm keeps the frozen camera-KO
+        // fall velocity y in this previously padded slot (z reuses x4C once
+        // the case-1 lerp that reads it has finished).
+        /* fp+2348 */ float x48;
         /* fp+234C */ float x4C;
         /* fp+2350 */ Vec3 x50;
         /* fp+235C */ Vec3 x5C;
@@ -465,7 +468,14 @@ union ftCommon_MotionVars {
         /* fp+2348 */ int x8;
         /* fp+234C */ u8 xC;
     } capturewait;
+    struct {
+        u8 pad[0x44];
+        u8 count;
+        u16 last_move;
+    } wobbling;
 };
+STATIC_ASSERT(offsetof(union ftCommon_MotionVars, wobbling.count) == 0x44);
+STATIC_ASSERT(offsetof(union ftCommon_MotionVars, wobbling.last_move) == 0x46);
 STATIC_ASSERT(sizeof(((union ftCommon_MotionVars*) 0)->itemthrow) == 0x24);
 
 /// @todo Fake, need to find real size of #HitCapsule

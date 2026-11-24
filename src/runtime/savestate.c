@@ -213,7 +213,9 @@ static uint64_t layout_hash(void)
     uint64_t hash = UINT64_C(1469598103934665603);
     uint32_t type;
     size_t match_size = sizeof(MslCoreMatch);
+    size_t game_data_size = sizeof(MslCoreGameData);
     hash = hash_bytes(hash, &match_size, sizeof(match_size));
+    hash = hash_bytes(hash, &game_data_size, sizeof(game_data_size));
     for (type = 0; type < MSL_RELOC_TYPE_COUNT; ++type) {
         const MslRelocTypeDesc* desc = &msl_reloc_type_descs[type];
         hash = hash_bytes(hash, &desc->size, sizeof(desc->size));

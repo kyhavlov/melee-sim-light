@@ -442,11 +442,13 @@ ftCollisionBox ftPr_Init_803D0610 = {
 
 void ftPr_Init_8013C2F8(void)
 {
+#ifndef MSL_CORE_HOSTED
     ft_8045A1E0[0] = NULL;
     ft_8045A1E0[1] = NULL;
     ft_8045A1E0[2] = NULL;
     ft_8045A1E0[3] = NULL;
     ft_8045A1E0[4] = NULL;
+#endif
 }
 
 void ftPr_Init_OnDeath(HSD_GObj* gobj)
@@ -461,7 +463,6 @@ void ftPr_Init_OnUserDataRemove(HSD_GObj* gobj)
 
 void ftPr_Init_8013C360(HSD_GObj* gobj)
 {
-    HSD_Joint** joints = ft_8045A1E0;
     Fighter* fp = GET_FIGHTER(gobj);
 
 #ifdef MSL_CORE_HOSTED
@@ -472,8 +473,8 @@ void ftPr_Init_8013C360(HSD_GObj* gobj)
     //   ftPr_Init_8013C360,ftPr_Init_UnkMtxFunc0,
     //   ftPr_Init_UnkIntBoolFunc0}
     fp->fv.pr.x223C = NULL;
-    return;
-#endif
+#else
+    HSD_Joint** joints = ft_8045A1E0;
 
     if (ftPr_Init_803D05B4[fp->x619_costume_id]) {
         /// @todo clean up memory accesses - this looks similar to
@@ -504,6 +505,7 @@ void ftPr_Init_8013C360(HSD_GObj* gobj)
     }
 
     fp->fv.pr.x223C = 0;
+#endif
 }
 
 void ftPr_Init_8013C494(HSD_GObj* gobj)

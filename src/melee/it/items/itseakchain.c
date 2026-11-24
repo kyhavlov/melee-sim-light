@@ -204,12 +204,10 @@ Item_GObj* itSeakChain_Spawn(Fighter_GObj* parent_gobj, Point3d* arg1,
         ip->xDD4_itemVar.seakchain.parent_gobj = parent_gobj;
         ip->xDD4_itemVar.seakchain.x10 = 0;
         ip->xDD4_itemVar.seakchain.x14 = 0;
-        // Retail's first Chain allocation inherits a zeroed heap lane here,
-        // but the source constructor reads x18 before its first assignment.
-        // Headless pool preallocation/reuse has a different presentation-item
-        // history, so make that source-observed initial value deterministic.
-        // refs/melee/src/melee/it/items/itseakchain.c::{
-        //   itSeakChain_Spawn,fn_802BB428}
+        // x18 is read before assignment only as a collision-sound gate.
+        // Initialize it independently of the headless pool's reuse history.
+        // refs/melee/src/melee/it/kinds/itseakchain.c::{
+        //     it_802BC080,it_802BBAEC,it_802BB938}
         ip->xDD4_itemVar.seakchain.x18 = 0;
         for (i = 0; i < 0xF; i++) {
             ip->xDD4_itemVar.seakchain.history[i].z = 0.0f;

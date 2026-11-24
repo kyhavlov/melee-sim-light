@@ -20,8 +20,9 @@ implementation queue.
   replay tooling and reporting.
 - Back gameplay changes with `refs/melee`, matching assembly,
   `refs/slippi-ssbm-asm` or extracted data. Do not fit behavior to individual replays.
-- Use one single-threaded batch per process. Immutable game data is shared;
-  mutable state belongs to a match and must support reset/copy/save/restore at any index.
+- Each batch runs single-threaded; independent batches may run concurrently.
+  GameData is immutable after preload. Synchronize its process-wide lifetime,
+  never gameplay; mutable state belongs to a match and supports reset/copy/save/restore.
 - No heap allocation after initialization on gameplay, observation, reset, copy
   or save/restore paths. Size fighter reserves by the number of that fighter,
   including followers, with separate capacity for stage-owned entities.

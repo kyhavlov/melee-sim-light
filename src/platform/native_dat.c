@@ -2124,13 +2124,13 @@ void msl_native_archive_locate_extern(HSD_Archive* archive,
     }
 }
 
-int msl_native_effect_bank(HSD_Archive* archive, const char* symbol,
-                           int* count, HSD_PSCmdList*** commands)
+// psInitDataBankLoad's command bank: version 0 lists [0, count); versions
+// 0x40..0x43 list [first, first + count) and are indexed by the full id.
+// refs/melee/src/sysdolphin/baselib/particle.c::psInitDataBankLoad
+static int msl_translate_particle_bank(MslNativeArchive* context, uint32_t bank,
+                                       int* count, int* id_base,
+                                       HSD_PSCmdList*** commands)
 {
-    require_dat_initialization("native effect bank translation");
-    MslNativeArchive* context = archive_context(archive);
-    uint32_t table = raw_public_offset(archive, symbol);
-    uint32_t bank;
     uint32_t entries;
     uint32_t first_count;
     uint32_t total;
@@ -2138,25 +2138,7 @@ int msl_native_effect_bank(HSD_Archive* archive, const char* symbol,
     HSD_PSCmdList** result;
     uint32_t i;
 
-    if (table == UINT32_MAX) {
-        return -1;
-    }
-    if ((bank = raw_pointer(context, table)) == UINT32_MAX) {
-        // A model-only effect archive carries no particle banks: both
-        // leading table words are unrelocated NULLs and retail skips
-        // psInitDataBank entirely (EfDkData.dat is the supported-domain
-        // case). Publish an empty command bank so generator lookups
-        // consume nothing, exactly like retail's absent bank.
-        // refs/melee/src/melee/ef/efasync.c::efAsync_LoadSync
-        if (table + 8 <= context->data_size &&
-            read_be32(context->data + table) == 0 &&
-            read_be32(context->data + table + 4) == 0 &&
-            raw_pointer(context, table + 4) == UINT32_MAX)
-        {
-            *count = 0;
-            *commands = NULL;
-            return 0;
-        }
+    if (bank + 12 > context->data_size) {
         return -1;
     }
     version = read_be16(context->data + bank);
@@ -2176,19 +2158,76 @@ int msl_native_effect_bank(HSD_Archive* archive, const char* symbol,
     {
         return -1;
     }
-    result = native_alloc((size_t) total * sizeof(*result));
-    for (i = version == 0 ? 0 : first_count; i < total; ++i) {
+    *id_base = version == 0 ? 0 : (int) first_count;
+    result = native_alloc((size_t) (total - *id_base) * sizeof(*result));
+    for (i = (uint32_t) *id_base; i < total; ++i) {
         uint32_t relative = read_be32(
             context->data + entries +
             (version == 0 ? i : i - first_count) * 4);
         if (relative != 0) {
-            result[i] = translate_target_count(
+            result[i - *id_base] = translate_target_count(
                 context, bank + relative, msl_dat_root_HSD_PSCmdList, 1);
         }
     }
     *count = (int) total;
     *commands = result;
     return 0;
+}
+
+int msl_native_effect_bank(HSD_Archive* archive, const char* symbol,
+                           int* count, int* id_base,
+                           HSD_PSCmdList*** commands)
+{
+    require_dat_initialization("native effect bank translation");
+    MslNativeArchive* context = archive_context(archive);
+    uint32_t table = raw_public_offset(archive, symbol);
+    uint32_t bank;
+
+    if (table == UINT32_MAX) {
+        return -1;
+    }
+    if ((bank = raw_pointer(context, table)) == UINT32_MAX) {
+        // A model-only effect archive carries no particle banks: both
+        // leading table words are unrelocated NULLs and retail skips
+        // psInitDataBank entirely (EfDkData.dat is the supported-domain
+        // case). Publish an empty command bank so generator lookups
+        // consume nothing, exactly like retail's absent bank.
+        // refs/melee/src/melee/ef/efasync.c::efAsync_LoadSync
+        if (table + 8 <= context->data_size &&
+            read_be32(context->data + table) == 0 &&
+            read_be32(context->data + table + 4) == 0 &&
+            raw_pointer(context, table + 4) == UINT32_MAX)
+        {
+            *count = 0;
+            *id_base = 0;
+            *commands = NULL;
+            return 0;
+        }
+        return -1;
+    }
+    return msl_translate_particle_bank(context, bank, count, id_base, commands);
+}
+
+int msl_native_particle_bank(HSD_Archive* archive, const char* symbol,
+                             int* count, int* id_base,
+                             HSD_PSCmdList*** commands)
+{
+    // A stage archive publishes its command bank itself as map_ptcl (not a
+    // table of bank pointers): Ground_801C0800 hands it straight to
+    // psInitDataBankLoad(0x1E, map_ptcl, map_texg).
+    // refs/melee/src/melee/gr/ground.c::Ground_801C0800
+    uint32_t bank;
+
+    require_dat_initialization("native particle bank translation");
+    bank = raw_public_offset(archive, symbol);
+    if (bank == UINT32_MAX) {
+        *count = 0;
+        *id_base = 0;
+        *commands = NULL;
+        return 0;
+    }
+    return msl_translate_particle_bank(archive_context(archive), bank, count,
+                                       id_base, commands);
 }
 
 EF_EffectDesc* msl_native_effect_models(HSD_Archive* archive,

@@ -64,6 +64,7 @@ struct ItemStateDesc;
 #ifdef MSL_CORE_NATIVE
 u32 msl_item_reserve_runtime_pools(bool common_items, u32 stage_item_count,
                                    u32 link_count);
+HSD_ObjAllocData* msl_item_runtime_pool(void);
 #endif
 #ifndef MSL_CORE_HOSTED
 /* 4A0C64 */ extern HSD_ObjAllocUnk Item_804A0C64;

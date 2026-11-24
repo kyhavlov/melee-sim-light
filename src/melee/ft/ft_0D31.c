@@ -845,11 +845,11 @@ void ftCo_DeadUpFall_Anim(Fighter_GObj* gobj)
             extern bool msl_core_freezes_dead_up_fall_physics(void);
             if (msl_core_freezes_dead_up_fall_physics()) {
                 // Slippi Online's InitHitVelocity.asm moves camera-KO
-                // velocity into the DeadUpFall overlay and zeros the retail
-                // physics vector so render-camera state cannot affect
-                // rollback gameplay.
-                M2C_FIELD(fp, float*, 0x2348) = *(f32*) (data + 12);
-                M2C_FIELD(fp, float*, 0x234C) = *(f32*) (data + 15);
+                // velocity into the DeadUpFall overlay (fp+2348/fp+234C,
+                // unk_deadup.x48/.x4C) and zeros the retail physics vector
+                // so render-camera state cannot affect rollback gameplay.
+                fp->mv.co.unk_deadup.x48 = *(f32*) (data + 12);
+                fp->mv.co.unk_deadup.x4C = *(f32*) (data + 15);
                 fp->self_vel.x = 0.0F;
                 fp->self_vel.y = 0.0F;
                 fp->self_vel.z = 0.0F;
@@ -905,7 +905,7 @@ void ftCo_DeadUpFall_Phys(Fighter_GObj* gobj)
         if (msl_core_freezes_dead_up_fall_physics()) {
             float gravity = *(float*) (ca + 0x34);
             float terminal_velocity = *(float*) (ca + 0x38);
-            float velocity_y = M2C_FIELD(fp, float*, 0x2348) - gravity;
+            float velocity_y = fp->mv.co.unk_deadup.x48 - gravity;
 
             // Direct C projection of Slippi Online's
             // FreezeDeadUpFallPhysics/UpdateFallVelocity.asm. The custom
@@ -914,10 +914,9 @@ void ftCo_DeadUpFall_Phys(Fighter_GObj* gobj)
             if (velocity_y <= -terminal_velocity) {
                 velocity_y = -terminal_velocity;
             }
-            M2C_FIELD(fp, float*, 0x2348) = velocity_y;
+            fp->mv.co.unk_deadup.x48 = velocity_y;
             fp->mv.co.unk_deadup.x5C.y += velocity_y;
-            fp->mv.co.unk_deadup.x5C.z +=
-                M2C_FIELD(fp, float*, 0x234C);
+            fp->mv.co.unk_deadup.x5C.z += fp->mv.co.unk_deadup.x4C;
         } else
 #endif
         {

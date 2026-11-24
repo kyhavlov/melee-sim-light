@@ -8,6 +8,7 @@ import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -23,7 +24,7 @@ from tools.validation.slpz import (
     resolve_replay_path,
     set_native_unorder_events,
 )
-from tools.validation.admission import require_admissible
+from tools.validation.admission import gecko_codes, require_admissible, slippi_patches
 from tools.validation.suite_io import ReplaySuite, display_path_under_repo, load_suite
 
 
@@ -66,6 +67,7 @@ class ReplayCase:
     ucf_shield_drop_084_enabled: bool = True
     played_on: str | None = None
     fnmsubs_profile: str | None = None
+    jit_arithmetic: str | None = None
 
 
 @dataclass(frozen=True)
@@ -124,56 +126,69 @@ class _NativeRunnerPool:
     def release(self, runner: _NativeRunner) -> None:
         self._available.put(runner)
 
-    def discard(self, runner: _NativeRunner) -> None:
+    def discard(self, runner: _NativeRunner) -> str:
         # A case that failed mid-session leaves the runner's streams at an
         # undefined position (a partially written job, unread output), so the
         # next job's header would be read as frame payload. Retire the process
         # and hand the pool a fresh one instead of poisoning later cases.
         with self._lock:
             self._runners.remove(runner)
-        for stream in (runner.process.stdin, runner.process.stdout, runner.process.stderr):
+        for stream in (runner.process.stdin, runner.process.stdout):
             if stream is not None and not stream.closed:
                 stream.close()
         runner.process.kill()
         runner.process.wait()
+        detail = ""
+        if runner.process.stderr is not None:
+            detail = runner.process.stderr.read().decode(errors="replace").strip()
+            runner.process.stderr.close()
         replacement = self._spawn()
         with self._lock:
             self._runners.append(replacement)
         self._available.put(replacement)
+        return detail
 
-    def close(self) -> None:
-        errors: list[str] = []
+    def close(self) -> list[str]:
+        """Return shutdown warnings without masking per-case validation errors."""
+        warnings: list[str] = []
         for runner in self._runners:
             if runner.process.stdin is not None and not runner.process.stdin.closed:
                 runner.process.stdin.close()
+            # EOF alone cannot stop a worker blocked writing job output;
+            # dropping the read end turns its next write into EPIPE.
+            if runner.process.stdout is not None and not runner.process.stdout.closed:
+                runner.process.stdout.close()
         for runner in self._runners:
+            killed = False
             try:
-                returncode = runner.process.wait(timeout=2.0)
+                # A freshly spawned worker spends a few seconds loading game
+                # data before it can see the EOF; the grace must cover that.
+                returncode = runner.process.wait(timeout=10.0)
             except subprocess.TimeoutExpired:
                 runner.process.kill()
                 returncode = runner.process.wait()
+                killed = True
             stderr = b""
             if runner.process.stderr is not None:
                 stderr = runner.process.stderr.read()
                 runner.process.stderr.close()
-            if runner.process.stdout is not None:
-                runner.process.stdout.close()
-            if returncode != 0:
+            if killed:
+                warnings.append(
+                    "native validation worker did not exit within the "
+                    "shutdown grace period and was killed"
+                )
+            elif returncode != 0:
                 detail = stderr.decode(errors="replace").strip()
-                errors.append(detail or f"native validation worker exited {returncode}")
+                warnings.append(detail or f"native validation worker exited {returncode}")
         self._runners.clear()
-        if errors:
-            raise RuntimeError("; ".join(errors))
+        return warnings
 
     def __enter__(self) -> _NativeRunnerPool:
         return self
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
-        try:
-            self.close()
-        except RuntimeError:
-            if exc is None:
-                raise
+        for warning in self.close():
+            print(f"warning: {warning}", file=sys.stderr)
 
 
 @lru_cache(maxsize=1)
@@ -275,6 +290,7 @@ def build_validation(*, backend: str, jobs: int = 4) -> None:
             "-f",
             "Makefile",
             f"-j{max(1, jobs)}",
+            "MSL_REPLAY_ARITHMETIC=1",
             *targets,
         ],
         cwd=ROOT,
@@ -310,6 +326,7 @@ def validate_one(
     ucf_shield_drop_084_enabled: bool = True,
     played_on: str | None = None,
     fnmsubs_profile: str | None = None,
+    jit_arithmetic: str | None = None,
     runner: _NativeRunner | None = None,
     diagnostic: bool = False,
 ) -> dict[str, object]:
@@ -320,7 +337,9 @@ def validate_one(
     with replay_path_for_peppi(replay) as peppi_path:
         game = _read_slippi(str(peppi_path), False)
         if not diagnostic:
-            require_admissible(game, peppi_path, played_on=played_on, fnmsubs_profile=fnmsubs_profile)
+            require_admissible(game, peppi_path, played_on=played_on, fnmsubs_profile=fnmsubs_profile,
+                               jit_arithmetic=jit_arithmetic)
+        codes = gecko_codes(peppi_path.read_bytes())
         metadata = game.metadata
         if played_on is not None:
             metadata = dict(metadata)
@@ -346,10 +365,13 @@ def validate_one(
             ucf_shield_drop_084_enabled=ucf_shield_drop_084_enabled,
             runner_stdin=runner.stdin_fd if runner is not None else -1,
             runner_stdout=runner.stdout_fd if runner is not None else -1,
+            slippi_patches=slippi_patches(codes),
+            jit_arithmetic=1 if jit_arithmetic == "split-fma" else 0,
         )
     result["admitted"] = not diagnostic
     result["diagnostic"] = diagnostic or signed_zero_equal or frames != 0 or start_frame is not None
     result["fnmsubs_profile"] = fnmsubs_profile or "metadata"
+    result["jit_arithmetic"] = jit_arithmetic or "fma"
     result["end_to_end_seconds"] = time.perf_counter() - started
     return result
 
@@ -455,6 +477,7 @@ def load_suite_cases(
                 ),
                 played_on=entry.played_on,
                 fnmsubs_profile=entry.fnmsubs_profile,
+                jit_arithmetic=entry.jit_arithmetic,
             )
         )
     if not cases:
@@ -521,13 +544,16 @@ def _validate_case(
                 ucf_shield_drop_084_enabled=case.ucf_shield_drop_084_enabled,
                 played_on=case.played_on,
                 fnmsubs_profile=case.fnmsubs_profile,
+                jit_arithmetic=case.jit_arithmetic,
                 runner=runner,
                 diagnostic=diagnostic,
             )
-        except Exception:
+        except Exception as exc:
             if runner is not None and runner_pool is not None:
-                runner_pool.discard(runner)
+                detail = runner_pool.discard(runner)
                 runner = None
+                if detail:
+                    raise RuntimeError(f"{exc}: {detail}") from exc
             raise
         finally:
             if runner is not None and runner_pool is not None:
@@ -582,12 +608,17 @@ def run_cases(
                 outcomes = [future.result() for future in futures]
     finally:
         if pool is not None:
-            pool.close()
+            for warning in pool.close():
+                print(f"warning: {warning}", file=sys.stderr)
     return outcomes, time.perf_counter() - started
 
 
 def _case_scope(case: ReplayCase) -> str:
-    profile = f"fnmsubs={case.fnmsubs_profile}" if case.fnmsubs_profile else ""
+    profile = " ".join(
+        part for part in (
+            f"fnmsubs={case.fnmsubs_profile}" if case.fnmsubs_profile else "",
+            f"jit={case.jit_arithmetic}" if case.jit_arithmetic else "",
+        ) if part)
     if case.stage_id is None:
         return profile
     stage = STAGE_NAMES.get(case.stage_id, f"stage {case.stage_id}")
@@ -748,6 +779,10 @@ def main() -> int:
         "--fnmsubs-profile", choices=("retail", "dolphin-legacy"),
         help="Explicit recording arithmetic profile; omission uses replay metadata defaults.",
     )
+    parser.add_argument(
+        "--jit-arithmetic", choices=("fma", "split-fma"),
+        help="Recording double-FMA semantics; omission preserves fused arithmetic.",
+    )
     parser.add_argument("--backend", choices=("ppc", "native", "both"), default="native")
     parser.add_argument(
         "--timing", action="store_true", help="Print per-replay runner timing."
@@ -824,6 +859,8 @@ def main() -> int:
             cases = _manual_cases(args.replay)
         if args.fnmsubs_profile is not None:
             cases = [replace(case, fnmsubs_profile=args.fnmsubs_profile) for case in cases]
+        if args.jit_arithmetic is not None:
+            cases = [replace(case, jit_arithmetic=args.jit_arithmetic) for case in cases]
         if args.write_output_locks and suite is not None and suite.name == "melee_core_aggregate":
             selected = {entry.replay for entry in suite.replays}
             output_locks = {key: lock for key, lock in output_locks.items() if key in selected}

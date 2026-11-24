@@ -9,6 +9,7 @@
 #include <baselib/psstructs.h>
 
 #include "ef/forward.h"
+#include "gr/forward.h"
 
 enum {
     // Banks index refs/melee/src/melee/ef/efasync.c::efAsync_DatEntries;
@@ -41,13 +42,16 @@ typedef struct MslCoreEffectGeneratorBank {
     EF_EffectDesc* models;
     s32 count;
     // Version-0x4x command banks index entries by the full generator id: the
-    // first header word is the bank's id base and only [id_base, count) exist
-    // in the archive. Version-0 banks have id_base 0.
+    // occupied range [id_base, count) is stored at commands[id - id_base].
+    // Version-0 banks have id_base 0.
     s32 id_base;
 } MslCoreEffectGeneratorBank;
 
 typedef struct MslCoreEffectData {
     MslCoreEffectGeneratorBank banks[MSL_CORE_EFFECT_BANK_CAPACITY];
+#ifdef MSL_CORE_NATIVE
+    MslCoreEffectGeneratorBank stage_banks[LAST + 1];
+#endif
     MslCoreEffectModelStart
         common_model_start[MSL_CORE_EFFECT_COMMON_MODEL_CAPACITY];
     s8 recording_common_model;
@@ -59,9 +63,20 @@ typedef struct MslCoreEffectState {
 } MslCoreEffectState;
 
 void msl_effect_game_data_init(MslCoreEffectData* data);
+#ifdef MSL_CORE_NATIVE
+// Load immutable map_ptcl commands before GameData seals.
+int msl_effect_load_stage_bank(MslCoreEffectData* data,
+                               s32 internal_stage_id, HSD_Archive* archive);
+#endif
+// Installs the match-time joint-animation particle callback.
+void msl_effect_install_match_callbacks(void);
 void msl_effect_match_init(const MslCoreEffectData* data,
                            MslCoreEffectState* state);
 void msl_effect_projection_bind(const MslCoreEffectData* data,
                                 MslCoreEffectState* state);
+// Checked-out nodes; must be zero after a complete frame.
+u32 msl_effect_queue_used(void);
+// Print checked-out nodes' spawn kinds and effect ids.
+void msl_effect_queue_dump(void);
 
 #endif

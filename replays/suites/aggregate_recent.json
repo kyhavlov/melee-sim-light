@@ -543,6 +543,18 @@
         "1": "Fox",
         "2": "Zelda"
       }
+    },
+    {
+      "characters": {
+        "1": "Sheik",
+        "2": "Falco"
+      },
+      "ports": [
+        1,
+        2
+      ],
+      "replay": "replays/validation/sheik/PaleMajorEchidna.slpz",
+      "stage_id": 32
     }
   ]
 }

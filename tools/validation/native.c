@@ -158,6 +158,11 @@ typedef struct ReplayView {
   uint8_t online_fnmsubs_zero;
   uint8_t brawl_offscreen_damage;
   uint8_t freeze_dead_up_fall_physics;
+  // MSL_PATCH_*, from the capture's gecko list (admission.py).
+  uint8_t slippi_patches;
+  // The recording's double-FMA semantics (arithmetic
+  // provenance, like the fnmsubs profile).
+  uint8_t jit_arithmetic;
   uint8_t whispy_dead_fighter_fix;
   float damage_ratio;
 } ReplayView;
@@ -1108,9 +1113,13 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
   config->num_players = (uint8_t)replay->num_players;
   config->is_teams = replay->is_teams;
   config->friendly_fire = replay->friendly_fire;
-  config->online_fnmsubs_zero = replay->online_fnmsubs_zero;
+  config->arithmetic_flags =
+      (replay->online_fnmsubs_zero ? MSL_ARITHMETIC_LEGACY_FNMSUBS : 0) |
+      (replay->jit_arithmetic ? MSL_ARITHMETIC_SPLIT_FMA : 0);
   config->brawl_offscreen_damage = replay->brawl_offscreen_damage;
   config->freeze_dead_up_fall_physics = replay->freeze_dead_up_fall_physics;
+  config->slippi_patches =
+      replay->slippi_patches | (replay->is_teams ? MSL_PATCH_ALLOW_WOBBLING : 0);
   config->whispy_dead_fighter_fix = replay->whispy_dead_fighter_fix;
   config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
   config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
@@ -2427,6 +2436,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "runner_stdin",
       "runner_stdout",
       "fnmsubs_profile",
+      "slippi_patches",
+      "jit_arithmetic",
       NULL,
   };
   PyObject* frames_obj;
@@ -2450,6 +2461,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int runner_stdin = -1;
   int runner_stdout = -1;
   const char* fnmsubs_profile = NULL;
+  int slippi_patches = 0;
+  int jit_arithmetic = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2468,12 +2481,13 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiiz:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiizii:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
-          &runner_stdin, &runner_stdout, &fnmsubs_profile)) {
+          &runner_stdin, &runner_stdout, &fnmsubs_profile, &slippi_patches,
+          &jit_arithmetic)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2500,6 +2514,18 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
   }
+  if (slippi_patches < 0 ||
+      (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_ALLOW_WOBBLING |
+                          MSL_PATCH_RETAIL_SPAWNS))) {
+    PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
+    goto done;
+  }
+  replay.slippi_patches = (uint8_t)slippi_patches;
+  if (jit_arithmetic < 0 || jit_arithmetic > 1) {
+    PyErr_SetString(PyExc_ValueError, "jit_arithmetic must be 0 to 1");
+    goto done;
+  }
+  replay.jit_arithmetic = (uint8_t)jit_arithmetic;
 
   arrow_pair = PyObject_CallMethod(frames_obj, "__arrow_c_array__", NULL);
   if (arrow_pair == NULL) {
@@ -2609,6 +2635,8 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
       "ucf_shield_drop_extended_enabled",
       "ucf_shield_drop_084_enabled",
       "fnmsubs_profile",
+      "slippi_patches",
+      "jit_arithmetic",
       NULL,
   };
   PyObject* frames_obj;
@@ -2617,6 +2645,8 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* arrow_pair = NULL;
   const char* output_path;
   const char* fnmsubs_profile = NULL;
+  int slippi_patches = 0;
+  int jit_arithmetic = 0;
   int ucf_cardinals_1_0_enabled = 1;
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
@@ -2635,11 +2665,12 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppppz:write_benchmark_case", keywords,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppppzii:write_benchmark_case", keywords,
                                    &frames_obj, &start_obj, &metadata_obj, &output_path,
                                    &ucf_cardinals_1_0_enabled, &ucf_shield_sdi_enabled,
                                    &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
-                                   &ucf_shield_drop_084_enabled, &fnmsubs_profile)) {
+                                   &ucf_shield_drop_084_enabled, &fnmsubs_profile, &slippi_patches,
+                                   &jit_arithmetic)) {
     return NULL;
   }
   memset(&replay, 0, sizeof(replay));
@@ -2657,6 +2688,18 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
   }
+  if (slippi_patches < 0 ||
+      (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_ALLOW_WOBBLING |
+                          MSL_PATCH_RETAIL_SPAWNS))) {
+    PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
+    goto done;
+  }
+  replay.slippi_patches = (uint8_t)slippi_patches;
+  if (jit_arithmetic < 0 || jit_arithmetic > 1) {
+    PyErr_SetString(PyExc_ValueError, "jit_arithmetic must be 0 to 1");
+    goto done;
+  }
+  replay.jit_arithmetic = (uint8_t)jit_arithmetic;
 
   arrow_pair = PyObject_CallMethod(frames_obj, "__arrow_c_array__", NULL);
   if (arrow_pair == NULL) {

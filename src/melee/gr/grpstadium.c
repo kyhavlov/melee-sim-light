@@ -264,9 +264,8 @@ void fn_801D11E4(Ground_GObj* gobj)
 void grStadium_801D1290(Ground_GObj* gobj)
 {
 #ifdef MSL_CORE_HOSTED
-    // The jumbotron model/material setup is renderer-owned. Its scheduled
-    // callback retains the source RNG projection below.
-    (void) gobj;
+    // Screen transitions consume RNG; image and text objects stay absent.
+    grStadium_801D2278(gobj);
     return;
 #else
     HSD_MObj* mobj;
@@ -300,11 +299,7 @@ bool grStadium_801D1388(Ground_GObj* gobj)
 void grStadium_801D1390(Ground_GObj* gobj)
 {
     grStadium_801D1E20();
-#ifndef MSL_CORE_HOSTED
     grStadium_801D2344(gobj);
-#else
-    (void) gobj;
-#endif
 }
 
 void grStadium_801D13C4(Ground_GObj* gobj) {}
@@ -858,7 +853,9 @@ void grStadium_801D21E4(Ground_GObj* gobj, bool arg1)
 void grStadium_801D2278(Ground_GObj* gobj)
 {
     Ground* gp = GET_GROUND(gobj);
+#ifndef MSL_CORE_HOSTED
     ImageDescWrapper* wrapper;
+#endif
 
     gp->u.display.xE4 = 1;
     gp->u.display.xE6 = 1;
@@ -869,54 +866,74 @@ void grStadium_801D2278(Ground_GObj* gobj)
     gp->u.display.xEA = -1;
     gp->u.display.xEE = 99;
     gp->u.display.xF2 = 0;
+#ifndef MSL_CORE_HOSTED
     gp->u.display.xD4 = grStadium_801D2BEC();
     gp->u.display.xD8 = grStadium_801D2D78();
     gp->u.display.xDC = grStadium_801D2E24();
     wrapper = GET_WRAPPER(gp->u.display.xDC);
     wrapper->x1A = 200;
     wrapper->x1C = 160;
+#endif
     gp->u.display.xF4 = NULL;
     grStadium_801D2528(gobj, 0, 0);
 }
 
+#ifdef MSL_CORE_HOSTED
+__attribute__((always_inline)) inline
+#endif
 void grStadium_801D2344(Ground_GObj* g)
 {
     Ground_GObj* gobj = g;
     Ground* gp;
     s16 temp_r0;
+#ifndef MSL_CORE_HOSTED
     ImageDescWrapper* temp_r3_6;
     ImageDescWrapper* temp_r3_8;
+#endif
 
     gp = GET_GROUND(gobj);
     temp_r0 = gp->u.display.xE4;
     switch (temp_r0) {
     case 0:
+#ifndef MSL_CORE_HOSTED
         grStadium_801D4194(gobj);
-        break;
-    case 1:
-        grStadium_801D39A0(gobj);
-        if (gp->u.display.xE0-- < 0) {
-            grStadium_801D2A60(gobj);
-        }
-        break;
-    case 9:
-        grStadium_801D3A0C(gobj);
-        if (gp->u.display.xE0-- < 0) {
-            grStadium_801D2A60(gobj);
-        }
-        break;
-    case 14:
-        grStadium_801D3BBC(gobj);
-        if (gp->u.display.xE0-- < 0) {
-            grStadium_801D2A60(gobj);
-        }
+#endif
         break;
     case 10:
     case 11:
     case 12:
     case 13:
+#ifndef MSL_CORE_HOSTED
         grStadium_801D3F40(gobj, gp->u.display.xE4);
+#endif
         break;
+    case 1:
+#ifndef MSL_CORE_HOSTED
+        grStadium_801D39A0(gobj);
+        if (gp->u.display.xE0-- < 0) {
+            grStadium_801D2A60(gobj);
+        }
+        break;
+#endif
+    case 9:
+#ifndef MSL_CORE_HOSTED
+        grStadium_801D3A0C(gobj);
+        if (gp->u.display.xE0-- < 0) {
+            grStadium_801D2A60(gobj);
+        }
+        break;
+#endif
+    case 14:
+#ifndef MSL_CORE_HOSTED
+        grStadium_801D3BBC(gobj);
+        if (gp->u.display.xE0-- < 0) {
+            grStadium_801D2A60(gobj);
+        }
+        break;
+#endif
+#ifdef MSL_CORE_HOSTED
+    case 7:
+#endif
     case 2:
     case 3:
     case 4:
@@ -928,6 +945,7 @@ void grStadium_801D2344(Ground_GObj* g)
             grStadium_801D2A60(gobj);
         }
         break;
+#ifndef MSL_CORE_HOSTED
     case 7:
         if (gp->u.display.xE0-- < 0) {
             grStadium_801D2A60(gobj);
@@ -936,6 +954,7 @@ void grStadium_801D2344(Ground_GObj* g)
         temp_r3_6 = GET_WRAPPER(gp->u.display.xD8);
         temp_r3_6->flag = false;
         break;
+#endif
     case 8:
         if (gp->u.display.xE0-- < 0 ||
             Player_GetEntity(gp->u.display.xEE) == NULL ||
@@ -944,11 +963,15 @@ void grStadium_801D2344(Ground_GObj* g)
             grStadium_801D2A60(gobj);
             break;
         }
+#ifdef MSL_CORE_HOSTED
+        if (!grStadium_801D32D0(gobj))
+#else
         temp_r3_8 = GET_WRAPPER(gp->u.display.xDC);
         temp_r3_8->flag = 0;
         if (gp->u.display.xDC == NULL ||
             Player_GetEntity(gp->u.display.xEE) == NULL ||
             Player_8003219C(gp->u.display.xEE) || !grStadium_801D32D0(gobj))
+#endif
         {
             grStadium_801D2A60(gobj);
         }
@@ -988,8 +1011,10 @@ void grStadium_801D2528(Ground_GObj* gobj, int arg1, int arg2)
 {
     Ground* gp = GET_GROUND(gobj);
     int i;
+#ifndef MSL_CORE_HOSTED
     ImageDescWrapper* temp_r27;
     TextWrapper* temp_r27_1;
+#endif
     s16 n;
 
     PAD_STACK(0x8);
@@ -1020,7 +1045,9 @@ void grStadium_801D2528(Ground_GObj* gobj, int arg1, int arg2)
     gp->u.display.xE4 = arg1;
     switch (gp->u.display.xE4) {
     case 0:
+#ifndef MSL_CORE_HOSTED
         grStadium_801D4194(gobj);
+#endif
         gp->u.display.xE6 = 0x40;
         gp->u.display.xF8_0 = false;
         gp->u.display.xF8_1 = false;
@@ -1029,7 +1056,9 @@ void grStadium_801D2528(Ground_GObj* gobj, int arg1, int arg2)
         }
         break;
     case 1:
+#ifndef MSL_CORE_HOSTED
         grStadium_801D39A0(gobj);
+#endif
         gp->u.display.xE6 = 0x40;
         gp->u.display.xE0 = yaku->x20;
         gp->u.display.xF8_0 = false;
@@ -1039,7 +1068,9 @@ void grStadium_801D2528(Ground_GObj* gobj, int arg1, int arg2)
         }
         break;
     case 9:
+#ifndef MSL_CORE_HOSTED
         grStadium_801D3A0C(gobj);
+#endif
         gp->u.display.xE6 = 0x40;
         gp->u.display.xE0 = yaku->x24;
         gp->u.display.xF8_0 = false;
@@ -1049,7 +1080,9 @@ void grStadium_801D2528(Ground_GObj* gobj, int arg1, int arg2)
         }
         break;
     case 14:
+#ifndef MSL_CORE_HOSTED
         grStadium_801D3BBC(gobj);
+#endif
         gp->u.display.xE6 = 0x40;
         gp->u.display.xE0 = yaku->x2C;
         gp->u.display.xF8_0 = false;
@@ -1062,7 +1095,9 @@ void grStadium_801D2528(Ground_GObj* gobj, int arg1, int arg2)
     case 11:
     case 12:
     case 13:
+#ifndef MSL_CORE_HOSTED
         grStadium_801D3F40(gobj, gp->u.display.xE4);
+#endif
         gp->u.display.xE6 = 0x40;
         gp->u.display.xF8_0 = false;
         gp->u.display.xF8_1 = false;
@@ -1118,9 +1153,11 @@ void grStadium_801D2528(Ground_GObj* gobj, int arg1, int arg2)
         break;
     case 17:
         gp->u.display.xE6 = 0x40;
+#ifndef MSL_CORE_HOSTED
         temp_r27_1 = gp->u.display.xD4->user_data;
         HSD_SisLib_803A7664((void*) temp_r27_1->win_dynamic_p);
         HSD_SisLib_803A6368((void*) temp_r27_1->win_static_p, 4);
+#endif
         gp->u.display.xF8_0 = false;
         gp->u.display.xF8_1 = false;
         break;
@@ -1418,8 +1455,25 @@ HSD_TObj* grStadium_801D3138(Ground_GObj* gobj, HSD_ImageDesc* desc,
     return NULL;
 }
 
+#ifdef MSL_CORE_HOSTED
+__attribute__((always_inline)) inline
+#endif
 bool grStadium_801D32D0(Ground_GObj* gobj)
 {
+#ifdef MSL_CORE_HOSTED
+    Ground* gp = GET_GROUND(gobj);
+    HSD_GObj* player = Player_GetEntity(gp->u.display.xEE);
+    Fighter* fp;
+
+    if (player == NULL) {
+        return false;
+    }
+    fp = player->user_data;
+    // Slippi Common/PSCameraIndependentMonitor replaces the return value
+    // at 0x801D24FC with these camera-independent fighter-position bounds.
+    return !(fp->cur_pos.x < -120.0F || fp->cur_pos.x > 120.0F ||
+             fp->cur_pos.y > 80.0F || fp->cur_pos.y < -20.0F);
+#else
     HSD_CObj* cobj;
     Ground* gp;
     HSD_GObj* player_gobj;
@@ -1471,6 +1525,7 @@ bool grStadium_801D32D0(Ground_GObj* gobj)
         }
     }
     return false;
+#endif
 }
 
 static const GXColor grPs_804DAF3C = { 0xFF, 0xFF, 0xFF, 0xFF };

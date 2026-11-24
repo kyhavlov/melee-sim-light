@@ -16,6 +16,7 @@
 #include "gr/grdatfiles.h"
 #include "gr/grizumi.h"
 #include "gr/ground.h"
+#include "gr/grpstadium.h"
 #include "gr/types.h"
 #include "it/inlines.h"
 #include "it/it_26B1.h"
@@ -179,7 +180,8 @@ static const MslCoreStageSpec stage_specs[] = {
       OLDPUPUPU,
       "/GrOp.dat",
       &grOp_803E6748,
-      (1U << 2) | (1U << 7),
+      // Map 1's particle events consume gameplay RNG before CPU decisions.
+      (1U << 1) | (1U << 2) | (1U << 7),
       0,
       { { -46.6F, 37.2F, 0.0F }, { 47.4F, 37.3F, 0.0F },
         { 0.0F, 7.0F, 0.0F }, { 0.0F, 58.5F, 0.0F } },
@@ -450,10 +452,6 @@ static void init_hsd(void)
 {
     HSD_GObjLibInitDataType init;
 
-    // The DOL runs MSL's constructor table before scene bootstrap. The ELF
-    // host build has no MetroWerks .ctors section, so initialize trigf's
-    // split 4/pi constants explicitly before any gameplay math.
-    __sinit_trigf_c();
     HSD_AObjInitAllocData();
     HSD_FObjInitAllocData();
     HSD_IDInitAllocData();
@@ -659,6 +657,18 @@ static int validate_config(MslCoreMatchConfig* config)
 {
     int i;
 
+    if (config->arithmetic_flags &
+        ~(MSL_ARITHMETIC_LEGACY_FNMSUBS | MSL_ARITHMETIC_SPLIT_FMA)) {
+        fprintf(stderr, "unsupported replay arithmetic mode\n");
+        return -1;
+    }
+#if !MSL_REPLAY_ARITHMETIC
+    if (config->arithmetic_flags & MSL_ARITHMETIC_SPLIT_FMA) {
+        fprintf(stderr, "split-FMA replay requires MSL_REPLAY_ARITHMETIC=1\n");
+        return -1;
+    }
+#endif
+
     if (stage_spec(config->stage_id) == NULL) {
         fprintf(stderr,
                 "current core supports the six legal stage ids "
@@ -847,6 +857,11 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     init_hsd();
     msl_effect_game_data_init(&game_data->effects);
 #ifdef MSL_CORE_NATIVE
+    // These source loaders publish immutable GameData, not Match state.
+    // Run them once before constructing the preload matches.
+    Fighter_LoadCommonData();
+    Player_80036DD8();
+    Item_80266FA8();
     if (preload_supported_game_data(game_data) != 0) {
         return -1;
     }
@@ -863,6 +878,7 @@ int msl_core_game_data_init(MslCoreGameData* game_data, const char* data_root)
     msl_native_dat_finish_initialization();
     msl_memory_finish_initialization();
 #endif
+    msl_effect_install_match_callbacks();
     return 0;
 }
 
@@ -1037,8 +1053,8 @@ static int match_construct(MslCoreMatch* match,
     match->random.value = 1;
     match->random.active = &match->random.value;
     match->game_data = game_data;
-    msl_core_bind_match(match);
     match->config = *config;
+    msl_core_bind_match(match);
     if (validate_config(&match->config) != 0) {
         return -1;
     }
@@ -1128,7 +1144,8 @@ static int match_construct(MslCoreMatch* match,
     msl_core_match_rules_init(&match->rules, match->config.is_teams,
                               match->config.friendly_fire,
                               match->config.match_damage_ratio,
-                              match->config.online_fnmsubs_zero,
+                              (match->config.arithmetic_flags &
+                               MSL_ARITHMETIC_LEGACY_FNMSUBS) != 0,
                               match->config.brawl_offscreen_damage,
                               match->config.freeze_dead_up_fall_physics,
                               match->config.ucf_cardinals_1_0_enabled,
@@ -1139,7 +1156,6 @@ static int match_construct(MslCoreMatch* match,
     msl_camera_state_init(&match->camera);
     msl_slippi_state_init(&match->slippi, match->config.stage_event_streams);
 
-    msl_host_set_data_root(game_data->root);
     msl_effect_match_init(&game_data->effects, &match->effects);
     // Standard versus creates the source camera owner before stage/fighters.
     // The HSD CObj/draw link remains headless; the transform process and
@@ -1222,17 +1238,25 @@ static int match_construct(MslCoreMatch* match,
     spec->source->OnLoad();
     configure_headless_ground_schedule(match, spec);
     // refs/melee/src/melee/gm/gm_16AE.c::fn_8016DCC0 and fn_8016E730.
-    // Keep the source owners intact: Player_InitAllPlayers also initializes
-    // each slot's statistics state, and Player_80036DD8 loads the common
-    // player table consumed by the scheduled statistics pass.
+    // Player_InitAllPlayers initializes each slot's statistics state.
     Player_InitAllPlayers();
+#ifndef MSL_CORE_NATIVE
     Player_80036DD8();
+#endif
     for (i = 0; i < match->config.num_players; ++i) {
         int slot = match->source_slots[i];
         int spawn_order = neutral_spawn_order(match, i);
         const Vec3* spawn = match->config.is_teams
                                 ? &spec->teams_spawn[spawn_order]
                                 : &spec->singles_spawn[spawn_order];
+        Vec3 retail_spawn;
+        // Without Slippi's NeutralSpawn each fighter enters at the stage's
+        // spawn point for its own port (gmvs.c::getSpawnPoint, stage.c::Stage_80224E64).
+        if ((match->config.slippi_patches & MSL_PATCH_RETAIL_SPAWNS) &&
+            Ground_801C2D24(slot, &retail_spawn))
+        {
+            spawn = &retail_spawn;
+        }
         uint8_t encoded = match->config.players[i].facing_and_port;
 #ifdef MSL_CORE_NATIVE
         if (match->config.players[i].char_id == MSL_CORE_CHAR_SAMUS) {
@@ -1302,11 +1326,9 @@ static int match_construct(MslCoreMatch* match,
         Player_80032768(slot, (Vec3*) spawn);
     }
     resolve_initial_facing(match);
-    // The versus bootstrap initializes fighter/device/item allocation before
-    // Fighter_Create. Items are disabled in the current Fox/FD domain, so the
-    // exact Item_80266FA8(false) entry is equivalent to Item_80266F70's source
-    // gate without retaining the scene-owned item-switch aggregate.
+#ifndef MSL_CORE_NATIVE
     Item_80266FA8();
+#endif
     Item_80266FCC();
     Player_80036DA4();
     for (i = 0; i < match->config.num_players; ++i) {
@@ -1381,7 +1403,9 @@ static int match_construct(MslCoreMatch* match,
     }
 #endif
 
+#ifndef MSL_CORE_HOSTED
     Camera_80030730(Ground_801C20D0());
+#endif
     Ground_EnableMatchCamera();
     Camera_8002F3AC();
     // Slippi installs the versus on-unpause override. fn_8016E730 invokes it
@@ -1716,6 +1740,19 @@ static int preload_supported_game_data(MslCoreGameData* game_data)
         if (preload_match_configuration(game_data, stage_specs[i].external_id,
                                         MSL_CORE_CHAR_FOX, MSL_CORE_CHAR_FOX) != 0)
         {
+            return -1;
+        }
+    }
+    // Stage particle creation consumes gameplay RNG; preload its commands.
+    for (i = 0; i < sizeof(stage_specs) / sizeof(stage_specs[0]); ++i) {
+        HSD_Archive* archive = lbArchive_LoadArchive(stage_specs[i].archive);
+        if (archive == NULL ||
+            msl_effect_load_stage_bank(&game_data->effects,
+                                       stage_specs[i].internal_id,
+                                       archive) != 0)
+        {
+            fprintf(stderr, "%s has an unreadable map_ptcl bank\n",
+                    stage_specs[i].archive);
             return -1;
         }
     }
@@ -2369,12 +2406,21 @@ int msl_core_match_step_prepare(MslCoreMatch* match,
     // dash flick. The renderer-owned overlay itself is absent headlessly.
     // refs/melee/src/melee/{gm/gm_16AE.c,if/ifstatus.c,if/if_2F72.c}
     // SSBM.iso::IfAll.dat::ScInfCnt_scene_models[3]
-    if (match->frame_id == -40) {
-        StructPairWithStageID stage_pair = {
-            match->stage_data->internal_stage_id, match->config.stage_id
-        };
-        ftLib_800868A4();
-        Ground_801C0FB8(&stage_pair);
+    // The same VS callbacks select Stadium's Ready, GO and ordinary screens.
+    // refs/melee/src/melee/gm/gmvs.c::{fn_8016B7B4,fn_8016B7F8,fn_8016B784}
+    if (match->frame_id < 0) {
+        if (match->frame_id == -40) {
+            StructPairWithStageID stage_pair = {
+                match->stage_data->internal_stage_id, match->config.stage_id
+            };
+            ftLib_800868A4();
+            Ground_801C0FB8(&stage_pair);
+            grStadium_801D4040();
+        } else if (match->frame_id == -124) {
+            grStadium_801D4084();
+        } else if (match->frame_id == -1) {
+            grStadium_801D4150();
+        }
     }
 
     for (i = 0; i < match->config.num_players; ++i) {

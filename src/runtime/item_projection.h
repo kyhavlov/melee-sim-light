@@ -12,6 +12,7 @@ enum {
 };
 
 enum {
+    MSL_ITEM_KIND_BOMBHEI = 6,
     MSL_CORE_ITEM_KIND_MR_SATURN = 7,
     MSL_CORE_ITEM_KIND_FOX_LASER = 54,
     MSL_CORE_ITEM_KIND_FALCO_LASER = 55,
@@ -187,6 +188,17 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
     case MSL_ITEM_KIND_GAMEWATCH_CHEF:
         // x0 is the shared attribute pointer; x4 is the trajectory index.
         return MSL_CORE_ITEM_MISC1;
+    case MSL_ITEM_KIND_BOMBHEI:
+        // xDD8 (misc1) is initialized when the fuse lights. States 5/6
+        // enter through fuse setup; held/thrown choose 8/10 when lit.
+        // Other states can carry unwritten pool residue in this lane.
+        // refs/melee/src/melee/it/kinds/itbombhei.c::{it_8027F8E0,
+        //     fn_8027FCA8,itBombhei_Logic6_PickedUp,it_3F14_Logic6_Thrown}
+        if (state == 5 || state == 6 || state == 8 || state == 10) {
+            return MSL_CORE_ITEM_MISC_ALL;
+        }
+        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC2 |
+               MSL_CORE_ITEM_MISC3;
     case MSL_CORE_ITEM_KIND_MR_SATURN:
         // Every xDE4 write in itdosei.c is `= ip->pos`, a copy of the
         // directly compared item position lanes, and the writing Anim
@@ -194,8 +206,16 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // samples stale bytes or pool residue (the held/thrown states never
         // write it at all). The y/z samples carry no independent gameplay
         // signal in any state.
-        // refs/melee/src/melee/it/items/itdosei.c
-        return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
+        // xDD8 (misc1) is not written by the spawn constructor: only entering
+        // state 2 (it_80281C6C, = 0) or state 9 (it_80282DE4, = 1) sets it,
+        // and only those states read it. A Saturn that Peach pulls goes
+        // straight to held (4) and thrown (5), which sample pool residue.
+        // refs/melee/src/melee/it/items/itdosei.c::{itDosei_Logic7_Spawned,
+        //     itDosei_80281C6C,itDosei_80282DE4}
+        if (state == 2 || state == 9) {
+            return MSL_CORE_ITEM_MISC0 | MSL_CORE_ITEM_MISC1;
+        }
+        return MSL_CORE_ITEM_MISC0;
     case MSL_CORE_ITEM_KIND_FOX_BLASTER:
     case MSL_CORE_ITEM_KIND_FALCO_BLASTER:
         // xDE4[1..2] are presentation effect-object pointers.
@@ -247,9 +267,11 @@ static inline uint8_t msl_core_item_gameplay_misc_mask(uint16_t kind,
         // refs/melee/src/melee/it/itCommonItems.h::itYoshiEggLay_ItemVars
         return MSL_CORE_ITEM_MISC0;
     case MSL_CORE_ITEM_KIND_SHEIK_CHAIN:
-        // The first samples are ItemLink pointers; x14/x18 are scalars.
-        // refs/melee/src/melee/it/itCharItems.h::itSeakChain_ItemVars
-        return MSL_CORE_ITEM_MISC2 | MSL_CORE_ITEM_MISC3;
+        // The first samples are ItemLink pointers. x14 is gameplay state;
+        // x18 only gates collision audio, even after its first assignment.
+        // refs/melee/src/melee/it/kinds/itseakchain.c::{it_802BC080,
+        //     it_802BBAEC,it_802BB938}
+        return MSL_CORE_ITEM_MISC2;
     case MSL_CORE_ITEM_KIND_PEACH_EXPLODE:
     case MSL_CORE_ITEM_KIND_PEACH_PARASOL:
     case MSL_CORE_ITEM_KIND_PEACH_TOAD:

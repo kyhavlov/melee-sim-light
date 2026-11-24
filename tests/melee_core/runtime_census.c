@@ -52,7 +52,7 @@ static void config_init(MslCoreMatchConfig* config, uint8_t stage, uint8_t chara
   config->num_players = player_count;
   config->is_teams = player_count > 2;
   config->stock_count = 4;
-  config->online_fnmsubs_zero = 1;
+  config->arithmetic_flags = MSL_ARITHMETIC_LEGACY_FNMSUBS;
   config->brawl_offscreen_damage = 1;
   config->freeze_dead_up_fall_physics = 1;
   config->whispy_dead_fighter_fix = 1;

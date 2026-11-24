@@ -5,6 +5,9 @@ and initialization-only scratch; the immutable game data is loaded once per proc
 per process) and shared by every batch. All runtime arrays are contiguous and have
 `msl_batch_size(batch)` rows.
 
+Different batches can run concurrently on separate threads, including creation and destruction.
+Use each batch from one thread at a time; synchronize both batches when copying between them.
+
 | call | purpose |
 | --- | --- |
 | `msl_game_data_acquire(data_root)` / `msl_game_data_release()` | load the process's game data ahead of any batch (e.g. before forking) and drop that hold |

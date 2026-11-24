@@ -56,6 +56,13 @@
 extern bool msl_core_freezes_dead_up_fall_physics(void);
 #endif
 
+// Match setup supplies this value from StageInfo; keep that existing owner.
+#ifdef MSL_CORE_HOSTED
+#define MSL_CAMERA_STAGE_FOV (stage_info.cam_info.cam_vertical_tilt)
+#else
+#define MSL_CAMERA_STAGE_FOV cm_803BCCA0.x40
+#endif
+
 /* 029AAC */ static void Camera_80029AAC(CameraBounds* bounds,
                                          CameraTransformState* transform,
                                          f32 speed);
@@ -1436,7 +1443,7 @@ void Camera_8002B3D4(void* arg0)
     Camera_8002B0E0();
 #endif
     Camera_8002958C(&bounds, &cm_80452C68.transform);
-    cm_80452C68.transform.target_fov = cm_803BCCA0.x40;
+    cm_80452C68.transform.target_fov = MSL_CAMERA_STAGE_FOV;
     total_dist = cm_80452C68.transform.target_fov - cm_80452C68.transform.fov;
     cm_80452C68.transform.fov += total_dist * cm_803BCCA0.x44;
     Camera_80029BC4(&bounds, &cm_80452C68.transform);
@@ -1461,7 +1468,7 @@ void Camera_8002B3D4(void* arg0)
 #endif
     {
         Camera_8002958C(&sp2C, &cm_80452C68.transform_copy);
-        cm_80452C68.transform_copy.target_fov = cm_803BCCA0.x40;
+        cm_80452C68.transform_copy.target_fov = MSL_CAMERA_STAGE_FOV;
         temp_f31 = cm_80452C68.transform_copy.target_fov -
                    cm_80452C68.transform_copy.fov;
         cm_80452C68.transform_copy.fov += temp_f31 * cm_803BCCA0.x44;
@@ -2535,7 +2542,7 @@ fallback_path: {
 
     globals = &cm_803BCCA0;
     smooth_ptr = &globals->x44;
-    fov_ptr = &globals->x40;
+    fov_ptr = &MSL_CAMERA_STAGE_FOV;
     cam->transform.target_fov = *fov_ptr;
     cam->transform.fov =
         (cam->transform.target_fov - cam->transform.fov) * *smooth_ptr +
@@ -2809,7 +2816,7 @@ fallback: {
 
     globals = &cm_803BCCA0;
     smooth_ptr = &globals->x44;
-    fov_ptr = &globals->x40;
+    fov_ptr = &MSL_CAMERA_STAGE_FOV;
     cam->transform.target_fov = *fov_ptr;
     cam->transform.fov +=
         (cam->transform.target_fov - cam->transform.fov) * *smooth_ptr;
@@ -3069,7 +3076,7 @@ fallback: {
     Camera_8002958C(&bounds, transform);
     globals = &cm_803BCCA0;
     smooth_ptr = &globals->x44;
-    cam->transform.target_fov = globals->x40;
+    cam->transform.target_fov = MSL_CAMERA_STAGE_FOV;
     cam->transform.fov =
         (cam->transform.target_fov - cam->transform.fov) * *smooth_ptr +
         cam->transform.fov;
@@ -3098,7 +3105,7 @@ check_done1:
 
     transform2 = &cam->transform_copy;
     Camera_8002958C(&bounds2, transform2);
-    cam->transform_copy.target_fov = globals->x40;
+    cam->transform_copy.target_fov = MSL_CAMERA_STAGE_FOV;
     cam->transform_copy.fov =
         (cam->transform_copy.target_fov - cam->transform_copy.fov) *
             *smooth_ptr +
@@ -4120,7 +4127,7 @@ void Camera_8002F9E4(s8 arg0, s8 arg1)
     cm_80452C68.mode = CAMERA_FREE;
     cm_80452C68.x304 = Camera_8002BA00(arg0 - 1, 1);
     cm_80452C68.x305 = arg1;
-    cm_80452C68.x32C = cm_803BCCA0.x40;
+    cm_80452C68.x32C = MSL_CAMERA_STAGE_FOV;
 
     cm_80452C68.x2D0.x_min = Stage_GetCamBoundsLeftOffset();
     cm_80452C68.x2D0.x_max = Stage_GetCamBoundsRightOffset();
@@ -4206,7 +4213,7 @@ void Camera_8002FC7C(s8 arg0, s8 arg1)
     cm_80452C68.mode = CAMERA_FREE;
     cm_80452C68.x304 = Camera_8002BA00(arg0 - 1, 1);
     cm_80452C68.x305 = arg1;
-    cm_80452C68.x32C = cm_803BCCA0.x40;
+    cm_80452C68.x32C = MSL_CAMERA_STAGE_FOV;
     cm_80452C68.x2D0.x_min = Stage_GetCamBoundsLeftOffset();
     cm_80452C68.x2D0.x_max = Stage_GetCamBoundsRightOffset();
     cm_80452C68.x2D0.y_max = Stage_GetCamBoundsTopOffset();
@@ -4575,7 +4582,7 @@ void Camera_80030688(void)
 
 void Camera_80030730(f32 arg8)
 {
-    cm_803BCCA0.x40 = arg8;
+    MSL_CAMERA_STAGE_FOV = arg8;
 }
 
 void Camera_SetBackgroundColor(u8 r, u8 g, u8 b)

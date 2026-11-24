@@ -431,7 +431,10 @@ u8 HSD_GObj_803912A8(HSD_GObjLibInitDataType* arg0, GObjFuncs* arg1)
         var_r3 += cur->size;
     }
     *pcur = arg1;
+    // Hosted bootstrap appends only the static, already terminated descriptor.
+#ifndef MSL_CORE_HOSTED
     (*pcur)->next = NULL;
+#endif
     return var_r3;
 }
 

@@ -36,8 +36,12 @@ jobs:
           cd "$(mktemp -d)"
           python -I -c 'from melee_sim import _native; _native.library()'
           python -I -m melee_sim.extract_data --help
-      - name: Check replay storage tooling without downloading replays
-        run: python -m pytest tests/test_slpz_replay_storage.py -q -k "not real_replay_payload"
+      - name: Check replay storage and fixture layout
+        run: >-
+          python -m pytest -q
+          tests/test_slpz_replay_storage.py
+          tests/test_vector_pool.py::VectorPoolTest::test_fixture_match_config_dtype
+          -k "not real_replay_payload"
 
   aggregate:
     # Only trusted main code receives the locally supplied game data.
@@ -125,7 +129,9 @@ jobs:
       - name: Build the native core and validator
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: make native validator python-library -j4 PY=python3
+        run: |
+          make native validator -j4 PY=python3 MSL_REPLAY_ARITHMETIC=1
+          make python-library -j4 PY=python3
 
       - name: Check source inventory
         run: make source-check
@@ -150,6 +156,9 @@ jobs:
             --output-locks replays/suites/melee_core_output_locks.json \
             | tee aggregate.log
           grep -E "^\[native\] summary" aggregate.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check independent threaded batches and immutable game data
+        run: make thread-smoke -j4 PY=python3
 
       - name: Run pytest
         env:

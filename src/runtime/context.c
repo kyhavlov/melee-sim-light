@@ -41,16 +41,22 @@ _Thread_local void* msl_core_context_fighter_state;
 _Thread_local int* msl_core_context_fighter_reference_counts;
 _Thread_local void* msl_core_context_fighter_costume_lists;
 _Thread_local void* msl_core_context_fighter_animation_data;
-_Thread_local void* msl_core_context_puff_hat_joints;
 _Thread_local void* msl_context_kirby_copy;
 _Thread_local void* msl_context_kirby_costume_hat_table;
 #ifdef MSL_CORE_NATIVE
 _Thread_local MslNativeDatContext* msl_core_context_native_dat;
 #endif
 
+#if MSL_REPLAY_ARITHMETIC
+_Thread_local int msl_jit_split_fma;
+#endif
+
 void msl_core_bind_game_data(MslCoreGameData* game_data)
 {
     msl_core_context_match = NULL;
+#if MSL_REPLAY_ARITHMETIC
+    msl_jit_split_fma = 0;
+#endif
     msl_core_context_game_data = game_data;
     msl_core_context_random = &game_data->bootstrap_random;
     msl_core_context_objalloc = &game_data->bootstrap_objalloc;
@@ -89,8 +95,6 @@ void msl_core_bind_game_data(MslCoreGameData* game_data)
         game_data->source.fighter.costume_lists;
     msl_core_context_fighter_animation_data =
         game_data->source.fighter.animation_data;
-    msl_core_context_puff_hat_joints =
-        game_data->source.fighter.puff_hat_joints;
     msl_context_kirby_copy = &game_data->source.fighter.kirby_copy;
     msl_context_kirby_costume_hat_table =
         game_data->source.fighter.kirby_costume_hat_table;
@@ -102,6 +106,10 @@ void msl_core_bind_game_data(MslCoreGameData* game_data)
 void msl_core_bind_match(MslCoreMatch* match)
 {
     msl_core_context_match = match;
+#if MSL_REPLAY_ARITHMETIC
+    msl_jit_split_fma =
+        (match->config.arithmetic_flags & MSL_ARITHMETIC_SPLIT_FMA) != 0;
+#endif
     msl_core_context_game_data = match->game_data;
     msl_core_context_random = &match->random;
     msl_core_context_objalloc = &match->objalloc;
@@ -149,8 +157,6 @@ void msl_core_bind_match(MslCoreMatch* match)
         (void*) match->game_data->source.fighter.costume_lists;
     msl_core_context_fighter_animation_data =
         (void*) match->game_data->source.fighter.animation_data;
-    msl_core_context_puff_hat_joints =
-        (void*) match->game_data->source.fighter.puff_hat_joints;
     msl_context_kirby_copy =
         (void*) &match->game_data->source.fighter.kirby_copy;
     msl_context_kirby_costume_hat_table =
@@ -376,11 +382,6 @@ UnkCostumeStruct* msl_core_fighter_costumes(FighterKind kind)
     default:
         return NULL;
     }
-}
-
-HSD_Joint** msl_core_puff_hat_joints(void)
-{
-    return msl_core_source_game_data()->fighter.puff_hat_joints;
 }
 
 HSD_Joint* msl_kirby_iso_joint_take(void)

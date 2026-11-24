@@ -11,6 +11,7 @@
 #include "ft/ftdevice.h"
 #include "ft/ftlib.h"
 #include "gr/granime.h"
+#include "gr/grdatfiles.h"
 #include "gr/grdisplay.h"
 #include "gr/grmaterial.h"
 #include "gr/ground.h"
@@ -20,7 +21,9 @@
 #include "lb/lbaudio_ax.h"
 #include "lb/lbspdisplay.h"
 
+#include <baselib/aobj.h>
 #include <baselib/debug.h>
+#include <baselib/fobj.h>
 #include <baselib/gobj.h>
 #include <baselib/gobjgxlink.h>
 #include <baselib/gobjproc.h>
@@ -215,6 +218,68 @@ void grOldPupupu_802109D0(Ground_GObj* arg) {}
 
 void grOldPupupu_802109D4(Ground_GObj* arg) {}
 
+#ifdef MSL_CORE_HOSTED
+// Object 1 has no collision or animation-end consumer. Load only its particle
+// tracks, in source joint/track order, without constructing visual animations.
+// grAnime_801C8138; HSD_JObjAddAnimAll; HSD_AObjLoadDesc; JObjUpdateFunc(0x28).
+static void msl_oldpupupu_load_particle_tracks(HSD_JObj* joint,
+                                              HSD_AnimJoint* anim, u32 flags)
+{
+    HSD_JObj* child;
+    HSD_AnimJoint* child_anim;
+    HSD_AObjRemove(joint->aobj);
+    joint->aobj = NULL;
+    if (anim != NULL && anim->aobjdesc != NULL) {
+        HSD_FObjDesc* track;
+        HSD_FObj** tail = NULL;
+        for (track = anim->aobjdesc->fobjdesc; track != NULL;
+             track = track->next)
+        {
+            if (track->type == 0x28) {
+                HSD_FObjDesc desc = *track;
+                if (joint->aobj == NULL) {
+                    HSD_AObjDesc clock = *anim->aobjdesc;
+                    clock.fobjdesc = NULL;
+                    clock.obj_id = 0;
+                    joint->aobj = HSD_AObjLoadDesc(&clock);
+                    joint->aobj->flags |= flags;
+                    tail = &joint->aobj->fobj;
+                }
+                desc.next = NULL;
+                *tail = HSD_FObjLoadDesc(&desc);
+                tail = &(*tail)->next;
+            }
+        }
+    }
+    if (!(joint->flags & JOBJ_INSTANCE)) {
+        child_anim = anim != NULL ? anim->child : NULL;
+        for (child = joint->child; child != NULL; child = child->next) {
+            msl_oldpupupu_load_particle_tracks(child, child_anim, flags);
+            child_anim = child_anim != NULL ? child_anim->next : NULL;
+        }
+    }
+}
+
+static void msl_oldpupupu_particle_animation(Ground_GObj* gobj, int map_id,
+                                             int animation_id)
+{
+    UnkArchiveStruct* archive = grDatFiles_801C6330(map_id);
+    HSD_JObj* joint = GET_JOBJ(gobj);
+    HSD_AnimJoint** animations = archive->unk4->unk8[map_id].unk4;
+    u8* flags = (u8*) archive->unk4->unk8[map_id].x28;
+    if (joint->child != NULL) {
+        joint = joint->child;
+    }
+    msl_oldpupupu_load_particle_tracks(
+        joint, animations != NULL ? animations[animation_id] : NULL,
+        flags != NULL && flags[animation_id] != 0 ? AOBJ_LOOP : 0);
+    HSD_JObjReqAnimAll(joint, 0.0F);
+    HSD_JObjAnimAll(joint);
+}
+#else
+#define msl_oldpupupu_particle_animation grAnime_801C8138
+#endif
+
 void grOldPupupu_802109D8(Ground_GObj* gobj)
 {
     Ground* gp = GET_GROUND(gobj);
@@ -222,7 +287,7 @@ void grOldPupupu_802109D8(Ground_GObj* gobj)
     gp->gv.oldpupupu.xC8 = 0;
     gp->gv.oldpupupu.xCC = 0;
     gp->gv.oldpupupu.xD0 = 1;
-    grAnime_801C8138(gobj, gp->map_id, 0);
+    msl_oldpupupu_particle_animation(gobj, gp->map_id, 0);
 }
 
 bool grOldPupupu_80210A1C(Ground_GObj* gobj)
@@ -236,24 +301,19 @@ void grOldPupupu_80210A24(Ground_GObj* gobj)
 
     if ((int) grOp_804D6A9C == 0 && gp->gv.oldpupupu.xD0 == 1) {
         gp->gv.oldpupupu.xD0 = 0;
-#ifdef MSL_CORE_NATIVE
-        // Object 7 owns Whispy's gameplay state. Object 1 consumes this
-        // handshake only to select a background animation.
-        return;
-#endif
         switch (gp->gv.oldpupupu.xC8) {
         case 0:
-            grAnime_801C8138(
+            msl_oldpupupu_particle_animation(
                 gobj, gp->map_id,
                 grOp_804D48A0[gp->gv.oldpupupu.xCC][gp->gv.oldpupupu.xD4]);
             break;
         case 1:
-            grAnime_801C8138(
+            msl_oldpupupu_particle_animation(
                 gobj, gp->map_id,
                 grOp_804D48B0[gp->gv.oldpupupu.xCC][gp->gv.oldpupupu.xD4]);
             break;
         case 2:
-            grAnime_801C8138(
+            msl_oldpupupu_particle_animation(
                 gobj, gp->map_id,
                 grOp_804D48A8[gp->gv.oldpupupu.xCC][gp->gv.oldpupupu.xD4]);
             break;

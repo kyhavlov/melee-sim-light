@@ -16,6 +16,13 @@ make validation-suite VALIDATION_SUITE=replays/suites/gamewatch.json VALIDATION_
 make viewer-smoke
 ```
 
+Validation commands enable `MSL_REPLAY_ARITHMETIC=1` when building their runners.
+This includes the reviewed `split-fma` recording profile. Normal native, Python
+and Wasm builds compile that compatibility path out and keep fused arithmetic.
+For a manual runner build use `make native MSL_REPLAY_ARITHMETIC=1` before
+`--no-build`. Default benchmarks omit recordings requiring this mode; use
+`make benchmark-native MSL_REPLAY_ARITHMETIC=1` to include them.
+
 Only certified Linux/amd64 GNU builds may record results and output locks; see
 [ENVIRONMENT.md](ENVIRONMENT.md). `melee_core_output_locks.json` stores measured
 full-output identities. `--write-output-locks` rejects partial, diagnostic,
@@ -66,7 +73,7 @@ Ban captures with any of these properties, even when they currently compare exac
 Admission is independent of comparison results. New captures need recording
 provenance, these property checks and a complete strict run. Do not shorten a
 failing recording, omit inconvenient rows or add tolerated mismatch snapshots.
-The aggregate contains 512 exact recordings across 148 manifest-listed
+The aggregate contains 525 exact recordings across 148 manifest-listed
 fighter/stage pairs. This is pair coverage, not a claim
 of exhaustive move/branch coverage or every fighter on every stage.
 
