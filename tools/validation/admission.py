@@ -89,6 +89,7 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
 # wire.h MSL_PATCH_*.
 PATCH_FD_BACKGROUND_FROZEN = 1 << 0
 PATCH_ALLOW_WOBBLING = 1 << 1
+PATCH_RETAIL_SPAWNS = 1 << 2
 
 
 def slippi_patches(codes: dict[int, bytes]) -> int:
@@ -107,6 +108,8 @@ def slippi_patches(codes: dict[int, bytes]) -> int:
                 raise ValueError("unsupported-prevent-wobbling-patch")
     elif codes:
         patches |= PATCH_ALLOW_WOBBLING
+    if codes and 0xC216E510 not in codes:
+        patches |= PATCH_RETAIL_SPAWNS
     return patches
 
 
