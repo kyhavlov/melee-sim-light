@@ -55,35 +55,27 @@ static uint16_t fighter_hitbox_bone(const Fighter* fp, const HitCapsule* hit)
     return UINT16_MAX;
 }
 
-static float joint_uniform_scale(HSD_JObj* joint)
+static float joint_max_axis_scale(HSD_JObj* joint)
 {
     MtxPtr matrix;
-    float x;
-    float y;
-    float z;
+    float max_length_squared = 0.0F;
+    int column;
 
     if (joint == NULL) {
         return 0.0F;
     }
     matrix = HSD_JObjGetMtxPtr(joint);
-    // Column norms are the per-axis scales. Take the largest: Game & Watch's
-    // skeleton is flattened along one axis (about 0.03), so the first column
-    // alone reported a 0.06-unit shield for him.
-    {
-        float best = 0.0F;
-        int column;
-        for (column = 0; column < 3; ++column) {
-            float norm;
-            x = matrix[0][column];
-            y = matrix[1][column];
-            z = matrix[2][column];
-            norm = sqrtf(x * x + y * y + z * z);
-            if (norm > best) {
-                best = norm;
-            }
+    // Game & Watch's flattened axis does not represent his shield radius.
+    for (column = 0; column < 3; ++column) {
+        float x = matrix[0][column];
+        float y = matrix[1][column];
+        float z = matrix[2][column];
+        float length_squared = x * x + y * y + z * z;
+        if (length_squared > max_length_squared) {
+            max_length_squared = length_squared;
         }
-        return best;
     }
+    return sqrtf(max_length_squared);
 }
 
 static void write_hitboxes(const Fighter* fp, uint8_t* player_out)
@@ -143,7 +135,7 @@ static void write_shield(const Fighter* fp, uint8_t* player_out)
         put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_z), center.z);
     }
     put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_radius),
-            shield->size * joint_uniform_scale(shield->bone));
+            shield->size * joint_max_axis_scale(shield->bone));
 
     if (fp->motion_id < ftCo_MS_GuardOn ||
         fp->motion_id > ftCo_MS_GuardReflect)

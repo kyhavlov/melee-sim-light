@@ -180,6 +180,11 @@ try {
       Math.abs(tiltedShield.shieldTiltY ?? 0) > 0.01,
     "live viewer shield projection did not expose Guard tilt",
   );
+  assert(
+    Math.hypot(tiltedShield.shieldX - neutralShield.shieldX,
+      tiltedShield.shieldY - neutralShield.shieldY) > 0.1,
+    "live viewer shield center did not move with Guard tilt",
+  );
 
   // A flattened skeleton must still publish a full-sized, centered shield.
   reset({ p1Char: CHAR_GAMEWATCH });
