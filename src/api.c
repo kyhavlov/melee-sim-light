@@ -87,7 +87,8 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
       (source->num_players < 2 || source->num_players > 4) || !isfinite(source->damage_ratio) ||
       source->damage_ratio <= 0.0F || source->stocks == 0 ||
       source->viewpoint_player >= source->num_players || source->is_teams > 1 ||
-      source->friendly_fire > 1 || source->ucf_cardinals > 1) {
+      source->friendly_fire > 1 || source->ucf_cardinals > 1 ||
+      source->allow_wobbling > MSL_WOBBLING_PREVENT) {
     return -1;
   }
 
@@ -110,6 +111,12 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
   target->ucf_sdi_enabled = 1;
   target->ucf_shield_drop_extended_enabled = 1;
   target->ucf_shield_drop_084_enabled = 1;
+  const int allow_wobbling = source->allow_wobbling == MSL_WOBBLING_DEFAULT
+                                 ? source->num_players == 4
+                                 : source->allow_wobbling == MSL_WOBBLING_ALLOW;
+  if (allow_wobbling) {
+    target->slippi_patches = MSL_PATCH_ALLOW_WOBBLING;
+  }
 
   for (player = 0; player < source->num_players; ++player) {
     const MslPlayerConfig* src = &source->players[player];

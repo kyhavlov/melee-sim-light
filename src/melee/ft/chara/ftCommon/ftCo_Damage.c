@@ -63,9 +63,7 @@
 #include <MetroTRK/intrinsics.h>
 #include <MSL/trigf.h>
 
-#ifdef MSL_CORE_HOSTED
 #include "runtime/match.h"
-#endif
 
 int ftCo_803C5520[2][12] = {
     { 81, 78, 75, 82, 79, 76, 83, 80, 77, 89, 88, 87 },
@@ -827,15 +825,23 @@ static bool inlineB1(Fighter* fp)
     return false;
 }
 
-static inline void inlineB2(Fighter_GObj* gobj)
+static inline void inlineB2(Fighter_GObj* gobj, bool check_wobble)
 {
     Fighter* fp = gobj->user_data;
     ftCo_800C8D00(gobj);
-    if (fp->motion_id == 0xe0 || fp->motion_id == 0xe1) {
-        ftCo_800DC284(gobj);
-    }
-    if (fp->motion_id == 0xe3 || fp->motion_id == 0xe4) {
-        ftCo_800DC3A4(gobj);
+    // Slippi patches only the 0x8008F090 call site. A broken grab skips
+    // CaptureDamage entry but still runs the common damage cleanup.
+    if (!(check_wobble && msl_wobble_check(gobj))) {
+        if (fp->motion_id == ftCo_MS_CaptureWaitHi ||
+            fp->motion_id == ftCo_MS_CaptureDamageHi)
+        {
+            ftCo_800DC284(gobj);
+        }
+        if (fp->motion_id == ftCo_MS_CaptureWaitLw ||
+            fp->motion_id == ftCo_MS_CaptureDamageLw)
+        {
+            ftCo_800DC3A4(gobj);
+        }
     }
     if (ftCo_8008DA4C(
             gobj, fp->dmg.x1860_element,
@@ -859,7 +865,7 @@ void ftCo_8008EC90(Fighter_GObj* gobj)
     float facing_dir = 0;
     PAD_STACK(64);
     if (fp->x2220_b3 || fp->x2220_b4 || !fp->dmg.kb_applied) {
-        inlineB2(gobj);
+        inlineB2(gobj, false);
         goto ret_A8C;
     } else if (fp->dmg.x1860_element == 10U) {
         if (ftCo_800C3538(gobj)) {
@@ -876,7 +882,7 @@ void ftCo_8008EC90(Fighter_GObj* gobj)
                 if (!ret0 && inlineB1(fp)) {
                     if (other_fp->dmg.kb_applied) {
                         if (ftCo_8008E984(other_fp)) {
-                            inlineB2(gobj);
+                            inlineB2(gobj, false);
                             fp->dmg.x183C_applied =
                                 other_fp->dmg.x183C_applied;
                             fp->x1960_vibrateMult =
@@ -911,7 +917,7 @@ void ftCo_8008EC90(Fighter_GObj* gobj)
                     // pummel hitlag is therefore discarded, not accumulated
                     // (53362 @1383: retail Ness x668 0x100 -> 0).
                     fp->input.x668 = fp->input.x66C = 0;
-                    inlineB2(gobj);
+                    inlineB2(gobj, true);
                     goto ret_A8C;
                 }
                 {

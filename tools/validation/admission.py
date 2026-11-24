@@ -26,6 +26,14 @@ OFFSCREEN_BODIES = {
 }
 
 
+# External/PreventWobbling: four-hit singles limit and CaptureWait resets.
+# Hash instruction bodies only; the Gecko return branch is relocated.
+PREVENT_WOBBLING_BODIES = {
+    0xC208F090: (496, "d5382be0df327bcfc7e379903064a02fd12a9b42c0d6c94917c3f1ef4df080c5"),
+    0xC20DB880: (32, "db2d14ce9fed80a7a34ac9fb911097d3e6b5a624fb2c58df662accea793da60f"),
+    0xC20DBBD4: (32, "db2d14ce9fed80a7a34ac9fb911097d3e6b5a624fb2c58df662accea793da60f"),
+}
+
 @lru_cache(maxsize=1)
 def evidence() -> dict:
     return json.loads(EVIDENCE.read_text())
@@ -80,6 +88,7 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
 
 # wire.h MSL_PATCH_*.
 PATCH_FD_BACKGROUND_FROZEN = 1 << 0
+PATCH_ALLOW_WOBBLING = 1 << 1
 
 
 def slippi_patches(codes: dict[int, bytes]) -> int:
@@ -87,6 +96,17 @@ def slippi_patches(codes: dict[int, bytes]) -> int:
     patches = 0
     if codes.get(0x0421AAE4, b"")[4:8] == bytes.fromhex("60000000"):
         patches |= PATCH_FD_BACKGROUND_FROZEN
+    if 0xC20DA9DC in codes:  # Earlier three-hit version.
+        raise ValueError("unsupported-prevent-wobbling-patch")
+    if any(address in codes for address in PREVENT_WOBBLING_BODIES):
+        for address, (size, digest) in PREVENT_WOBBLING_BODIES.items():
+            patch = codes.get(address, b"")
+            if (len(patch) != size or
+                    hashlib.sha256(patch[8:-4]).hexdigest() != digest or
+                    int.from_bytes(patch[-4:], "big") & 0xFC000003 != 0x48000000):
+                raise ValueError("unsupported-prevent-wobbling-patch")
+    elif codes:
+        patches |= PATCH_ALLOW_WOBBLING
     return patches
 
 
@@ -100,6 +120,10 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
     if record is not None:
         issues.extend(record["reasons"])
     codes = gecko_codes(raw)
+    try:
+        slippi_patches(codes)
+    except ValueError as exc:
+        issues.append(str(exc))
     offscreen = codes.get(0xC206A880)
     if offscreen is None:
         issues.append("vanilla-magnifier")

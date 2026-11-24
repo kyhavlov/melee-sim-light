@@ -2382,28 +2382,11 @@ float ftColl_80079EA8(Fighter* fp, HitCapsule* hit, u32 unk_count)
 void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
                      int arg4)
 {
-    // Both Fighter damage-result overlays begin on a PPC 4-byte boundary.
-    // Keep their explicit source layout when native pointers widen rather
-    // than adding pointer padding relative to an assumed 8-byte-aligned base.
-    // refs/melee/src/melee/ft/{ftcoll.c,types.h}
-    struct __attribute__((packed, aligned(4))) DmgResult {
-        /* 0x00 */ float dir;
-        /* 0x04 */ int angle;
-        /* 0x08 */ int hurt_height;
-        /* 0x0C */ float kb;
-        /* 0x10 */ Vec3 pos;
-        /* 0x1C */ u32 element;
-        /* 0x20 */ int sfx_severity;
-        /* 0x24 */ HSD_GObj* source;
-        /* 0x28 */ float damage;
-    };
-
     Fighter* fp;
     ftCo_DatAttrs* co;
     DmgLogEntry* entries;
     DmgLogEntry* entry;
     DmgLogEntry* best_entry;
-    struct DmgResult* out;
     ftCommonData* ftd;
     HitCapsule* hit;
     HitCapsule stack_hit;
@@ -2660,7 +2643,6 @@ void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
         }
     }
 
-    out = (struct DmgResult*) dmg_ptr;
     best_entry = &entries[best_idx];
 
     switch (best_entry->x0) {
@@ -2761,15 +2743,29 @@ void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
         angle = (float) angle_int;
     }
 
-    out->dir = dir;
-    out->angle = (int) angle;
-    out->hurt_height = (int) best_entry->hurt1->height;
-    out->kb = best_kb;
-    out->pos = best_entry->pos;
-    out->element = element;
-    out->source = best_entry->gobj;
-    out->damage = best_entry->x20;
-    out->sfx_severity = sfx_severity;
+    // Native pointer alignment differs between these two result regions.
+    // Publish through Fighter's fields, not a packed PPC-relative overlay.
+    if (dmg_ptr == &fp->dmg.facing_dir_1) {
+        fp->dmg.facing_dir_1 = dir;
+        fp->dmg.x1848_kb_angle = (int) angle;
+        fp->dmg.x184c_damaged_hurtbox = (int) best_entry->hurt1->height;
+        fp->dmg.kb_applied = best_kb;
+        fp->dmg.x1854_collpos = best_entry->pos;
+        fp->dmg.x1860_element = element;
+        fp->dmg.x1864 = sfx_severity;
+        fp->dmg.x1868_source = best_entry->gobj;
+        memcpy(&fp->dmg.x186c, &best_entry->x20, sizeof(float));
+    } else {
+        fp->dmg.x1870 = dir;
+        fp->dmg.x1874 = (int) angle;
+        fp->dmg.x1878 = (int) best_entry->hurt1->height;
+        fp->dmg.x187c = best_kb;
+        fp->dmg.x1880 = best_entry->pos;
+        fp->dmg.x188c = element;
+        fp->dmg.x1890 = sfx_severity;
+        fp->dmg.x1894 = best_entry->gobj;
+        fp->dmg.x1898 = best_entry->x20;
+    }
 
     switch (best_entry->x0) {
     case 1: {
@@ -2814,7 +2810,8 @@ void ftColl_8007A06C(Fighter_GObj* gobj, void* dmg_ptr, void* log, size_t idx,
     }
 
 end:
-    if (out->element == 2) {
+    if ((dmg_ptr == &fp->dmg.facing_dir_1 ? fp->dmg.x1860_element
+                                         : fp->dmg.x188c) == 2) {
         fp->x1960_vibrateMult = p_ftCommonData->x1A4;
     }
 }

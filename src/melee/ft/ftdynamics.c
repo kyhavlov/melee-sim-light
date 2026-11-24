@@ -198,6 +198,9 @@ void msl_fighter_refresh_dynamics_matrices(Fighter* fp)
     }
 }
 
+#if defined(MSL_NATIVE_INLINE_FMADDS) && defined(__GNUC__) && !defined(__clang__)
+__attribute__((optimize("O2")))
+#endif
 void ftCo_HeadlessPublishDynamicHurtCapsules(Fighter* fp)
 {
     u32 hurt_index;
