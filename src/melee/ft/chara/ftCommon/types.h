@@ -473,7 +473,14 @@ union ftCommon_MotionVars {
         /* fp+2348 */ int x8;
         /* fp+234C */ u8 xC;
     } capturewait;
+    struct {
+        u8 pad[0x44];
+        u8 count;
+        u16 last_move;
+    } wobbling;
 };
+STATIC_ASSERT(offsetof(union ftCommon_MotionVars, wobbling.count) == 0x44);
+STATIC_ASSERT(offsetof(union ftCommon_MotionVars, wobbling.last_move) == 0x46);
 STATIC_ASSERT(sizeof(((union ftCommon_MotionVars*) 0)->itemthrow) == 0x24);
 STATIC_ASSERT(offsetof(union ftCommon_MotionVars, thrown.xC) ==
               offsetof(union ftCommon_MotionVars, capturewait.xC));

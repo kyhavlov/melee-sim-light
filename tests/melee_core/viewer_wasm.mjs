@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { GameCubeAdapterInput } from "../../tools/viewer/live/gamecube_adapter.js";
 import { MslWasmSim } from "../../tools/viewer/live/sim.js";
 import {
   BUTTONS,
@@ -135,6 +136,52 @@ try {
   }
   assert(hitShyGuy, "live viewer never damaged Yoshi's Shy Guy");
 
+  // A hard shield is opaque; a light shield is larger and fainter. Analog-only
+  // shielding exercises the source light-shield amount rather than the button.
+  const shieldFor = (pad, character = CHAR_FOX) => {
+    reset({ p1Char: character });
+    let state;
+    for (let index = 0; index < 12; index += 1) {
+      state = step(controllers(pad)).players[0].state;
+    }
+    assert(state.isShieldActive && (state.shieldRadius ?? 0) > 0);
+    return state;
+  };
+  const hardShield = shieldFor({ ...neutral(), l: 1, buttons: BUTTONS.L });
+  const lightPad = { ...neutral(), l: 0.3 };
+  const lightShield = shieldFor(lightPad);
+  assert.equal(hardShield.shieldAlpha, 1);
+  assert(lightShield.shieldAlpha > 0 && lightShield.shieldAlpha < 1,
+    `light shield alpha ${lightShield.shieldAlpha}`);
+  assert(lightShield.shieldRadius > hardShield.shieldRadius);
+  // The trigger's travel past the game's clamp is a full press, not more.
+  const fullAnalogShield = shieldFor({ ...neutral(), l: 1 });
+  assert.equal(fullAnalogShield.shieldAlpha, 1);
+  assert(Math.abs(fullAnalogShield.shieldRadius - hardShield.shieldRadius) < 0.01,
+    `full analog shield radius ${fullAnalogShield.shieldRadius}`);
+  assert.equal(shieldFor(lightPad, CHAR_YOSHI).shieldAlpha, 1);
+  assert.equal(reset({ p1Char: CHAR_FOX }).players[0].state.shieldAlpha, undefined);
+
+  // Some gamepads report analog trigger travel before reporting a press.
+  const buttons = Array.from({ length: 17 }, () => ({ pressed: false, value: 0 }));
+  const gamepad = { id: "Smoke gamepad", buttons, axes: [0, 0, 0, 0] };
+  Object.defineProperty(navigator, "getGamepads", { configurable: true, value: () => [gamepad] });
+  globalThis.window = new EventTarget();
+  try {
+    const input = new GameCubeAdapterInput();
+    assert(input.startGamepadPolling());
+    for (const index of [6, 7]) {
+      buttons[index].value = 0.3;
+      assert.equal(shieldFor(input.readController()).shieldAlpha, lightShield.shieldAlpha);
+      buttons[index].pressed = true;
+      assert.equal(shieldFor(input.readController()).shieldAlpha, 1);
+      buttons[index] = { pressed: false, value: 0 };
+    }
+  } finally {
+    delete navigator.getGamepads;
+    delete globalThis.window;
+  }
+
   reset({ p1Char: CHAR_FOX });
   let sawHitbox = false;
   for (let index = 0; index < 20; index += 1) {
@@ -157,8 +204,14 @@ try {
     }
   }
   assert(sawShield, "live viewer never observed a source shield bubble");
-  assert.equal(neutralShield.shieldX, undefined);
-  assert.equal(neutralShield.shieldY, undefined);
+  // The projection publishes the source collision center (shield bone world
+  // transform + descriptor offset): near the fighter, above the feet.
+  assert(Number.isFinite(neutralShield.shieldX) && Number.isFinite(neutralShield.shieldY),
+    "live viewer shield projection did not expose the shield center");
+  assert(Math.abs(neutralShield.shieldX - neutralShield.xPosition) < 10 &&
+    neutralShield.shieldY > neutralShield.yPosition &&
+    neutralShield.shieldY < neutralShield.yPosition + 30,
+    "live viewer shield center is not near the fighter");
   let tiltedShield = neutralShield;
   for (let index = 0; index < 20; index += 1) {
     const pads = controllers({
@@ -174,6 +227,22 @@ try {
       Math.abs(tiltedShield.shieldTiltY ?? 0) > 0.01,
     "live viewer shield projection did not expose Guard tilt",
   );
+  assert(
+    Math.hypot(tiltedShield.shieldX - neutralShield.shieldX,
+      tiltedShield.shieldY - neutralShield.shieldY) > 0.1,
+    "live viewer shield center did not move with Guard tilt",
+  );
+
+  // A flattened skeleton must still publish a full-sized, centered shield.
+  reset({ p1Char: CHAR_GAMEWATCH });
+  let gwShield;
+  for (let index = 0; index < 12; index += 1) {
+    gwShield = step(controllers({ ...neutral(), l: 1, buttons: BUTTONS.L })).players[0].state;
+  }
+  assert(gwShield.isShieldActive);
+  assert(gwShield.shieldRadius > 1 && gwShield.shieldRadius < 20,
+    `Game & Watch shield radius ${gwShield.shieldRadius}`);
+  assert(Number.isFinite(gwShield.shieldX) && Number.isFinite(gwShield.shieldY));
 
   reset({ p1Char: CHAR_PEACH, stageId: STAGE_FINAL_DESTINATION, seed: 31 });
   let sawItem = false;

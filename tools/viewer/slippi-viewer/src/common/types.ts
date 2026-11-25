@@ -273,6 +273,8 @@ export interface PlayerState {
   readonly shieldX?: number;
   readonly shieldY?: number;
   readonly shieldRadius?: number;
+  /** The game's own shield bubble alpha, 0..1 (1 = hard shield); sim viewer lane. */
+  readonly shieldAlpha?: number;
   readonly shieldTiltX?: number;
   readonly shieldTiltY?: number;
   readonly lastHittingAttackId: number;

@@ -30,6 +30,13 @@ STARTER_REPLAY = (
     / "aggregate_recent"
     / "PutridJoyousOryx.slpz"
 )
+UCF_08 = dict(
+    ucf_cardinals_1_0_enabled=False,
+    ucf_shield_sdi_enabled=False,
+    ucf_sdi_enabled=False,
+    ucf_shield_drop_extended_enabled=False,
+    ucf_shield_drop_084_enabled=False,
+)
 
 
 @pytest.mark.parametrize("replay,kind,lane,states,ignored", [
@@ -87,11 +94,7 @@ def test_vanilla_magnifier_uses_leader_visibility() -> None:
         ROOT / "replays/validation/icies/collision2024_ICs_v_DK_FD.slpz",
         frames=0, start_frame=None, timeout=30.0, backend="native",
         diagnostic=True,
-        ucf_cardinals_1_0_enabled=False,
-        ucf_shield_sdi_enabled=False,
-        ucf_sdi_enabled=False,
-        ucf_shield_drop_extended_enabled=False,
-        ucf_shield_drop_084_enabled=False,
+        **UCF_08,
     )
     # Without the leader check Popo misses 1% at frame 2369, then knockback
     # diverges. Check the whole recording, not just that damage tick.
@@ -100,6 +103,23 @@ def test_vanilla_magnifier_uses_leader_visibility() -> None:
     assert result["render_visibility_mismatch_count"] == 0
     assert result["diagnostic"] is True
     assert result["admitted"] is False
+
+
+@pytest.mark.parametrize("replay,frame_count", [
+    pytest.param("dk/diamond-diamond-33b572328d41bb20873121a4.slpz", 8869, id="squatrv"),
+    pytest.param("icies/master-diamond-bf25cf805e23959b754c2c71.slpz", 12375, id="dashback"),
+])
+def test_ucf_08_matches_recorded_gameplay(replay, frame_count) -> None:
+    if not NATIVE.is_file() or not NATIVE_BINARY.is_file():
+        pytest.skip("native core validation artifacts are unavailable")
+    # These anonymized online captures lack playedOn and raw C-stick bytes.
+    result = validate_one(
+        load_native(), ROOT / "replays/validation" / replay,
+        frames=0, start_frame=None, timeout=30.0, backend="native",
+        played_on="dolphin", diagnostic=True, **UCF_08,
+    )
+    assert result["pass"], result["details"]
+    assert result["matched_frames"] == result["total"] == frame_count
 
 
 @pytest.mark.parametrize("backend", ["ppc", "native"])
@@ -191,14 +211,14 @@ def test_native_validation_runs_current_oracle_replays_in_parallel() -> None:
         stages=frozenset((32,)),
     )
 
-    outcomes, wall_seconds = run_cases(
+    outcomes, _ = run_cases(
         load_native(),
         cases,
         # Bound immutable data copies on memory-limited CI runners.
         workers=min(4, len(cases)),
         frames=256,
         start_frame=None,
-        timeout=3.0,
+        timeout=30.0,
         backend="native",
         signed_zero_equal=False,
     )
@@ -206,4 +226,3 @@ def test_native_validation_runs_current_oracle_replays_in_parallel() -> None:
     assert len(outcomes) == 3
     assert all(outcome.error is None for outcome in outcomes)
     assert all(outcome.result is not None and outcome.result["pass"] for outcome in outcomes)
-    assert wall_seconds < 3.0

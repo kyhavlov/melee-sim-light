@@ -17,6 +17,12 @@
     },
     {
       "replay": "replays/validation/luigi/Game_20250309T214357.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/luigi/Game_20250309T214357.post320.zst",
+        "replay_sha256": "3dfd257e88152cd51e231ab6ce7a3d04dc1a06a0e35cd7355a246bfd88364ad4",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2

@@ -106,7 +106,6 @@ typedef struct MslCoreStageSpec {
     const char* archive;
     StageData* source;
     uint16_t runtime_animation_mask;
-    uint16_t static_stage_proc_mask;
     Vec3 singles_spawn[MSL_CORE_MAX_PLAYERS];
     Vec3 teams_spawn[MSL_CORE_MAX_PLAYERS];
 } MslCoreStageSpec;
@@ -151,7 +150,6 @@ static const MslCoreStageSpec stage_specs[] = {
       "/GrIz.dat",
       &grIz_803E0E5C,
       1U << 4,
-      0,
       { { -41.25F, 21.0F, 0.0F }, { 41.25F, 27.0F, 0.0F },
         { 0.0F, 5.25F, 0.0F }, { 0.0F, 48.0F, 0.0F } },
       { { -41.25F, 21.0F, 0.0F }, { -41.25F, 5.0F, 0.0F },
@@ -161,7 +159,6 @@ static const MslCoreStageSpec stage_specs[] = {
       "/GrPs.dat",
       &grPs_803E1334,
       0,
-      1U << 5,
       { { -40.0F, 32.0F, 0.0F }, { 40.0F, 32.0F, 0.0F },
         { 70.0F, 7.0F, 0.0F }, { -70.0F, 7.0F, 0.0F } },
       { { -40.0F, 32.0F, 0.0F }, { -40.0F, 5.0F, 0.0F },
@@ -171,7 +168,6 @@ static const MslCoreStageSpec stage_specs[] = {
       "/GrSt.dat",
       &grSt_803E274C,
       (1U << 2) | (1U << 3),
-      0,
       { { -42.0F, 26.6F, 0.0F }, { 42.0F, 28.0F, 0.0F },
         { 0.0F, 46.9F, 0.0F }, { 0.0F, 4.9F, 0.0F } },
       { { -42.0F, 26.6F, 0.0F }, { -42.0F, 5.0F, 0.0F },
@@ -182,20 +178,17 @@ static const MslCoreStageSpec stage_specs[] = {
       &grOp_803E6748,
       // Map 1's particle events consume gameplay RNG before CPU decisions.
       (1U << 1) | (1U << 2) | (1U << 7),
-      0,
       { { -46.6F, 37.2F, 0.0F }, { 47.4F, 37.3F, 0.0F },
         { 0.0F, 7.0F, 0.0F }, { 0.0F, 58.5F, 0.0F } },
       { { -46.6F, 37.2F, 0.0F }, { -46.6F, 5.0F, 0.0F },
         { 47.4F, 37.3F, 0.0F }, { 47.4F, 5.0F, 0.0F } } },
+    // Battlefield map 6 advances the shared dynamics-force emitters
+    // (lb_800115F4) that gate fighter tail gusts.
     { MSL_CORE_STAGE_BATTLEFIELD,
       BATTLE,
       "/GrNBa.dat",
       &grNBa_803E7E38,
       (1U << 1) | (1U << 2) | (1U << 3) | (1U << 4),
-      // Map 6's per-frame proc (grBattle_8021A174) is not render-only: it
-      // advances the shared dynamics-force emitters (lb_800115F4) that gate
-      // fighter tail gusts. Keep it scheduled.
-      0,
       { { -38.8F, 35.2F, 0.0F }, { 38.8F, 35.2F, 0.0F },
         { 0.0F, 8.0F, 0.0F }, { 0.0F, 62.4F, 0.0F } },
       { { -38.8F, 35.2F, 0.0F }, { -38.8F, 5.0F, 0.0F },
@@ -206,7 +199,6 @@ static const MslCoreStageSpec stage_specs[] = {
       &grNLa_803E7F90,
       (1U << 3) | (1U << 4) | (1U << 5) | (1U << 6) |
           (1U << 7) | (1U << 8) | (1U << 9),
-      0,
       { { -60.0F, 10.0F, 0.0F }, { 60.0F, 10.0F, 0.0F },
         { -20.0F, 10.0F, 0.0F }, { 20.0F, 10.0F, 0.0F } },
       { { -60.0F, 10.0F, 0.0F }, { -20.0F, 10.0F, 0.0F },
@@ -440,11 +432,7 @@ static void configure_headless_ground_schedule(
         if ((spec->runtime_animation_mask & map_bit) == 0) {
             msl_ground_use_headless_epoch_proc(gp->gobj);
         }
-        if ((spec->static_stage_proc_mask & map_bit) != 0) {
-            msl_ground_remove_priority4_procs(gp->gobj);
-        } else {
-            msl_ground_remove_null_post_proc(gp->gobj);
-        }
+        msl_ground_remove_null_post_proc(gp->gobj);
     }
 }
 
@@ -1249,6 +1237,14 @@ static int match_construct(MslCoreMatch* match,
         const Vec3* spawn = match->config.is_teams
                                 ? &spec->teams_spawn[spawn_order]
                                 : &spec->singles_spawn[spawn_order];
+        Vec3 retail_spawn;
+        // Without Slippi's NeutralSpawn each fighter enters at the stage's
+        // spawn point for its own port (gmvs.c::getSpawnPoint, stage.c::Stage_80224E64).
+        if ((match->config.slippi_patches & MSL_PATCH_RETAIL_SPAWNS) &&
+            Ground_801C2D24(slot, &retail_spawn))
+        {
+            spawn = &retail_spawn;
+        }
         uint8_t encoded = match->config.players[i].facing_and_port;
 #ifdef MSL_CORE_NATIVE
         if (match->config.players[i].char_id == MSL_CORE_CHAR_SAMUS) {
@@ -1464,7 +1460,7 @@ static int match_construct(MslCoreMatch* match,
     // mem-piece pools first -- so Samus keeps its established 256 per fighter
     // rather than being reduced to Ness's measured rate.
     // refs/melee/src/melee/it/items/{itnesspkflashexplode.c,itsamusgrapple.c}
-    // tests/melee_core/article_pool_smoke.c
+    // tests/melee_core/article_pool.c
     // Chaos soaks measured two more lineups sitting close to the flat base:
     // four Link peaked at 258 live FObjs and four Peach at 240 against the
     // 283-slot capacity it bought them. Link and Young Link overlap bow,
@@ -1473,7 +1469,7 @@ static int match_construct(MslCoreMatch* match,
     // tests/melee_core/pool_chaos_soak.c
     // Five forward-throw Shadow Ball graphs use 185 tracks per Mewtwo.
     // Reserve that burst per fighter; the 20-shot stress leaves at least 20%
-    // headroom. it_802C519C -> Item_80268E5C; mewtwo_smoke.c.
+    // headroom. it_802C519C -> Item_80268E5C; tests/melee_core/mewtwo_moves.c.
     HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(),
                            256 + 128 * ness_count + 256 * samus_count +
                                32 * link_count + 32 * peach_count +
