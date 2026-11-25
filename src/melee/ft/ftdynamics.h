@@ -29,7 +29,7 @@ void ftCo_HeadlessPublishDynamicHurtCapsules(Fighter* fp);
 
 /// @todo
 /* 09CB40 */ static void ftCo_8009CB40(Fighter* fp, ssize_t bone_idx, bool,
-                                       FigaTree*);
+                                       s32 count);
 /* 09D18C */ void ftCo_8009D18C(Fighter* fp);
 /* 09D2A4 */ void ftCo_8009D2A4(Fighter* fp);
 /* 09D3BC */ void ftCo_8009D3BC(Fighter* fp);

@@ -1067,18 +1067,6 @@ void msl_ground_remove_null_post_proc(HSD_GObj* gobj)
     }
     HSD_ASSERT(1054, 0);
 }
-
-void msl_ground_remove_priority4_procs(HSD_GObj* gobj)
-{
-    HSD_GObjProc* proc = gobj->proc;
-    while (proc != NULL) {
-        HSD_GObjProc* next = proc->child;
-        if (proc->s_link == 4) {
-            HSD_GObjProc_8038FE24(proc);
-        }
-        proc = next;
-    }
-}
 #endif
 
 void Ground_801C1D6C(u32 arg0)
@@ -1822,6 +1810,23 @@ bool Ground_801C2FE0(Ground_GObj* arg0)
 
     return false;
 }
+
+#ifdef MSL_CORE_HOSTED
+// Retain both Ground_801C2FE0 epochs. Only the second map owns a joint,
+// with fixed vertices and line kinds. Keep the collision epoch and island
+// order from mpLib_80055E9C. The cached floor bounds remain valid.
+void msl_ground_refresh_static_joint(int empty_map, int map_id, int joint_id)
+{
+    MslMpLibState* map = &msl_core_source_match_state()->mp_lib;
+    Ground_804D6954 += Ground_804D6950[empty_map] == 0;
+    if (Ground_804D6950[map_id] == 0) {
+        CollJoint* joint = &map->joints[joint_id];
+        joint->xC = ++Ground_804D6954;
+        mpColl_804D64AC += 1;
+        map->island_order_pending = !map->island_order_pending;
+    }
+}
+#endif
 
 bool Ground_801C3128(s32 arg0, void (*arg1)(int))
 {

@@ -77,6 +77,12 @@
     },
     {
       "replay": "replays/validation/gamewatch/bucket.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/gamewatch/bucket.post320.zst",
+        "replay_sha256": "a8a6ced64e0f0245f8f9bb959bb02179e19058b10bb95c7883974d5c01ded954",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2
@@ -113,6 +119,12 @@
     },
     {
       "replay": "replays/validation/gamewatch/judge_chef.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/gamewatch/judge_chef.post320.zst",
+        "replay_sha256": "928c14967f80730c835fa4ca033d34b94c2a960532d3dda5724d44e63e05309f",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2

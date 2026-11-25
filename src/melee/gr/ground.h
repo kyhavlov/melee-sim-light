@@ -164,7 +164,7 @@
 void msl_ground_headless_epoch_proc(HSD_GObj* gobj);
 void msl_ground_use_headless_epoch_proc(HSD_GObj* gobj);
 void msl_ground_remove_null_post_proc(HSD_GObj* gobj);
-void msl_ground_remove_priority4_procs(HSD_GObj* gobj);
+void msl_ground_refresh_static_joint(int empty_map, int map_id, int joint_id);
 #endif
 #ifndef MSL_CORE_HOSTED
 /* 49E6C8 */ extern StageInfo stage_info;

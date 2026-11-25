@@ -21,8 +21,8 @@
 static inline void ftKp_SpecialHi_Enter_inline(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    fp->take_dmg_cb = (void (*)(HSD_GObj*)) ftKp_Init_80132B38;
-    fp->death2_cb = (void (*)(HSD_GObj*)) ftKp_Init_80132B38;
+    fp->take_dmg_cb = ftKp_Init_80132B38;
+    fp->death2_cb = ftKp_Init_80132B38;
 }
 
 void ftKp_SpecialHi_Enter(Fighter_GObj* gobj)

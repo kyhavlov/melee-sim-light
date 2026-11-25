@@ -2,8 +2,11 @@
 #include "runtime/observation.h"
 #include "runtime/savestate.h"
 #include "runtime/scalar.h"
+#include "runtime/viewer.h"
 #include "ft/ftlib.h"
 #include "gr/ground.h"
+#include "mp/mpisland.h"
+#include "mp/mplib.h"
 
 #include <baselib/fog.h>
 #include <stdio.h>
@@ -26,6 +29,49 @@ static int whispy_is(const MslCoreMatch* match, uint8_t direction)
            msl_core_match_write_observation_from_compare(match, 0, &compared) == 0 &&
            live.stage.whispy == direction &&
            memcmp(&live, &compared, sizeof(live)) == 0;
+}
+
+static int check_randall_surface(MslCoreMatch* match, const MslCoreGameData* data,
+                                 MslCoreMatchConfig config)
+{
+    MslCoreInput input = { 0 };
+    int frame;
+    config.stage_id = MSL_STAGE_YOSHIS_STORY;
+    if (msl_core_match_reset(match, data, &config, &input) != 0) return 1;
+    for (frame = 0; frame < 1200; ++frame) {
+        MslCoreObservation observation;
+        MslCoreViewerState viewer;
+        Vec3 hit;
+        Vec3 normal;
+        Vec3 left;
+        Vec3 right;
+        int line;
+        u32 flags;
+        float x;
+        float y;
+        if (msl_core_match_step(match, &input, (uint32_t) frame,
+                                &(MslCoreStageEvents) { 0 }) != 0) return 1;
+        msl_core_match_write_observation(match, 0, &observation);
+        msl_core_match_write_viewer(match, &viewer);
+        x = msl_core_get_lef32(&observation.stage.randall.x);
+        y = msl_core_get_lef32(&observation.stage.randall.y);
+        if (!observation.stage.randall.exists || !viewer.stage.randall_exists ||
+            msl_core_get_lef32(&viewer.stage.randall_x) != x ||
+            msl_core_get_lef32(&viewer.stage.randall_y) != y ||
+            !mpCheckFloor(x, y + 1, x, y - 1, 0, &hit, &line, &flags,
+                          &normal, -1, -1, -1, NULL, NULL))
+        {
+            fprintf(stderr, "Randall observation is not on a collision floor at %d\n", frame);
+            return 1;
+        }
+        mpFloorGetLeft(line, &left);
+        mpFloorGetRight(line, &right);
+        if (x != (left.x + right.x) * 0.5F || y != (left.y + right.y) * 0.5F) {
+            fprintf(stderr, "Randall surface differs from source collision endpoints\n");
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int main(int argc, char** argv)
@@ -180,6 +226,44 @@ int main(int argc, char** argv)
     if (msl_core_match_reset(&matches[0], &game_data, &config, &input) != 0 ||
         !whispy_is(&matches[0], MSL_WHISPY_NONE))
         goto fail;
+
+    if (check_randall_surface(&matches[0], &game_data, config) != 0)
+        goto fail;
+
+    config.stage_id = MSL_STAGE_POKEMON_STADIUM;
+    events = (MslCoreStageEvents) { 0 };
+    if (msl_core_match_reset(&matches[0], &game_data, &config, &input) != 0)
+        goto fail;
+    {
+        const struct mpIsland_80458E88_t* islands =
+            &matches[0].source.mp_lib.island_root;
+        int first_floor = islands->next->x24;
+        int last_static_floor = islands->x8->x24;
+        for (i = 0; i < 2; ++i) {
+            if (msl_core_match_step(&matches[0], &input, 1, &events) != 0)
+                goto fail;
+        }
+        msl_core_bind_match(&matches[0]);
+        if (first_floor == last_static_floor ||
+            msl_mp_floor_islands()->x24 != first_floor ||
+            msl_core_match_step(&matches[0], &input, 1, &events) != 0)
+            goto fail;
+
+        // Copy and restore before the first read of the reversed order.
+        free(snapshot);
+        snapshot_size = msl_core_match_save_size(&matches[0]);
+        snapshot = malloc(snapshot_size);
+        if (snapshot == NULL ||
+            msl_core_match_copy(&matches[1], &matches[0]) != 0 ||
+            msl_core_match_save(&matches[0], snapshot, snapshot_size, NULL) != 0 ||
+            msl_core_match_restore(&matches[2], snapshot, snapshot_size) != 0)
+            goto fail;
+        for (i = 0; i < 3; ++i) {
+            msl_core_bind_match(&matches[i]);
+            if (msl_mp_floor_islands()->x24 != last_static_floor)
+                goto fail;
+        }
+    }
 
     free(snapshot);
     for (i = 0; i < 3; ++i) msl_core_match_destroy(&matches[i]);

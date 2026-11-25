@@ -1435,6 +1435,15 @@
       }
     },
     {
+      "replay": "replays/validation/icies/diamond-platinum-d7e5ba443ed6f176c1880a44.slpz",
+      "expected": {
+        "native": {
+          "frames": 11028,
+          "actual_output_fingerprint": "a70f7aad69bc45ce"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/dl-fox-2025-05_Game_20250504T134832.slpz",
       "expected": {
         "native": {
@@ -1561,6 +1570,15 @@
         "native": {
           "frames": 8548,
           "actual_output_fingerprint": "38992f16c6315f85"
+        }
+      }
+    },
+    {
+      "replay": "replays/validation/icies/master-platinum-61896315f7e2f0eaf09974ae.slpz",
+      "expected": {
+        "native": {
+          "frames": 6702,
+          "actual_output_fingerprint": "82b68c8ce1a1fe67"
         }
       }
     },

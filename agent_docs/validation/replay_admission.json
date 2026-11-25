@@ -117,6 +117,33 @@
       ]
     },
     {
+      "replay": "replays/validation/dk/Game_A45C27BA0AE1_20240811T121116.slpz",
+      "sha256_slp": "be7e590ca851d2259c01cca1f75a150e2874609372fdf99ef76c109664a77383",
+      "reasons": [
+        "missing-recorded-inputs",
+        "vanilla-magnifier"
+      ],
+      "evidence": "Console capture without NeutralSpawn (no 0xC216E510), kept as the recording behind the retail spawn-point rule. Before it both fighters' positions differ from frame -123 to the end; with each port entering at its own spawn point, all 12,418 frames are equal. No stage-bounds offscreen patch; Slippi 3.15 records no raw C-stick bytes. Measured with a Windows build and a replay driver comparing fighter and item gameplay lanes with the recording's own code list; the C-stick bytes this Slippi version does not record come from the driver's fixed reading of the processed C-stick, not from a fit. Not run with tools/validation.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Online/Core/BrawlOffscreenDamage.asm",
+        "refs/melee/src/melee/gm/gmvs.c::getSpawnPoint",
+        "tools/validation/admission.py::slippi_patches"
+      ]
+    },
+    {
+      "replay": "replays/validation/dk/diamond-diamond-33b572328d41bb20873121a4.slpz",
+      "sha256_slp": "35f1b56d4f24a1423c121cdaac3d89b152ebd2c34cd637bf1af17b3c82baf21e",
+      "reasons": [
+        "missing-recorded-inputs"
+      ],
+      "evidence": "Slippi 3.14 online capture with UCF 0.8. Captain Falcon releases crouch at frame 395 under the retail SquatRv threshold. The native diagnostic matches all 8,869 compared gameplay frames with reconstructed C-stick inputs.",
+      "sources": [
+        "refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm",
+        "src/runtime/match.c::msl_ucf_squatrv_threshold",
+        "tests/test_melee_core_validation.py::test_ucf_08_matches_recorded_gameplay"
+      ]
+    },
+    {
       "replay": "replays/validation/falcon/EmotionalNaturalLemur.slpz",
       "sha256_slp": "cb9371a757528237dafa85e9c37066eb36e2db0b327d914cda1d2703a73b15d9",
       "reasons": [
@@ -184,6 +211,19 @@
         "refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998",
         "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
         "src/runtime/camera.c::msl_camera_publish_match_visibility"
+      ]
+    },
+    {
+      "replay": "replays/validation/icies/master-diamond-bf25cf805e23959b754c2c71.slpz",
+      "sha256_slp": "bf132d3abe79a7ee58781a520382fd1023af7459a9f5edcebacd6bf1a2174b87",
+      "reasons": [
+        "missing-recorded-inputs"
+      ],
+      "evidence": "Slippi 3.15 online capture with UCF 0.8. Popo's stick magnitude qualifies for dashback at frame 9,229. The native diagnostic matches all 12,375 compared gameplay frames with reconstructed C-stick inputs.",
+      "sources": [
+        "refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF DB.asm",
+        "src/runtime/match.c::msl_ucf_apply_dashback",
+        "tests/test_melee_core_validation.py::test_ucf_08_matches_recorded_gameplay"
       ]
     },
     {

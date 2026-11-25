@@ -89,6 +89,12 @@
     },
     {
       "replay": "replays/validation/falcon/Game_20260505T114745.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/falcon/Game_20260505T114745.post320.zst",
+        "replay_sha256": "013fa84e5d292cdba80164aae7f254698beb10bf651c8cbe6572c0020ef9ad65",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2

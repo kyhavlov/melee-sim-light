@@ -298,6 +298,50 @@ static int msl_test_costume_hat_lifetime(FighterKind alternate)
     return 0;
 }
 
+static int msl_test_throw_escape(bool jump)
+{
+    MslCoreInput input = { 0 };
+    MSL_TEST_CHECK(msl_test_setup(2, 4, 24) == 0);
+    Fighter* kirby = msl_test_fighter(0);
+    Fighter* held = msl_test_fighter(1);
+
+    input.p[0].main_x = 38;
+    for (unsigned frame = 0; frame < 360 && held->cur_pos.x - kirby->cur_pos.x > 8;
+         ++frame)
+    {
+        MSL_TEST_CHECK(msl_test_step(&input) == 0);
+    }
+    input.p[0].main_x = 0;
+    input.p[0].buttons = PAD_TRIGGER_Z;
+    MSL_TEST_CHECK(msl_test_step(&input) == 0);
+    input.p[0].buttons = 0;
+    for (unsigned frame = 0; frame < 30 && kirby->motion_id != ftCo_MS_CatchWait;
+         ++frame)
+    {
+        MSL_TEST_CHECK(msl_test_step(&input) == 0);
+    }
+    MSL_TEST_CHECK(kirby->motion_id == ftCo_MS_CatchWait);
+    if (jump) {
+        input.p[1].buttons = PAD_BUTTON_X;
+        MSL_TEST_CHECK(msl_test_step(&input) == 0);
+        input.p[1].buttons = 0;
+    }
+
+    // Start the forward throw late enough for the grab timer to expire in it.
+    for (unsigned frame = 0; frame < 180 && held->grab_timer > 20; ++frame) {
+        MSL_TEST_CHECK(msl_test_step(&input) == 0);
+    }
+    MSL_TEST_CHECK(held->grab_timer > 0 && held->grab_timer <= 20);
+    input.p[0].main_x = 80;
+    MSL_TEST_CHECK(msl_test_step(&input) == 0);
+    MSL_TEST_CHECK(held->motion_id == ftCo_MS_ThrownF);
+    for (unsigned frame = 0; frame < 30 && held->motion_id == ftCo_MS_ThrownF; ++frame) {
+        MSL_TEST_CHECK(msl_test_step(&msl_test_neutral) == 0);
+    }
+    MSL_TEST_CHECK(held->motion_id == (jump ? ftCo_MS_CaptureJump : ftCo_MS_CaptureCut));
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     float cutter_fox, hammer_fox, stone_fox, spit_fox, fox_copy, bowser_copy, pichu_copy, gamewatch_copy;
@@ -311,6 +355,7 @@ int main(int argc, char** argv)
                  msl_test_copy(23, 1, It_Kind_Kirby_PichuTJolt_Ground, &pichu_copy, &hat_pichu) ||
                  msl_test_copy(24, 1, It_Kind_Kirby_GameWatchChef, &gamewatch_copy, &hat_gamewatch) ||
                  msl_test_roy_copy() || msl_test_four_kirbys() ||
+                 msl_test_throw_escape(false) || msl_test_throw_escape(true) ||
                  msl_test_costume_hat_lifetime(FTKIND_PURIN) ||
                  msl_test_costume_hat_lifetime(FTKIND_FALCO) ||
                  msl_test_costume_hat_lifetime(FTKIND_GAMEWATCH) ||

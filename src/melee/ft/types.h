@@ -1939,7 +1939,8 @@ struct ftDynamics {
     };
     /*  +8 */ int x4;
     /*  +C */ struct ftData_x38* x8;
-    /* +10 */ FigaTree*** x10;
+    // Per animation, the number of joints driven by animation in each chain.
+    /* +10 */ s32** x10;
 };
 
 struct KirbyHatStruct {

@@ -37,6 +37,7 @@
 #include <MetroTRK/intrinsics.h>
 #endif
 #include <baselib/gobj.h>
+#include "runtime/match.h"
 #include <baselib/jobj.h>
 #include <baselib/random.h>
 #include <melee/cm/camera.h>
@@ -2801,6 +2802,7 @@ void fn_800DB790(Fighter_GObj* gobj)
     }
 
     ftCommon_8007E2F4(fp, 0x1FF);
+    msl_wobble_count_init(fp);
 }
 
 #pragma push
@@ -2917,6 +2919,7 @@ void fn_800DBAE4(Fighter_GObj* gobj)
     }
 
     ftCommon_8007E2F4(fp, 0x1FF);
+    msl_wobble_count_init(fp);
 }
 
 static inline void fn_800DBBF8_noinline(Fighter_GObj* gobj1, Fighter* gobj2)
