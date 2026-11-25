@@ -10,6 +10,21 @@
 #ifdef MSL_CORE_NATIVE
 #include <platform/memory.h>
 #endif
+#ifdef MSL_CORE_HOSTED
+#include <runtime/context.h>
+#include <runtime/source_state.h>
+
+#ifdef MSL_CORE_NATIVE
+#define mpIsland_80458E88 (*msl_core_context_mp_island_root)
+#else
+#define mpIsland_80458E88 (*msl_core_mp_island_root())
+#endif
+
+#define island_order_pending                                                  \
+    (msl_core_source_match_state()->mp_lib.island_order_pending)
+
+static void materialize_island_order(void);
+#endif
 
 static mp_UnkStruct0* alloc_island(void)
 {
@@ -51,6 +66,9 @@ static mp_UnkStruct0* alloc_island(void)
 
 void mpIsland_8005A6F8(void)
 {
+#ifdef MSL_CORE_HOSTED
+    island_order_pending = false;
+#endif
     mpIsland_80458E88.next = NULL;
     mpIsland_80458E88.x4 = NULL;
     mpIsland_80458E88.x8 = NULL;
@@ -216,6 +234,14 @@ void mpIsland_8005A728(void)
     *ceiling_tail = prev;
 }
 
+mp_UnkStruct0* msl_mp_floor_islands(void)
+{
+#ifdef MSL_CORE_HOSTED
+    materialize_island_order();
+#endif
+    return mpIsland_80458E88.next;
+}
+
 mp_UnkStruct0* mpIsland_8005AB54(int surface_idx)
 {
     if (mpLib_80054ED8(surface_idx)) {
@@ -223,7 +249,7 @@ mp_UnkStruct0* mpIsland_8005AB54(int surface_idx)
         bool done;
         mp_UnkStruct0* cur;
 
-        for (cur = mpIsland_80458E88.next; cur; cur = cur->next) {
+        for (cur = msl_mp_floor_islands(); cur; cur = cur->next) {
             int j, j_next;
             for (j = cur->x24; j != -1; j = j_next) {
                 if (j == surface_idx) {
@@ -590,6 +616,9 @@ void mpIsland_8005B334(int arg0, int arg1, int arg2, bool arg3)
 {
     mp_UnkStruct0* temp;
 
+#ifdef MSL_CORE_HOSTED
+    materialize_island_order();
+#endif
     if (mpIsland_80458E88.x8 != NULL) {
         mpIsland_80458E88.x8->next = NULL;
     } else {
@@ -635,3 +664,42 @@ void mpIsland_8005B334(int arg0, int arg1, int arg2, bool arg3)
     }
     mpIsland_80458E88.xC = temp;
 }
+
+#ifdef MSL_CORE_HOSTED
+static mp_UnkStruct0* reverse_islands(mp_UnkStruct0* head, mp_UnkStruct0* end,
+                                     mp_UnkStruct0* suffix)
+{
+    while (head != end) {
+        mp_UnkStruct0* next = head->next;
+        head->next = suffix;
+        suffix = head;
+        head = next;
+    }
+    return suffix;
+}
+
+static void reverse_active_islands(mp_UnkStruct0** head, mp_UnkStruct0** tail,
+                                   mp_UnkStruct0** dynamic)
+{
+    mp_UnkStruct0* old_head = *head;
+    mp_UnkStruct0* old_dynamic = *dynamic;
+    *dynamic = reverse_islands(old_dynamic, NULL, NULL);
+    *head = reverse_islands(old_head, old_dynamic, *dynamic);
+    *tail = old_head == old_dynamic ? NULL : old_head;
+}
+
+// A frozen joint refresh reverses each list without changing its contents.
+// Adjacent reversals cancel until the next read or rebuild.
+static void materialize_island_order(void)
+{
+    struct mpIsland_80458E88_t* islands = &mpIsland_80458E88;
+    if (!island_order_pending) {
+        return;
+    }
+    island_order_pending = false;
+    reverse_active_islands(&islands->next, &islands->x8, &islands->x10);
+    reverse_active_islands(&islands->x4, &islands->xC, &islands->x14);
+    islands->x18 = reverse_islands(islands->x18, NULL, NULL);
+    islands->x1C = reverse_islands(islands->x1C, NULL, NULL);
+}
+#endif

@@ -1804,7 +1804,7 @@ bool ftCo_800A3908(Fighter* fp, bool arg1)
     } else {
         frames = -(-fp->co_attrs.terminal_vel - fp->pos_delta.y) / grav;
     }
-    for (island = mpIsland_80458E88.next; island != NULL;
+    for (island = msl_mp_floor_islands(); island != NULL;
          island = island->next)
     {
         island_pos = island->x14;
@@ -1987,7 +1987,7 @@ bool ftCo_800A4038(Fighter* fp, bool arg1)
     } else {
         frames = -(-fp->co_attrs.terminal_vel - fp->pos_delta.y) / grav;
     }
-    for (island = mpIsland_80458E88.next; island != NULL;
+    for (island = msl_mp_floor_islands(); island != NULL;
          island = island->next)
     {
         island_pos = island->x8;
@@ -2155,7 +2155,7 @@ s32 ftCo_800A4768(Fighter* fp, Vec3* arg1)
     f32 dist;
 
     best = -1.0f;
-    for (island = mpIsland_80458E88.next; island != NULL;
+    for (island = msl_mp_floor_islands(); island != NULL;
          island = island->next)
     {
         pt = island->x14;
@@ -3086,7 +3086,7 @@ bool ftCo_800A6700(Fighter* fp, Vec3* arg1, Vec3* arg2)
     s32 result;
 
     best = -1.0f;
-    for (island = mpIsland_80458E88.next; island != NULL;
+    for (island = msl_mp_floor_islands(); island != NULL;
          island = island->next)
     {
         if (ftCo_800A2718(island) == 0) {
@@ -3171,7 +3171,7 @@ s32 ftCo_800A6A98(Fighter* fp, Vec3* arg1)
     u8 operand_pad[12];
 
     best = -1.0f;
-    for (island = mpIsland_80458E88.next; island != NULL;
+    for (island = msl_mp_floor_islands(); island != NULL;
          island = island->next)
     {
         if (ftCo_800A2718(island) == 0) {
@@ -3245,7 +3245,7 @@ s32 ftCo_800A6D2C(Fighter* fp, Vec3* arg1)
 
     best = -1.0f;
     cur_island = mpIsland_8005AB54(fp->coll_data.floor.index);
-    for (island = mpIsland_80458E88.next; island != NULL;
+    for (island = msl_mp_floor_islands(); island != NULL;
          island = island->next)
     {
         if (ftCo_800A2718(island) == 0 && island != cur_island) {
@@ -3329,7 +3329,7 @@ bool ftCo_800A6FC4(Fighter* fp, Vec3* arg1, Vec3* arg2)
     cur_island = mpIsland_8005AB54(fp->coll_data.floor.index);
     lbVector_Normalize(arg2);
     data = &fp->x1A88;
-    for (island = mpIsland_80458E88.next; island != NULL;
+    for (island = msl_mp_floor_islands(); island != NULL;
          island = island->next)
     {
         if (island == cur_island) {
@@ -4085,7 +4085,7 @@ void ftCo_800A8940(Fighter* fp)
     rnd = HSD_Randf();
     cur_island = mpIsland_8005AB54(fp->coll_data.floor.index);
     total = 0.0f;
-    for (island = mpIsland_80458E88.next; island != NULL;
+    for (island = msl_mp_floor_islands(); island != NULL;
          island = island->next)
     {
         if (cur_island != island && ftCo_800A2718_dontinline3(island) == 0) {
@@ -4106,7 +4106,7 @@ void ftCo_800A8940(Fighter* fp)
     }
     accum = 0.0f;
     total = 1.0 / total;
-    for (island = mpIsland_80458E88.next; island != NULL;
+    for (island = msl_mp_floor_islands(); island != NULL;
          island = island->next)
     {
         if (cur_island != island) {
@@ -5064,7 +5064,7 @@ bool ftCo_800AAF48(Fighter* fp)
         return false;
     }
     if (fp->facing_dir > 0.0) {
-        for (cur = mpIsland_80458E88.next; cur != NULL; cur = cur->next) {
+        for (cur = msl_mp_floor_islands(); cur != NULL; cur = cur->next) {
             sp44 = cur->x8;
             dx = sp44.x - fp->cur_pos.x;
             dy = sp44.y - fp->cur_pos.y;
@@ -5097,7 +5097,7 @@ bool ftCo_800AAF48(Fighter* fp)
             }
         }
     } else {
-        for (cur = mpIsland_80458E88.next; cur != NULL; cur = cur->next) {
+        for (cur = msl_mp_floor_islands(); cur != NULL; cur = cur->next) {
             Vec3 spC = cur->x14;
             dx = fp->cur_pos.x - spC.x;
             dy = fp->cur_pos.y - spC.y;

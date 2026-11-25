@@ -5,6 +5,7 @@
 #include "runtime/viewer.h"
 #include "ft/ftlib.h"
 #include "gr/ground.h"
+#include "mp/mpisland.h"
 #include "mp/mplib.h"
 
 #include <baselib/fog.h>
@@ -228,6 +229,41 @@ int main(int argc, char** argv)
 
     if (check_randall_surface(&matches[0], &game_data, config) != 0)
         goto fail;
+
+    config.stage_id = MSL_STAGE_POKEMON_STADIUM;
+    events = (MslCoreStageEvents) { 0 };
+    if (msl_core_match_reset(&matches[0], &game_data, &config, &input) != 0)
+        goto fail;
+    {
+        const struct mpIsland_80458E88_t* islands =
+            &matches[0].source.mp_lib.island_root;
+        int first_floor = islands->next->x24;
+        int last_static_floor = islands->x8->x24;
+        for (i = 0; i < 2; ++i) {
+            if (msl_core_match_step(&matches[0], &input, 1, &events) != 0)
+                goto fail;
+        }
+        msl_core_bind_match(&matches[0]);
+        if (first_floor == last_static_floor ||
+            msl_mp_floor_islands()->x24 != first_floor ||
+            msl_core_match_step(&matches[0], &input, 1, &events) != 0)
+            goto fail;
+
+        // Copy and restore before the first read of the reversed order.
+        free(snapshot);
+        snapshot_size = msl_core_match_save_size(&matches[0]);
+        snapshot = malloc(snapshot_size);
+        if (snapshot == NULL ||
+            msl_core_match_copy(&matches[1], &matches[0]) != 0 ||
+            msl_core_match_save(&matches[0], snapshot, snapshot_size, NULL) != 0 ||
+            msl_core_match_restore(&matches[2], snapshot, snapshot_size) != 0)
+            goto fail;
+        for (i = 0; i < 3; ++i) {
+            msl_core_bind_match(&matches[i]);
+            if (msl_mp_floor_islands()->x24 != last_static_floor)
+                goto fail;
+        }
+    }
 
     free(snapshot);
     for (i = 0; i < 3; ++i) msl_core_match_destroy(&matches[i]);
