@@ -201,33 +201,34 @@ NATIVE_MAIN_OBJ := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(MAIN_SRC))
 PPC_OBJS := $(PPC_CORE_OBJS) $(PPC_MAIN_OBJ)
 NATIVE_OBJS := $(NATIVE_CORE_OBJS) $(NATIVE_MAIN_OBJ)
 SMOKE_SRCS := \
-	$(ROOT)/tests/melee_core/archive_smoke.c \
-	$(ROOT)/tests/melee_core/data_load_smoke.c \
-	$(ROOT)/tests/melee_core/map_collision_smoke.c \
-	$(ROOT)/tests/melee_core/model_animation_smoke.c \
-	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
-	$(ROOT)/tests/melee_core/scheduler_smoke.c
+	$(ROOT)/tests/melee_core/archive.c \
+	$(ROOT)/tests/melee_core/data_load.c \
+	$(ROOT)/tests/melee_core/map_collision.c \
+	$(ROOT)/tests/melee_core/model_animation.c \
+	$(ROOT)/tests/melee_core/scalar_api.c \
+	$(ROOT)/tests/melee_core/scheduler.c
 NATIVE_SMOKE_SRCS := \
-	$(ROOT)/tests/melee_core/mewtwo_moves_smoke.c \
-	$(ROOT)/tests/melee_core/gamewatch_moves_smoke.c \
-	$(ROOT)/tests/melee_core/roy_moves_smoke.c \
-	$(ROOT)/tests/melee_core/pichu_moves_smoke.c \
-	$(ROOT)/tests/melee_core/kirby_moves_smoke.c \
-	$(ROOT)/tests/melee_core/cpu_replay_smoke.c \
-	$(ROOT)/tests/melee_core/fnmsubs_smoke.c \
-	$(ROOT)/tests/melee_core/batch_api_smoke.c \
-	$(ROOT)/tests/melee_core/public_api_smoke.c \
-	$(ROOT)/tests/melee_core/context_smoke.c \
-	$(ROOT)/tests/melee_core/thread_shared_state_smoke.c \
-	$(ROOT)/tests/melee_core/thread_batch_smoke.c \
-	$(ROOT)/tests/melee_core/data_load_smoke.c \
-	$(ROOT)/tests/melee_core/gameplay_parts_smoke.c \
-	$(ROOT)/tests/melee_core/article_pool_smoke.c \
-	$(ROOT)/tests/melee_core/stage_lifecycle_smoke.c \
-	$(ROOT)/tests/melee_core/map_collision_smoke.c \
-	$(ROOT)/tests/melee_core/model_animation_smoke.c \
-	$(ROOT)/tests/melee_core/scalar_api_smoke.c \
-	$(ROOT)/tests/melee_core/scheduler_smoke.c \
+	$(ROOT)/tests/melee_core/mewtwo_moves.c \
+	$(ROOT)/tests/melee_core/gamewatch_moves.c \
+	$(ROOT)/tests/melee_core/roy_moves.c \
+	$(ROOT)/tests/melee_core/pichu_moves.c \
+	$(ROOT)/tests/melee_core/kirby_moves.c \
+	$(ROOT)/tests/melee_core/stored_charge.c \
+	$(ROOT)/tests/melee_core/cpu_replay.c \
+	$(ROOT)/tests/melee_core/fnmsubs.c \
+	$(ROOT)/tests/melee_core/batch_api.c \
+	$(ROOT)/tests/melee_core/public_api.c \
+	$(ROOT)/tests/melee_core/context.c \
+	$(ROOT)/tests/melee_core/thread_shared_state.c \
+	$(ROOT)/tests/melee_core/thread_batch.c \
+	$(ROOT)/tests/melee_core/data_load.c \
+	$(ROOT)/tests/melee_core/gameplay_parts.c \
+	$(ROOT)/tests/melee_core/article_pool.c \
+	$(ROOT)/tests/melee_core/stage_lifecycle.c \
+	$(ROOT)/tests/melee_core/map_collision.c \
+	$(ROOT)/tests/melee_core/model_animation.c \
+	$(ROOT)/tests/melee_core/scalar_api.c \
+	$(ROOT)/tests/melee_core/scheduler.c \
 	$(ROOT)/tests/melee_core/lifecycle_bench.c \
 	$(ROOT)/tests/melee_core/wasm_parity.c
 ifeq ($(UNAME_S)/$(HOST_TARGET_ARCH),Linux/x86_64)
@@ -237,7 +238,7 @@ PPC_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(PPC_OBJ_DIR)/%.o,$(SMOKE_SRCS))
 NATIVE_SMOKE_OBJS := $(patsubst $(ROOT)/%.c,$(NATIVE_OBJ_DIR)/%.o,$(NATIVE_SMOKE_SRCS))
 NATIVE_REPLAY_BENCH_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/replay_bench.o
 NATIVE_RUNTIME_CENSUS_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/runtime_census.o
-NATIVE_LARGE_BATCH_SMOKE_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/large_batch_smoke.o
+NATIVE_LARGE_BATCH_SMOKE_OBJ := $(NATIVE_OBJ_DIR)/tests/melee_core/large_batch.o
 NATIVE_FLAGS_STAMP := $(NATIVE_BUILD)/compile-flags.stamp
 NATIVE_COMPILE_OBJS := $(NATIVE_CORE_OBJS) $(NATIVE_MAIN_OBJ) $(NATIVE_SMOKE_OBJS) \
 	$(NATIVE_REPLAY_BENCH_OBJ) $(NATIVE_RUNTIME_CENSUS_OBJ) \
@@ -762,38 +763,39 @@ $(1): $(NATIVE_CORE_OBJS) $(2)
 	@"$(HOST_CC)" $(NATIVE_EXE_LINK_FLAGS) $(NATIVE_LINK_FLAGS) $$^ $$(LDLIBS) -o "$$@"
 endef
 
-$(eval $(call link_smoke,$(ARCHIVE_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/archive_smoke.o))
-$(eval $(call link_smoke,$(DATA_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/data_load_smoke.o))
-$(eval $(call link_smoke,$(MAP_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/map_collision_smoke.o))
-$(eval $(call link_smoke,$(MODEL_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/model_animation_smoke.o))
-$(eval $(call link_smoke,$(SCHEDULER_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/scheduler_smoke.o))
-$(eval $(call link_smoke,$(SCALAR_API_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_DATA_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/data_load_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_MAP_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/map_collision_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_MODEL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/model_animation_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_SCHEDULER_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scheduler_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_SCALAR_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scalar_api_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/context_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_THREAD_SHARED_STATE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/thread_shared_state_smoke.o))
-$(NATIVE_OBJ_DIR)/tests/melee_core/thread_shared_state_smoke.o: NATIVE_CFLAGS += -pthread
-$(eval $(call link_native_smoke,$(NATIVE_THREAD_BATCH_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/thread_batch_smoke.o))
-$(NATIVE_OBJ_DIR)/tests/melee_core/thread_batch_smoke.o: NATIVE_CFLAGS += -pthread
+$(eval $(call link_smoke,$(ARCHIVE_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/archive.o))
+$(eval $(call link_smoke,$(DATA_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/data_load.o))
+$(eval $(call link_smoke,$(MAP_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/map_collision.o))
+$(eval $(call link_smoke,$(MODEL_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/model_animation.o))
+$(eval $(call link_smoke,$(SCHEDULER_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/scheduler.o))
+$(eval $(call link_smoke,$(SCALAR_API_SMOKE),$(PPC_OBJ_DIR)/tests/melee_core/scalar_api.o))
+$(eval $(call link_native_smoke,$(NATIVE_DATA_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/data_load.o))
+$(eval $(call link_native_smoke,$(NATIVE_MAP_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/map_collision.o))
+$(eval $(call link_native_smoke,$(NATIVE_MODEL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/model_animation.o))
+$(eval $(call link_native_smoke,$(NATIVE_SCHEDULER_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scheduler.o))
+$(eval $(call link_native_smoke,$(NATIVE_SCALAR_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/scalar_api.o))
+$(eval $(call link_native_smoke,$(NATIVE_CONTEXT_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/context.o))
+$(eval $(call link_native_smoke,$(NATIVE_THREAD_SHARED_STATE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/thread_shared_state.o))
+$(NATIVE_OBJ_DIR)/tests/melee_core/thread_shared_state.o: NATIVE_CFLAGS += -pthread
+$(eval $(call link_native_smoke,$(NATIVE_THREAD_BATCH_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/thread_batch.o))
+$(NATIVE_OBJ_DIR)/tests/melee_core/thread_batch.o: NATIVE_CFLAGS += -pthread
 ifeq ($(UNAME_S)/$(HOST_TARGET_ARCH),Linux/x86_64)
 $(eval $(call link_native_smoke,$(NATIVE_SHARED_WRITE_AUDIT),$(NATIVE_OBJ_DIR)/tests/melee_core/shared_write_audit.o))
 $(NATIVE_SHARED_WRITE_AUDIT): LDLIBS += -Wl,-z,now
 endif
-$(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/public_api_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_STAGE_LIFECYCLE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/stage_lifecycle_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_ARTICLE_POOL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/article_pool_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_BUILD)/mewtwo-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/mewtwo_moves_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_BUILD)/gamewatch-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/gamewatch_moves_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_BUILD)/roy-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/roy_moves_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_BUILD)/pichu-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/pichu_moves_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_BUILD)/kirby-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/kirby_moves_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_BUILD)/cpu-replay-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/cpu_replay_smoke.o))
-$(eval $(call link_native_smoke,$(NATIVE_BUILD)/fnmsubs-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/fnmsubs_smoke.o))
+$(eval $(call link_native_smoke,$(NATIVE_BATCH_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/batch_api.o))
+$(eval $(call link_native_smoke,$(NATIVE_PUBLIC_API_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/public_api.o))
+$(eval $(call link_native_smoke,$(NATIVE_GAMEPLAY_PARTS_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/gameplay_parts.o))
+$(eval $(call link_native_smoke,$(NATIVE_STAGE_LIFECYCLE_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/stage_lifecycle.o))
+$(eval $(call link_native_smoke,$(NATIVE_ARTICLE_POOL_SMOKE),$(NATIVE_OBJ_DIR)/tests/melee_core/article_pool.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/mewtwo-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/mewtwo_moves.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/gamewatch-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/gamewatch_moves.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/roy-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/roy_moves.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/pichu-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/pichu_moves.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/kirby-moves-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/kirby_moves.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/stored-charge-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/stored_charge.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/cpu-replay-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/cpu_replay.o))
+$(eval $(call link_native_smoke,$(NATIVE_BUILD)/fnmsubs-smoke,$(NATIVE_OBJ_DIR)/tests/melee_core/fnmsubs.o))
 $(eval $(call link_native_smoke,$(NATIVE_BUILD)/pool-chaos-soak,$(NATIVE_OBJ_DIR)/tests/melee_core/pool_chaos_soak.o))
 $(eval $(call link_native_smoke,$(NATIVE_WASM_PARITY),$(NATIVE_OBJ_DIR)/tests/melee_core/wasm_parity.o))
 $(eval $(call link_native_smoke,$(NATIVE_LIFECYCLE_BENCH),$(NATIVE_OBJ_DIR)/tests/melee_core/lifecycle_bench.o))
@@ -835,7 +837,7 @@ ifeq ($(UNAME_S)/$(HOST_TARGET_ARCH),Linux/x86_64)
 thread-smoke: $(NATIVE_SHARED_WRITE_AUDIT)
 endif
 
-native-smoke: thread-smoke fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke kirby-smoke data-check $(NATIVE_BUILD)/cpu-replay-smoke $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
+native-smoke: thread-smoke fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke pichu-smoke kirby-smoke stored-charge-smoke data-check $(NATIVE_BUILD)/cpu-replay-smoke $(NATIVE_DATA_SMOKE) $(NATIVE_MAP_SMOKE) $(NATIVE_MODEL_SMOKE) $(NATIVE_SCHEDULER_SMOKE) $(NATIVE_SCALAR_API_SMOKE) $(NATIVE_CONTEXT_SMOKE) $(NATIVE_BATCH_API_SMOKE) $(NATIVE_PUBLIC_API_SMOKE) $(NATIVE_GAMEPLAY_PARTS_SMOKE) $(NATIVE_ARTICLE_POOL_SMOKE) $(NATIVE_STAGE_LIFECYCLE_SMOKE) $(NATIVE_RUNTIME_CENSUS)
 	@$(TIMEOUT) 5s "$(NATIVE_DATA_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MODEL_SMOKE)" "$(DATA)"
 	@$(TIMEOUT) 5s "$(NATIVE_MAP_SMOKE)" "$(DATA)"
@@ -853,17 +855,17 @@ native-smoke: thread-smoke fnmsubs-smoke mewtwo-smoke gamewatch-smoke roy-smoke 
 
 wasm-smoke: data-check $(WASM_MODULE) $(NATIVE_WASM_PARITY)
 	@MSL_CORE_NATIVE_DIGEST="$$($(NATIVE_WASM_PARITY) "$(DATA)")" \
-		node "$(ROOT)/tests/melee_core/wasm_api_smoke.mjs" "$(WASM_MODULE)"
+		node "$(ROOT)/tests/melee_core/wasm_api.mjs" "$(WASM_MODULE)"
 
 viewer-smoke: wasm-smoke viewer-schema-check
 	+@MSL_DATA_DIR="$(abspath $(MSL_DATA_DIR))" \
 		"$(ROOT)/tools/viewer/live/build_wasm.sh" >/dev/null
-	@node "$(ROOT)/tests/melee_core/viewer_wasm_smoke.mjs"
-	@node "$(ROOT)/tests/melee_core/viewer_browser_smoke.mjs"
+	@node "$(ROOT)/tests/melee_core/viewer_wasm.mjs"
+	@node "$(ROOT)/tests/melee_core/viewer_browser.mjs"
 
 viewer-production-smoke: viewer-smoke
 	+@"$(ROOT)/tools/viewer/build.sh" >/dev/null
-	@node "$(ROOT)/tests/melee_core/viewer_browser_smoke.mjs" --production
+	@node "$(ROOT)/tests/melee_core/viewer_browser.mjs" --production
 
 lifecycle-benchmark: data-check $(NATIVE_LIFECYCLE_BENCH)
 	@$(TIMEOUT) 5s "$(NATIVE_LIFECYCLE_BENCH)" "$(DATA)"
@@ -982,3 +984,7 @@ pichu-smoke: data-check $(NATIVE_BUILD)/pichu-moves-smoke
 .PHONY: kirby-smoke
 kirby-smoke: data-check $(NATIVE_BUILD)/kirby-moves-smoke
 	@$(TIMEOUT) 20s "$(NATIVE_BUILD)/kirby-moves-smoke" "$(DATA)"
+
+.PHONY: stored-charge-smoke
+stored-charge-smoke: data-check $(NATIVE_BUILD)/stored-charge-smoke
+	@$(TIMEOUT) 20s "$(NATIVE_BUILD)/stored-charge-smoke" "$(DATA)"

@@ -1,3 +1,4 @@
+#include "runtime/observation.h"
 #include "runtime/scalar.h"
 #include "runtime/wire.h"
 
@@ -41,6 +42,22 @@ static int write_compare(FILE* output, const MslCoreCompare* compare)
     return 0;
 }
 
+static int write_stream_frame(const MslCoreMatch* match, int with_stored)
+{
+    if (write_compare(stdout, msl_core_match_output(match)) != 0) {
+        return -1;
+    }
+    if (with_stored) {
+        MslCoreStoredFrame stored;
+        msl_core_match_write_stored(match, &stored);
+        if (fwrite(&stored, 1, sizeof(stored), stdout) != sizeof(stored)) {
+            fprintf(stderr, "failed to write stored fighter state\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
 static int init_match(MslCoreGameData* game_data, MslCoreMatch* match,
                       const char* data_root, const uint8_t* config_wire,
                       const MslCoreInput* previous_input)
@@ -54,7 +71,7 @@ static int init_match(MslCoreGameData* game_data, MslCoreMatch* match,
     return msl_core_match_init(match, game_data, &config, previous_input);
 }
 
-static int run_stream(const char* data_root)
+static int run_stream(const char* data_root, int with_stored)
 {
     char input_buffer[MSL_CORE_IO_BUFFER_BYTES];
     char output_buffer[MSL_CORE_IO_BUFFER_BYTES];
@@ -94,7 +111,7 @@ static int run_stream(const char* data_root)
             &stage_events, (const uint8_t*) &frame.stage_events);
         if (msl_core_match_step(&match, &frame.input, frame_seed,
                                 &stage_events) != 0 ||
-            write_compare(stdout, msl_core_match_output(&match)) != 0)
+            write_stream_frame(&match, with_stored) != 0)
         {
             return 1;
         }
@@ -137,6 +154,7 @@ static int run_server(const char* data_root)
         size_t header_bytes = fread(&header, 1, sizeof(header), stdin);
         uint32_t frame_count;
         uint32_t frame_index;
+        uint32_t flags;
         MslCoreMatchConfig config;
 
         if (header_bytes == 0 && feof(stdin)) {
@@ -148,6 +166,11 @@ static int run_server(const char* data_root)
             break;
         }
         frame_count = msl_core_get_le32(&header.frame_count);
+        flags = msl_core_get_le32(&header.flags);
+        if (flags & ~MSL_CORE_STREAM_STORED) {
+            fprintf(stderr, "unknown Melee core server job flags\n");
+            break;
+        }
         if (frame_count == 0) {
             fprintf(stderr, "empty Melee core server job\n");
             break;
@@ -171,7 +194,7 @@ static int run_server(const char* data_root)
                                          (const uint8_t*) &frame.stage_events);
             if (msl_core_match_step(&match, &frame.input, frame_seed,
                                     &stage_events) != 0 ||
-                write_compare(stdout, msl_core_match_output(&match)) != 0)
+                write_stream_frame(&match, flags & MSL_CORE_STREAM_STORED) != 0)
             {
                 goto done;
             }
@@ -195,7 +218,7 @@ static void usage(const char* argv0)
 {
     fprintf(stderr,
             "usage: %s GAME_DATA CONFIG PREV_INPUT_OR_- INPUT_TAPE OUTPUT\n"
-            "       %s GAME_DATA {--stream|--server}\n",
+            "       %s GAME_DATA {--stream|--stream-stored|--server}\n",
             argv0, argv0);
 }
 
@@ -214,7 +237,10 @@ int main(int argc, char** argv)
     int result = 1;
 
     if (argc == 3 && strcmp(argv[2], "--stream") == 0) {
-        return run_stream(argv[1]);
+        return run_stream(argv[1], 0);
+    }
+    if (argc == 3 && strcmp(argv[2], "--stream-stored") == 0) {
+        return run_stream(argv[1], 1);
     }
     if (argc == 3 && strcmp(argv[2], "--server") == 0) {
         return run_server(argv[1]);

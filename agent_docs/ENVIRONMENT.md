@@ -82,9 +82,7 @@ make validator
    authority; do not use a historical work-log count as the expected roster or case total.
 4. `make ppc` then one per-suite PPC run (`VALIDATION_SUITE=replays/suites/<char>.json
    VALIDATION_BACKEND=ppc`). Per-suite PPC is the gate; aggregate-PPC lock-fails by design.
-5. `pytest tests`. The parallel replay test asserts a host-dependent timing budget and is
-   deselected in hosted CI (`test_native_validation_runs_current_oracle_replays_in_parallel`).
-   Investigate its errors before distinguishing timing limits from correctness failures.
+5. `pytest tests`.
 
 Until steps 1-4 are green on the host, do not record aggregate identities or output locks from it.
 

@@ -490,8 +490,8 @@ export class GameCubeAdapterInput {
     if (pressed(1)) buttons |= BUTTONS.B;
     if (pressed(2)) buttons |= BUTTONS.X;
     if (pressed(3)) buttons |= BUTTONS.Y;
-    if (pressed(4) || value(6) > 0.25) buttons |= BUTTONS.L;
-    if (value(7) > 0.25) buttons |= BUTTONS.R;
+    if (pressed(4) || pressed(6)) buttons |= BUTTONS.L;
+    if (pressed(7)) buttons |= BUTTONS.R;
     if (pressed(5) || pressed(8)) buttons |= BUTTONS.Z;
     if (pressed(9)) buttons |= BUTTONS.START;
     if (pressed(12)) buttons |= BUTTONS.D_UP;

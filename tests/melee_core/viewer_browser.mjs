@@ -9,7 +9,7 @@ const production = process.argv.includes("--production");
 const staticRoot = production ? path.join(root, "build/viewer") : root;
 const entryPath = production
   ? "/tools/viewer/live/index.html"
-  : "/tests/melee_core/viewer_browser_smoke.html";
+  : "/tests/melee_core/viewer_browser.html";
 const systemChromePaths = [
   "/opt/google/chrome/chrome",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -120,89 +120,79 @@ const call = (method, params = {}) => new Promise((resolve) => {
   socket.send(JSON.stringify({ id, method, params }));
 });
 
+const selectedCharacter = production ? 14 : 15;
+const selectedStage = 8;
 let result = "PENDING";
-if (production) {
-  let keyboardStarted = false;
-  let changedSelection = false;
-  while (Date.now() < deadline) {
-    const response = await call("Runtime.evaluate", {
+let keyboardStarted = false;
+let changedSelection = false;
+while (Date.now() < deadline) {
+  const response = await call("Runtime.evaluate", {
+    expression: `(() => {
+      const status = document.querySelector("#status");
+      const viewer = document.querySelector("slippi-viewer");
+      const replay = window.__mslViewerReplayData;
+      const frameCount = window.__mslViewerFrameCount || 0;
+      const player = replay?.frames?.[frameCount]?.players?.[0];
+      const settings = replay?.settings?.playerSettings?.[0];
+      return {
+        error: status?.classList.contains("error") ? status.textContent : "",
+        frames: frameCount,
+        stage: replay?.settings?.stageId,
+        character: settings?.internalCharacterIds?.[0],
+        externalCharacter: settings?.externalCharacterId,
+        xIsFinite: Number.isFinite(player?.state?.xPosition),
+        keyboard: player?.inputs?.processed?.joystickX === 1,
+        trace: window.__mslTraceSaved === true,
+        api: typeof viewer?.setLiveReplayData === "function" && typeof viewer?.setFrame === "function",
+        svg: Boolean(viewer?.shadowRoot?.querySelector("svg") || viewer?.querySelector("svg")),
+        yoshiModel: performance.getEntriesByType("resource").some(
+          entry => new URL(entry.name).pathname.endsWith("/zips/yoshi.zip") && entry.responseEnd > 0),
+      };
+    })()`,
+    returnByValue: true,
+  });
+  const state = response.result?.result?.value || {};
+  if (state.error) {
+    result = `FAIL|${state.error}`;
+    break;
+  }
+  if (!keyboardStarted && state.frames >= 2 && state.api) {
+    keyboardStarted = true;
+    await call("Runtime.evaluate", {
+      expression: `window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", bubbles: true }))`,
+    });
+  } else if (keyboardStarted && state.keyboard && !changedSelection) {
+    changedSelection = true;
+    await call("Runtime.evaluate", {
       expression: `(() => {
-        const status = document.querySelector("#status");
-        const viewer = document.querySelector("slippi-viewer");
-        const replay = window.__mslViewerReplayData;
-        const frameCount = window.__mslViewerFrameCount || 0;
-        const current = replay?.frames?.[frameCount];
-        const svg = viewer?.shadowRoot?.querySelector("svg") || viewer?.querySelector("svg");
-        return JSON.stringify({
-          error: status?.classList.contains("error") ? status.textContent : "",
-          frames: frameCount,
-          stage: replay?.settings?.stageId,
-          character: replay?.settings?.playerSettings?.[0]?.internalCharacterIds?.[0],
-          externalCharacter: replay?.settings?.playerSettings?.[0]?.externalCharacterId,
-          yoshiModel: performance.getEntriesByType("resource").some(
-            entry => new URL(entry.name).pathname.endsWith("/zips/yoshi.zip") && entry.responseEnd > 0),
-          keyboard: current?.players?.[0]?.inputs?.processed?.joystickX === 1,
-          trace: window.__mslTraceSaved === true,
-          api: typeof viewer?.setLiveReplayData === "function" && typeof viewer?.setFrame === "function",
-          svg: Boolean(svg),
-        });
+        window.dispatchEvent(new KeyboardEvent("keyup", { key: "d", bubbles: true }));
+        window.prompt = () => "viewer-test";
+        URL.createObjectURL = () => "blob:viewer-test";
+        URL.revokeObjectURL = () => {};
+        HTMLAnchorElement.prototype.click = function () {
+          window.__mslTraceSaved = this.download.endsWith(".msltrace.json");
+        };
+        document.querySelector("#save-trace").click();
+        const character = document.querySelector("#p1-character");
+        character.value = "${selectedCharacter}";
+        character.dispatchEvent(new Event("change"));
+        document.querySelector('button[data-stage-id="${selectedStage}"]').click();
       })()`,
-      returnByValue: true,
     });
-    const state = JSON.parse(response.result?.result?.value || "{}");
-    if (state.error) {
-      result = `FAIL|${state.error}`;
-      break;
-    }
-    if (!keyboardStarted && state.frames >= 2 && state.api) {
-      keyboardStarted = true;
-      await call("Runtime.evaluate", {
-        expression: `window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", bubbles: true }))`,
-      });
-    } else if (keyboardStarted && state.keyboard && !changedSelection) {
-      changedSelection = true;
-      await call("Runtime.evaluate", {
-        expression: `(() => {
-          window.dispatchEvent(new KeyboardEvent("keyup", { key: "d", bubbles: true }));
-          window.prompt = () => "phase6-browser-smoke";
-          URL.createObjectURL = () => "blob:phase6-browser-smoke";
-          URL.revokeObjectURL = () => {};
-          HTMLAnchorElement.prototype.click = function () {
-            window.__mslTraceSaved = this.download.endsWith(".msltrace.json");
-          };
-          document.querySelector("#save-trace").click();
-          const character = document.querySelector("#p1-character");
-          character.value = "14";
-          character.dispatchEvent(new Event("change"));
-          document.querySelector('button[data-stage-id="8"]').click();
-        })()`,
-      });
-    } else if (
-      changedSelection &&
-      state.frames >= 2 &&
-      state.stage === 8 &&
-      state.character === 14 &&
-      state.externalCharacter === 17 &&
-      state.yoshiModel &&
-      state.trace &&
-      state.api &&
-      state.svg
-    ) {
-      result = "PASS|production viewer";
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 25));
+  } else if (
+    changedSelection &&
+    state.frames >= 2 &&
+    state.stage === selectedStage &&
+    state.character === selectedCharacter &&
+    state.xIsFinite &&
+    state.trace &&
+    state.api &&
+    (!production || (state.externalCharacter === 17 && state.yoshiModel && state.svg))
+  ) {
+    result = "PASS";
+    break;
   }
-} else {
-  while (Date.now() < deadline) {
-    const response = await call("Runtime.evaluate", {
-      expression: "`${document.body?.dataset.smoke || 'PENDING'}|${document.querySelector('#result')?.textContent || ''}`",
-      returnByValue: true,
-    });
-    result = response.result?.result?.value || "PENDING";
-    if (result.startsWith("PASS|") || result.startsWith("FAIL|")) break;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
+  await new Promise((resolve) => setTimeout(resolve, 25));
 }
 socket.close();
 signalChromeGroup("SIGTERM");
@@ -214,7 +204,7 @@ signalChromeGroup("SIGKILL");
 server.close();
 fs.rmSync(profile, { recursive: true, force: true });
 
-if (!result.startsWith("PASS|")) {
+if (result !== "PASS") {
   throw new Error(`browser smoke failed: ${result}\n${stderr.slice(-1000)}`);
 }
 console.log(JSON.stringify({
