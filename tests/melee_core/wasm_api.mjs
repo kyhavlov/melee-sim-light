@@ -3,10 +3,18 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
+  CHAR_BOWSER,
+  CHAR_FALCO,
+  INPUT_PLAYER_SIZE,
+  INPUT_SIZE,
+  inputPlayerOffsets,
   MATCH_CONFIG_SIZE,
   MATCH_CONFIG_PLAYER_SIZE,
   matchConfigOffsets,
+  STAGE_FINAL_DESTINATION,
   VIEWER_STATE_SIZE,
+  viewerOffsets,
+  viewerPlayerOffsets,
 } from '../../tools/viewer/live/schema.js';
 
 const modulePath = path.resolve(
@@ -23,7 +31,6 @@ const OK = 0;
 const INVALID_ARGUMENT = 1;
 const INVALID_STATE = 3;
 const CONFIG_SIZE = MATCH_CONFIG_SIZE;
-const INPUT_SIZE = 52;
 const STATE_SIZE = 1302;
 const OBSERVATION_SIZE = 1272;
 const OBSERVATION_SLOTS_OFFSET = 40;
@@ -31,6 +38,11 @@ const OBSERVATION_PLAYER_SIZE = 64;
 const TERMINAL_SIZE = 16;
 const VIEWER_SIZE = VIEWER_STATE_SIZE;
 const MATCH_COUNT = 2;
+const BUTTON_B = 1 << 9;
+const BOWSER_SPECIAL_HI = 359;
+const BOWSER_SPECIAL_AIR_HI = 360;
+const DAMAGE_FIRST = 75;
+const DAMAGE_LAST = 91;
 
 const allocations = [];
 const alloc = (size) => {
@@ -94,7 +106,7 @@ const copySource = alloc(4);
 putU32(copyDestination, 1);
 putU32(copySource, 0);
 
-const writeConfig = (row, stage, character) => {
+const writeConfig = (row, stage, firstCharacter, secondCharacter = firstCharacter) => {
   const base = configs + row * CONFIG_SIZE;
   putU32(base, stage);
   putI32(base + 4, -123);
@@ -103,8 +115,8 @@ const writeConfig = (row, stage, character) => {
   putF32(base + 16, 1);
   module.HEAPU8[base + 20] = 2;
   module.HEAPU8[base + 23] = 4;
-  module.HEAPU8[base + matchConfigOffsets.players] = character;
-  module.HEAPU8[base + matchConfigOffsets.players + MATCH_CONFIG_PLAYER_SIZE] = character;
+  module.HEAPU8[base + matchConfigOffsets.players] = firstCharacter;
+  module.HEAPU8[base + matchConfigOffsets.players + MATCH_CONFIG_PLAYER_SIZE] = secondCharacter;
 };
 writeConfig(0, 32, 1);
 writeConfig(1, 2, 9);
@@ -298,6 +310,34 @@ try {
   if (process.env.MSL_CORE_NATIVE_DIGEST !== undefined) {
     assert.equal(stateDigest, process.env.MSL_CORE_NATIVE_DIGEST);
   }
+
+  // A laser hit during Whirling Fortress calls Bowser's damage callback.
+  writeConfig(0, STAGE_FINAL_DESTINATION, CHAR_BOWSER, CHAR_FALCO);
+  callOk('msl_core_batch_reset_matches', restoredBatch, configs, CONFIG_SIZE, 0, 0);
+  module.HEAPU8.fill(0, inputs, inputs + INPUT_SIZE);
+  const bowserAction = viewers + viewerOffsets.players + viewerPlayerOffsets.actionId;
+  const falcoButtons = inputs + INPUT_PLAYER_SIZE + inputPlayerOffsets.buttons;
+  let previousAction = -1;
+  let interrupted = false;
+  for (let frame = 0; frame < 180; frame += 1) {
+    const upB = frame % 90 < 2;
+    const laser = frame % 12 < 2;
+    view().setUint16(inputs + inputPlayerOffsets.buttons, upB ? BUTTON_B : 0, true);
+    view().setInt8(inputs + inputPlayerOffsets.mainY, upB ? 80 : 0);
+    view().setUint16(falcoButtons, laser ? BUTTON_B : 0, true);
+    step(restoredBatch, inputs, 0, `Bowser vs. Falco frame ${frame}`);
+    callOk('msl_core_batch_write_viewer', restoredBatch, viewers, VIEWER_SIZE, 0, 0);
+    const action = view().getUint16(bowserAction, true);
+    const wasWhirling = previousAction === BOWSER_SPECIAL_HI ||
+                        previousAction === BOWSER_SPECIAL_AIR_HI;
+    if (wasWhirling && action >= DAMAGE_FIRST && action <= DAMAGE_LAST) {
+      interrupted = true;
+      break;
+    }
+    previousAction = action;
+  }
+  assert(interrupted, 'Falco laser did not interrupt Whirling Fortress');
+
   console.log(
     JSON.stringify({
       status: 'PASS',
