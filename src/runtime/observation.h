@@ -5,6 +5,8 @@
 
 typedef struct MslCoreMatch MslCoreMatch;
 
+void msl_core_match_write_stored(const MslCoreMatch* match,
+                                 MslCoreStoredFrame* output);
 int msl_core_match_write_observation(const MslCoreMatch* match,
                                      uint8_t viewpoint_player,
                                      MslCoreObservation* output);

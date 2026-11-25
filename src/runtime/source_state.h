@@ -111,6 +111,7 @@ typedef struct MslMpLibState {
     /* mpLibLoad/mpPruneEmptyLines mutate the loaded MapLine adjacency. */
     MapCollData data_copy;
     bool did_check_bounding;
+    bool island_order_pending;
     MapCollData* data;
     CollVtx* vertices;
     CollLine* lines;

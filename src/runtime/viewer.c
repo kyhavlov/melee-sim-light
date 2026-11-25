@@ -5,6 +5,7 @@
 #include "ft/fighter.h"
 #include "ft/types.h"
 #include "gr/types.h"
+#include "lb/lb_00B0.h"
 #include "lb/types.h"
 #include "runtime/context.h"
 #include "runtime/observation.h"
@@ -54,21 +55,27 @@ static uint16_t fighter_hitbox_bone(const Fighter* fp, const HitCapsule* hit)
     return UINT16_MAX;
 }
 
-static float joint_uniform_scale(HSD_JObj* joint)
+static float joint_max_axis_scale(HSD_JObj* joint)
 {
     MtxPtr matrix;
-    float x;
-    float y;
-    float z;
+    float max_length_squared = 0.0F;
+    int column;
 
     if (joint == NULL) {
         return 0.0F;
     }
     matrix = HSD_JObjGetMtxPtr(joint);
-    x = matrix[0][0];
-    y = matrix[1][0];
-    z = matrix[2][0];
-    return sqrtf(x * x + y * y + z * z);
+    // Game & Watch's flattened axis does not represent his shield radius.
+    for (column = 0; column < 3; ++column) {
+        float x = matrix[0][column];
+        float y = matrix[1][column];
+        float z = matrix[2][column];
+        float length_squared = x * x + y * y + z * z;
+        if (length_squared > max_length_squared) {
+            max_length_squared = length_squared;
+        }
+    }
+    return sqrtf(max_length_squared);
 }
 
 static void write_hitboxes(const Fighter* fp, uint8_t* player_out)
@@ -110,19 +117,38 @@ static void write_shield(const Fighter* fp, uint8_t* player_out)
     if (!fp->x221B_b0 || shield->bone == NULL) {
         return;
     }
-    // The common Guard descriptor's bone is a detached shield JObj. Its
-    // translation and HitResult::pos are not a stable world-space render
-    // center: ftCo_800921DC zeros the former and lbColl_80007BCC fills the
-    // latter lazily during collision queries. Mark the center unavailable so
-    // the 2D viewer uses its established per-character model offset.
+    // Publish the collision center the source itself uses: the shield bone's
+    // world transform applied to the descriptor offset, exactly as
+    // lbColl_80007BCC fills HitResult::pos lazily during collision queries.
+    // ftCo_800921DC zeros the bone's local translation at guard start and the
+    // guard tilt animation then moves it, so the world matrix at end of frame
+    // is the rendered and colliding center.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     //   ftCo_80091BC4,ftCo_80091E78,ftCo_800921DC}
     // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-    put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_x), NAN);
-    put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_y), NAN);
-    put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_z), NAN);
+    {
+        Vec3 offset = shield->offset;
+        Vec3 center;
+        lb_8000B1CC(shield->bone, &offset, &center);
+        put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_x), center.x);
+        put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_y), center.y);
+        put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_z), center.z);
+    }
     put_f32(player_out, offsetof(MslCoreViewerPlayer, shield_radius),
-            shield->size * joint_uniform_scale(shield->bone));
+            shield->size * joint_max_axis_scale(shield->bone));
+
+    // ftCo_80091E78 fades the bubble with the light-shield amount: common
+    // data's x2F4 is the lightest alpha and a hard shield is opaque. Yoshi's
+    // egg is not faded.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091E78
+    if (fp->kind == FTKIND_YOSHI) {
+        player_out[offsetof(MslCoreViewerPlayer, shield_alpha)] = 255;
+    } else {
+        float alpha = p_ftCommonData->x2F4;
+        player_out[offsetof(MslCoreViewerPlayer, shield_alpha)] =
+            (u8) (int) (alpha + (float) (int) (fp->lightshield_amount *
+                                               (255 - alpha)));
+    }
 
     if (fp->motion_id < ftCo_MS_GuardOn ||
         fp->motion_id > ftCo_MS_GuardReflect)

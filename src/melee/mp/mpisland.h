@@ -21,18 +21,7 @@
                                     int arg2, int arg3, int arg4, int arg5,
                                     bool arg6);
 /* 05B334 */ void mpIsland_8005B334(int arg0, int arg1, int arg2, bool arg3);
+mp_UnkStruct0* msl_mp_floor_islands(void);
 
 extern mpIsland_Palette mpIsland_TerrainPalette;
-struct mpIsland_80458E88_t;
-#ifdef MSL_CORE_HOSTED
-#include "runtime/context.h"
-#if defined(MSL_CORE_NATIVE) && !defined(MSL_CORE_CONTEXT_IMPLEMENTATION)
-#define mpIsland_80458E88 (*msl_core_context_mp_island_root)
-#else
-#define mpIsland_80458E88 (*msl_core_mp_island_root())
-#endif
-#else
-extern struct mpIsland_80458E88_t mpIsland_80458E88;
-#endif
-
 #endif

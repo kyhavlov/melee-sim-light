@@ -257,6 +257,12 @@
     },
     {
       "replay": "replays/validation/samus/ranked-marth-2025-09_Game_20250902T190726.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/samus/ranked-marth-2025-09_Game_20250902T190726.post320.zst",
+        "replay_sha256": "549425dfaa428ca6e009951647746f6a2e4095cccc11d1adc1827397a1c98536",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2

@@ -25,6 +25,7 @@ from tools.validation.slpz import (
     set_native_unorder_events,
 )
 from tools.validation.admission import gecko_codes, require_admissible, slippi_patches
+from tools.validation.stored import StoredSidecar, expected_stored
 from tools.validation.suite_io import ReplaySuite, display_path_under_repo, load_suite
 
 
@@ -68,6 +69,7 @@ class ReplayCase:
     played_on: str | None = None
     fnmsubs_profile: str | None = None
     jit_arithmetic: str | None = None
+    stored_sidecar: StoredSidecar | None = None
 
 
 @dataclass(frozen=True)
@@ -327,6 +329,7 @@ def validate_one(
     played_on: str | None = None,
     fnmsubs_profile: str | None = None,
     jit_arithmetic: str | None = None,
+    stored_sidecar: StoredSidecar | None = None,
     runner: _NativeRunner | None = None,
     diagnostic: bool = False,
 ) -> dict[str, object]:
@@ -339,7 +342,9 @@ def validate_one(
         if not diagnostic:
             require_admissible(game, peppi_path, played_on=played_on, fnmsubs_profile=fnmsubs_profile,
                                jit_arithmetic=jit_arithmetic)
-        codes = gecko_codes(peppi_path.read_bytes())
+        raw = peppi_path.read_bytes()
+        codes = gecko_codes(raw)
+        stored = expected_stored(raw, stored_sidecar, ROOT)
         metadata = game.metadata
         if played_on is not None:
             metadata = dict(metadata)
@@ -367,6 +372,7 @@ def validate_one(
             runner_stdout=runner.stdout_fd if runner is not None else -1,
             slippi_patches=slippi_patches(codes),
             jit_arithmetic=1 if jit_arithmetic == "split-fma" else 0,
+            stored_expected=stored,
         )
     result["admitted"] = not diagnostic
     result["diagnostic"] = diagnostic or signed_zero_equal or frames != 0 or start_frame is not None
@@ -478,6 +484,7 @@ def load_suite_cases(
                 played_on=entry.played_on,
                 fnmsubs_profile=entry.fnmsubs_profile,
                 jit_arithmetic=entry.jit_arithmetic,
+                stored_sidecar=entry.stored_sidecar,
             )
         )
     if not cases:
@@ -545,6 +552,7 @@ def _validate_case(
                 played_on=case.played_on,
                 fnmsubs_profile=case.fnmsubs_profile,
                 jit_arithmetic=case.jit_arithmetic,
+                stored_sidecar=case.stored_sidecar,
                 runner=runner,
                 diagnostic=diagnostic,
             )
@@ -721,6 +729,8 @@ def print_backend_results(
         counts[key] += 1
         print(f"{key.upper():<10} {matched:>7,}/{frames:<7,}{timing}{scope_column} "
               f"{outcome.case.display_path}")
+        if result.get("stored_fighter_rows"):
+            print(f"      stored_fighter_rows={result['stored_fighter_rows']:,}")
         if status == "unlocked":
             print("      missing required full-output lock")
         elif status == "output-drift":

@@ -173,6 +173,12 @@
     },
     {
       "replay": "replays/validation/roy/greg_zelda_20250106T144302.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/roy/greg_zelda_20250106T144302.post320.zst",
+        "replay_sha256": "68e781e7198e162cfff66f1be0b30d27b43c5c65591414816341d86a501b341c",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2

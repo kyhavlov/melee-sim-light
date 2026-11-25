@@ -404,7 +404,8 @@ struct gmm_x0 {
 STATIC_ASSERT(sizeof(struct gmm_x0) == 0x8518);
 
 struct lbl_8046B6A0_24C_t {
-    UNK_T x0;
+    // Keep the scene tick at the same width as MatchEnd.x0.
+    u32 x0;
     u8 x4; ///< MatchOutcome
     u8 x5; ///< match mode
     u8 is_teams;
@@ -685,6 +686,20 @@ struct MatchEnd {
     /* 0x186C */ u8 pad_x186C[0x227C - 0x186C];
 };
 STATIC_ASSERT(sizeof(struct MatchEnd) == 0x227C);
+#ifdef MSL_CORE_NATIVE
+_Static_assert(offsetof(struct lbl_8046B6A0_24C_t, x4) ==
+                   offsetof(struct MatchEnd, result),
+               "Standings and MatchEnd must share the result offset");
+_Static_assert(offsetof(struct lbl_8046B6A0_24C_t, x8) ==
+                   offsetof(struct MatchEnd, frame_count),
+               "Standings and MatchEnd must share the frame count offset");
+_Static_assert(offsetof(struct lbl_8046B6A0_24C_t, x58) ==
+                   offsetof(struct MatchEnd, player_standings),
+               "Standings and MatchEnd must share the player table offset");
+_Static_assert(offsetof(struct lbl_8046B6A0_24C_t, x44C) ==
+                   offsetof(struct MatchEnd, x44C),
+               "Standings and MatchEnd must share the result table offset");
+#endif
 
 struct MatchExitInfo {
     int x0;
