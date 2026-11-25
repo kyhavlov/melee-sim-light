@@ -163,13 +163,21 @@ enum {
 // Native validation workers keep immutable GameData alive across jobs. The
 // frame count gives each job an explicit boundary without closing the stream;
 // config remains the same little-endian wire consumed by the one-shot runner.
+enum { MSL_CORE_STREAM_STORED = 1 };
+
 typedef struct MslCoreStreamJobHeader {
     uint32_t frame_count;
+    uint32_t flags;
     MslCoreMatchConfig config;
     MslCoreInput previous;
 } MslCoreStreamJobHeader;
 
 typedef MslItem MslCoreItem;
+
+typedef struct MslCoreStoredFrame {
+    MslObservationStored stored[MSL_CORE_MAX_PLAYERS];
+    MslObservationStored follower_stored[MSL_CORE_MAX_PLAYERS];
+} MslCoreStoredFrame;
 
 typedef struct MslCoreCompare {
     int32_t frame_id;
@@ -255,6 +263,7 @@ typedef MslObservationPlayer MslCoreObservationPlayer;
 typedef MslObservationRandall MslCoreObservationRandall;
 typedef MslObservationFodPlatforms MslCoreObservationFodPlatforms;
 typedef MslObservationStage MslCoreObservationStage;
+typedef MslObservationStored MslCoreObservationStored;
 typedef MslObservation MslCoreObservation;
 typedef MslTerminal MslCoreTerminal;
 
@@ -374,15 +383,18 @@ _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
 _Static_assert(sizeof(MslCoreMatchConfig) == 64,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 120,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 124,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
+_Static_assert(sizeof(MslCoreStoredFrame) == 64, "stored fighter frame wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");
-_Static_assert(sizeof(MslCoreObservationPlayer) == 56,
+_Static_assert(sizeof(MslCoreObservationPlayer) == 64,
                "MslCoreObservationPlayer wire size");
 _Static_assert(sizeof(MslCoreObservationStage) == 24,
                "MslCoreObservationStage wire size");
-_Static_assert(sizeof(MslCoreObservation) == 1208,
+_Static_assert(sizeof(MslCoreObservationStored) == 8,
+               "MslCoreObservationStored wire size");
+_Static_assert(sizeof(MslCoreObservation) == 1272,
                "MslCoreObservation wire size");
 _Static_assert(sizeof(MslCoreTerminal) == 16,
                "MslCoreTerminal wire size");

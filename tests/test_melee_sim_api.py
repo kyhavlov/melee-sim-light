@@ -56,6 +56,244 @@ def test_followers_pair_with_their_leaders_in_teams(monkeypatch, viewpoint: int)
                 assert not follower.tobytes().strip(b"\0")
 
 
+def _nothing_stored(stored) -> bool:
+    return not stored.tobytes().strip(b"\0")
+
+
+@pytest.mark.parametrize("viewpoint", range(4))
+def test_stored_charges_stay_with_their_players_in_teams(monkeypatch, viewpoint: int) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    dk, fox, sheik, samus = (msl.Character.DONKEY_KONG, msl.Character.FOX,
+                             msl.Character.SHEIK, msl.Character.SAMUS)
+    # A full Giant Punch, no charge, six needles, a full Charge Shot.
+    full = {dk: 10, fox: 0, sheik: 6, samus: 7}
+    with msl.EnvBatch(batch_size=1, length=64, num_players=4) as env:
+        env.configure_matches([msl.MatchConfig(
+            players=tuple(msl.PlayerConfig(c, team_id=t)
+                          for c, t in ((dk, 0), (fox, 0), (sheik, 1), (samus, 1))),
+            is_teams=True, viewpoint_player=viewpoint)])
+        env.reset_all()
+        assert _nothing_stored(env.current_frame["slots"]["stored"])
+        for tick in range(700):
+            if env.t == env.length:
+                env.reset_cursor()
+            pressed = env.controller_action_view[env.t]["players"]["buttons"]["B"]
+            pressed[:] = 0
+            # Donkey Kong and Samus start the move and it charges by itself;
+            # Sheik holds the button. Fox stands still.
+            pressed[0, 0] = pressed[0, 3] = tick == 150
+            pressed[0, 2] = tick >= 150
+            env.step()
+            row = env.current_frame[0]
+            order = row["slots"]["source_player"]
+            assert sorted(order) == [0, 1, 2, 3] and order[0] == viewpoint
+            charges = dict(zip(row["slots"]["char_id"], row["slots"]["stored"]["charge"]))
+            assert np.all(row["slots"]["stored"]["character_byte"] == 0)
+            assert all(charges[c] <= full[c] for c in full), (tick, charges)
+        assert charges == full
+        # A reset clears them; the restored match publishes them again.
+        published = env.current_frame.copy()
+        snapshot = env.save(0)
+        env.reset_matches([0])
+        assert _nothing_stored(env.current_frame["slots"]["stored"])
+        env.restore(0, snapshot)
+        env.observe()
+        np.testing.assert_array_equal(env.current_frame["slots"]["stored"], published["slots"]["stored"])
+
+
+@pytest.mark.parametrize("viewpoint", range(2))
+def test_oil_panic_stores_the_caught_damage_beside_the_count(monkeypatch, viewpoint: int) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=1, length=64) as env:
+        env.configure_matches([msl.MatchConfig(
+            players=(msl.PlayerConfig(msl.Character.GAMEWATCH),
+                     msl.PlayerConfig(msl.Character.FALCO)),
+            viewpoint_player=viewpoint)])
+        env.reset_all()
+        for tick in range(900):
+            if env.t == env.length:
+                env.reset_cursor()
+            action = env.controller_action_view[env.t]["players"]
+            # The bucket held out; Falco fires a laser into it now and then.
+            action["main_stick_y"][0, 0] = 0.0 if tick >= 150 else 0.5
+            action["buttons"]["B"][0, 0] = tick >= 150
+            action["buttons"]["B"][0, 1] = tick >= 200 and tick % 60 < 2
+            env.step()
+            row = env.current_frame[0]
+            bucket = row["slots"]["stored"][list(row["slots"]["source_player"]).index(0)]
+            # Each of Falco's lasers would have dealt 3.
+            assert bucket["character_value_bits"].view("<i4") == 3 * bucket["charge"], tick
+            if bucket["charge"] == 3:
+                break
+        else:
+            pytest.fail("the bucket never filled")
+        other = row["slots"]["stored"][list(row["slots"]["source_player"]).index(1)]
+        assert _nothing_stored(other)
+
+
+@pytest.mark.parametrize("viewpoint", range(2))
+def test_fire_breath_drains_and_recovers(monkeypatch, viewpoint: int) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=1, length=64) as env:
+        env.configure_matches([msl.MatchConfig(
+            players=(msl.PlayerConfig(msl.Character.BOWSER),
+                     msl.PlayerConfig(msl.Character.FOX)),
+            viewpoint_player=viewpoint)])
+        env.reset_all()
+        lowest = 360.0
+        for tick in range(1200):
+            if env.t == env.length:
+                env.reset_cursor()
+            # 200 frames of breath, then nothing.
+            env.controller_action_view[env.t]["players"]["buttons"]["B"][0, 0] = 150 <= tick < 350
+            env.step()
+            row = env.current_frame[0]
+            bowser = row["slots"]["stored"][list(row["slots"]["source_player"]).index(0)]
+            fuel = float(bowser["character_value_bits"].view("<f4"))
+            assert bowser["charge"] == 0 and 40 <= fuel <= 360, tick
+            if tick < 150:
+                assert fuel == 360
+            lowest = min(lowest, fuel)
+        # Something under 200 frames of it drained, 1 a frame from each.
+        assert 160 < lowest < 220
+        assert fuel == 360
+        fox = row["slots"]["stored"][list(row["slots"]["source_player"]).index(1)]
+        assert _nothing_stored(fox)
+
+
+@pytest.mark.parametrize("viewpoint", range(2))
+def test_kirby_copied_ability_names_the_stored_move(monkeypatch, viewpoint: int) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=1, length=64) as env:
+        env.configure_matches([msl.MatchConfig(
+            players=(msl.PlayerConfig(msl.Character.KIRBY),
+                     msl.PlayerConfig(msl.Character.SAMUS)),
+            viewpoint_player=viewpoint)])
+        env.reset_all()
+        copied_at = None
+        for tick in range(1500):
+            if env.t == env.length:
+                env.reset_cursor()
+            row = env.current_frame[0]
+            slots = list(row["slots"]["source_player"])
+            kirby, samus = row["slots"][slots.index(0)], row["slots"][slots.index(1)]
+            stored = row["slots"]["stored"][slots.index(0)]
+            action = env.controller_action_view[env.t]["players"]
+            action["main_stick_x"][0, 0] = 0.5
+            action["buttons"]["B"][0, 0] = 0
+            if copied_at is None:
+                assert (stored["character_byte"], stored["charge"]) == (msl.Character.KIRBY, 0)
+                if tick >= 150 and abs(samus["pos_x"] - kirby["pos_x"]) > 16:
+                    # Walk up to Samus.
+                    action["main_stick_x"][0, 0] = 1.0 if samus["pos_x"] > kirby["pos_x"] else 0.0
+                elif tick >= 150:
+                    # Inhale, then B again to swallow.
+                    action["buttons"]["B"][0, 0] = tick % 4 < 2
+            else:
+                # The copied Charge Shot charges by itself to Samus's full count.
+                action["buttons"]["B"][0, 0] = tick == copied_at + 120
+            env.step()
+            stored = env.current_frame[0]["slots"]["stored"][slots.index(0)]
+            if copied_at is None and stored["character_byte"] != msl.Character.KIRBY:
+                copied_at = tick
+            if copied_at is not None:
+                assert stored["character_byte"] == samus["char_id"] == msl.Character.SAMUS
+                if stored["charge"] == 7:
+                    break
+        else:
+            pytest.fail("Kirby never held a full copied Charge Shot")
+        assert _nothing_stored(env.current_frame[0]["slots"]["stored"][slots.index(1)])
+
+
+@pytest.mark.parametrize("viewpoint", range(2))
+def test_judge_history_is_the_two_numbers_the_next_roll_avoids(monkeypatch, viewpoint: int) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=1, length=64) as env:
+        env.configure_matches([msl.MatchConfig(
+            players=(msl.PlayerConfig(msl.Character.GAMEWATCH),
+                     msl.PlayerConfig(msl.Character.FOX)),
+            viewpoint_player=viewpoint)])
+        env.reset_all()
+        pair, rolls = (1, 0), 0
+        for tick in range(2000):
+            if env.t == env.length:
+                env.reset_cursor()
+            action = env.controller_action_view[env.t]["players"]
+            # A Judge every 100 frames.
+            pressed = tick >= 150 and tick % 100 == 0
+            action["main_stick_x"][0, 0] = 1.0 if pressed else 0.5
+            action["buttons"]["B"][0, 0] = pressed
+            env.step()
+            row = env.current_frame[0]
+            slots = list(row["slots"]["source_player"])
+            judge = int(row["slots"]["stored"][slots.index(0)]["character_byte"])
+            now = (judge & 15, judge >> 4)
+            if now != pair:
+                # The new number is neither of the two before it, and the
+                # newer of those is now the older.
+                assert pressed and now[1] == pair[0] and now[0] not in pair and 0 <= now[0] < 9
+                pair, rolls = now, rolls + 1
+            fox = row["slots"]["stored"][slots.index(1)]
+            assert _nothing_stored(fox)
+        assert rolls == len(range(200, 2000, 100))
+
+
+@pytest.mark.parametrize("viewpoint", range(4))
+def test_spent_bits_stay_with_their_players_in_teams(monkeypatch, viewpoint: int) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    peach, marth, mario, luigi = (msl.Character.PEACH, msl.Character.MARTH,
+                                  msl.Character.MARIO, msl.Character.LUIGI)
+    # Side special lift, down special lift, float.
+    side, down, floated = 2, 4, 8
+    with msl.EnvBatch(batch_size=1, length=64, num_players=4) as env:
+        env.configure_matches([msl.MatchConfig(
+            players=tuple(msl.PlayerConfig(c, team_id=t)
+                          for c, t in ((peach, 0), (marth, 0), (mario, 1), (luigi, 1))),
+            is_teams=True, viewpoint_player=viewpoint)])
+        env.reset_all()
+        assert _nothing_stored(env.current_frame["slots"]["stored"])
+        seen = {c: set() for c in (peach, marth, mario, luigi)}
+        longest = 0.0
+        timer_left_after_landing = False
+        for tick in range(600):
+            if env.t == env.length:
+                env.reset_cursor()
+            action = env.controller_action_view[env.t]["players"]
+            action["buttons"]["X"][0] = 0
+            action["buttons"]["B"][0] = 0
+            action["main_stick_x"][0] = 0.5
+            action["main_stick_y"][0] = 0.5
+            # Everyone jumps. Peach keeps the button down and floats; at the
+            # top Marth and Mario use the side special, Luigi the down one.
+            action["buttons"]["X"][0, 0] = 150 <= tick < 300
+            action["buttons"]["X"][0, 1:] = 150 <= tick < 156
+            if tick == 172:
+                action["buttons"]["B"][0, 1:] = 1
+                action["main_stick_x"][0, 1:3] = 1.0
+                action["main_stick_y"][0, 3] = 0.0
+            if 172 < tick < 260:
+                action["buttons"]["B"][0, 3] = tick % 2
+            env.step()
+            row = env.current_frame[0]
+            order = row["slots"]["source_player"]
+            assert sorted(order) == [0, 1, 2, 3] and order[0] == viewpoint
+            assert not row["slots"]["stored"]["wall_jumps"].any() and np.all(row["slots"]["stored"]["character_byte"] == 0)
+            for char, stored in zip(row["slots"]["char_id"], row["slots"]["stored"]):
+                seen[char].add(int(stored["spent"]))
+                if char == peach:
+                    timer = float(stored["character_value_bits"].view("<f4"))
+                    longest = max(longest, timer)
+                    timer_left_after_landing |= timer > 0 and stored["spent"] == 0
+                else:
+                    assert stored["character_value_bits"] == 0
+        assert seen[peach] == {0, floated} and longest > 100 and timer_left_after_landing
+        assert seen[marth] == {0, side} and seen[mario] == {0, side}
+        assert seen[luigi] == {0, down}
+        # Back on the ground: only Luigi's is still spent.
+        final = dict(zip(row["slots"]["char_id"], row["slots"]["stored"]["spent"]))
+        assert final == {peach: 0, marth: 0, mario: 0, luigi: down}
+
+
 def test_peach_pull_throw_reserves_runtime_items(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=64, length=128, num_players=4) as env:
@@ -84,7 +322,17 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     assert dtypes.controller_input_dtype().itemsize == 112
     assert dtypes.input_dtype().itemsize == 32
     assert dtypes.match_config_dtype().itemsize == 52
-    assert dtypes.gamestate_dtype().itemsize == 1208
+    assert dtypes.gamestate_dtype().itemsize == 1272
+    assert dtypes.gamestate_stored_dtype().itemsize == 8
+    assert dtypes.gamestate_stored_dtype().fields["spent"][1] == 1
+    assert dtypes.gamestate_stored_dtype().fields["wall_jumps"][1] == 2
+    assert dtypes.gamestate_stored_dtype().fields["character_byte"][1] == 3
+    assert dtypes.gamestate_stored_dtype().fields["character_value_bits"][1] == 4
+    assert np.dtype(dtypes.gamestate_dtype().descr) == dtypes.gamestate_dtype()
+    assert dtypes.gamestate_player_dtype().itemsize == 64
+    assert dtypes.gamestate_player_dtype().fields["stored"][1] == 56
+    assert dtypes.gamestate_dtype().fields["items"][1] == 296
+    assert dtypes.gamestate_dtype().fields["followers"][1] == 1016
     assert dtypes.gamestate_stage_dtype().itemsize == 24
     assert dtypes.gamestate_stage_dtype().fields["whispy"][1] == 20
     assert dtypes.terminal_dtype().itemsize == 16

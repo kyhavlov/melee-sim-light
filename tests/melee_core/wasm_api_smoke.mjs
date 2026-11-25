@@ -25,7 +25,9 @@ const INVALID_STATE = 3;
 const CONFIG_SIZE = MATCH_CONFIG_SIZE;
 const INPUT_SIZE = 52;
 const STATE_SIZE = 1302;
-const OBSERVATION_SIZE = 1208;
+const OBSERVATION_SIZE = 1272;
+const OBSERVATION_SLOTS_OFFSET = 40;
+const OBSERVATION_PLAYER_SIZE = 64;
 const TERMINAL_SIZE = 16;
 const VIEWER_SIZE = VIEWER_STATE_SIZE;
 const MATCH_COUNT = 2;
@@ -184,9 +186,11 @@ try {
   assert.equal(view().getUint32(viewers + 8, true), 32);
   assert.equal(module.HEAPU8[viewers + 16], 2);
   assert.equal(module.HEAPU8[observations + 13], 1);
-  assert.equal(module.HEAPU8[observations + 40 + 1], 1);
+  const firstSlots = observations + OBSERVATION_SLOTS_OFFSET;
+  assert.equal(module.HEAPU8[firstSlots + 1], 1);
+  assert.equal(module.HEAPU8[firstSlots + OBSERVATION_PLAYER_SIZE + 1], 0);
   assert.equal(
-    module.HEAPU8[observations + OBSERVATION_SIZE + 40 + 1],
+    module.HEAPU8[firstSlots + OBSERVATION_SIZE + 1],
     0,
   );
   callOk(

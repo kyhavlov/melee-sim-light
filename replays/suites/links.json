@@ -41,6 +41,12 @@
   },
     {
    "replay": "replays/validation/links/2025-04_Game_20250420T082949.slpz",
+   "stored_sidecar": {
+    "path": "replays/validation/links/2025-04_Game_20250420T082949.post320.zst",
+    "replay_sha256": "9ef32b104aba4e925e5886136aa37cbf9f8886270cc892bbedc228612c754189",
+    "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+    "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+   },
    "ports": [
     1,
     2
@@ -593,6 +599,12 @@
   },
     {
    "replay": "replays/validation/links/slpfiles-2026-01_Game_20260128T184810.slpz",
+   "stored_sidecar": {
+    "path": "replays/validation/links/slpfiles-2026-01_Game_20260128T184810.post320.zst",
+    "replay_sha256": "06e286c76ee160375ff545c9ba3c8edbeee74a5bb6fc48c0253c74062fedd5a2",
+    "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+    "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+   },
    "ports": [
     1,
     2

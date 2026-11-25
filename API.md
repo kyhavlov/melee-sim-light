@@ -136,6 +136,55 @@ Top-level fields:
 | `jumps_left` | `uint8_t` | remaining air jumps |
 | `hurtbox_state` | `uint8_t` | GALE01 hurtbox state id |
 | `invulnerable` | `uint8_t` | `0` or `1` |
+| `stored` | `MslObservationStored` | Slippi stored state |
+
+`MslObservationStored`:
+
+| field | type | values / range |
+| --- | --- | --- |
+| `charge` | `uint8_t` | stored charge count |
+| `spent` | `uint8_t` | OR of `MSL_SPENT_*` |
+| `wall_jumps` | `uint8_t` | manual wall jumps since last grounded |
+| `character_byte` | `uint8_t` | Kirby copy ID or Judge history |
+| `character_value` | `float` | Fire Breath fuel or Peach float timer |
+| `oil_panic_damage` | `int32_t` | Game & Watch's stored bucket damage |
+
+`charge` reports the stored count for these moves. Kirby uses the same range when
+copying Donkey Kong, Sheik, Samus, or Mewtwo. Other fighters and copies report `0`.
+
+| fighter | move | count |
+| --- | --- | --- |
+| Donkey Kong | Giant Punch | `0..10` arm swings |
+| Sheik | Needle Storm | `0..6` stored needles |
+| Samus | Charge Shot | `0..7` charge levels |
+| Mewtwo | Shadow Ball | `0..7` charge levels |
+| Game & Watch | Oil Panic | absorbed projectiles (`0` empty, `3` or more full) |
+
+`spent` is a bitmask. Test a flag with `&`, as in `stored.spent & MSL_SPENT_FLOAT`.
+
+| flag | value | meaning when set |
+| --- | --- | --- |
+| `MSL_SPENT_NEUTRAL_LIFT` | `0x01` | aerial neutral special lift used |
+| `MSL_SPENT_SIDE_LIFT` | `0x02` | aerial side special lift used |
+| `MSL_SPENT_DOWN_LIFT` | `0x04` | aerial down special lift used |
+| `MSL_SPENT_FLOAT` | `0x08` | Peach's float used |
+| `MSL_SPENT_TETHER` | `0x10` | aerial tether used |
+| `MSL_SPENT_AIR_ITEM_CATCH` | `0x20` | aerial item catch used |
+
+- `character_byte` holds Kirby's internal copy ID (`4` means no copy). For Game & Watch,
+  the rightmost four bits hold the latest Judge entry and the leftmost four bits hold
+  the previous one. Each entry stores the hammer number minus one. For example, `0x72`
+  means the latest hammer was 3 and the previous one was 8. Other fighters report `0`.
+- `character_value` is Fire Breath fuel for Bowser or Kirby with Bowser's copy
+  (`40..360`), or Peach's remaining float frames (`0..150`). Ending a float early
+  can leave time in the timer.
+- `oil_panic_damage` is the total damage stored in Game & Watch's bucket.
+  `charge` counts the absorbed projectiles.
+
+The stored record ends with one 32-bit value. Its C union exposes that value as
+`oil_panic_damage` for Game & Watch and as `character_value` for the float cases above.
+It contains zero for all other cases. NumPy exposes the same bits as `character_value_bits`.
+Use `.view("<i4")` for Oil Panic damage or `.view("<f4")` for the float.
 
 `MslItem` slots are fixed-capacity. Inactive slots have `exists == 0`.
 

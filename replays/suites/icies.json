@@ -101,6 +101,12 @@
   },
     {
    "replay": "replays/validation/icies/bf-marth-2025-03_Game_20250321T234954.slpz",
+   "stored_sidecar": {
+    "path": "replays/validation/icies/bf-marth-2025-03_Game_20250321T234954.post320.zst",
+    "replay_sha256": "761d6fc3cfdcc5f69b649aa940754c7826f2a6c5f2319c5cfd63e6984e4814ed",
+    "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+    "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+   },
    "ports": [
     1,
     2
