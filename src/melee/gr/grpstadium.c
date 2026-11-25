@@ -119,7 +119,12 @@ static StageCallbacks grPs_803E126C[] = {
     {
         grStadium_801D1570,
         grStadium_801D15FC,
+#ifdef MSL_CORE_HOSTED
+        // Map 2 runs this adjacent priority-4 refresh on frozen Stadium.
+        NULL,
+#else
         grStadium_801D1604,
+#endif
         grStadium_801D1624,
         0,
     },
@@ -380,7 +385,13 @@ void grStadium_801D1520(Ground_GObj* gobj)
         grStadium_801D4548(gobj);
     }
     lb_800115F4();
+#ifdef MSL_CORE_HOSTED
+    // Map 2 has no collision joints. Map 5 owns joint 4 (grPs_803E1248)
+    // and its transforms are static on the frozen stage.
+    msl_ground_refresh_static_joint(2, 5, 4);
+#else
     Ground_801C2FE0(gobj);
+#endif
 }
 
 void grStadium_801D156C(Ground_GObj* gobj) {}

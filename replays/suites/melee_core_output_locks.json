@@ -1435,6 +1435,15 @@
       }
     },
     {
+      "replay": "replays/validation/icies/diamond-platinum-d7e5ba443ed6f176c1880a44.slpz",
+      "expected": {
+        "native": {
+          "frames": 11028,
+          "actual_output_fingerprint": "a70f7aad69bc45ce"
+        }
+      }
+    },
+    {
       "replay": "replays/validation/icies/dl-fox-2025-05_Game_20250504T134832.slpz",
       "expected": {
         "native": {
