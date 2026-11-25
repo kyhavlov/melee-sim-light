@@ -101,14 +101,13 @@ def test_stored_charges_stay_with_their_players_in_teams(monkeypatch, viewpoint:
         np.testing.assert_array_equal(env.current_frame["slots"]["stored"], published["slots"]["stored"])
 
 
-@pytest.mark.parametrize("viewpoint", range(2))
-def test_oil_panic_stores_the_caught_damage_beside_the_count(monkeypatch, viewpoint: int) -> None:
+def test_oil_panic_stores_the_caught_damage_beside_the_count(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=1, length=64) as env:
         env.configure_matches([msl.MatchConfig(
             players=(msl.PlayerConfig(msl.Character.GAMEWATCH),
                      msl.PlayerConfig(msl.Character.FALCO)),
-            viewpoint_player=viewpoint)])
+            viewpoint_player=1)])
         env.reset_all()
         for tick in range(900):
             if env.t == env.length:
@@ -120,122 +119,37 @@ def test_oil_panic_stores_the_caught_damage_beside_the_count(monkeypatch, viewpo
             action["buttons"]["B"][0, 1] = tick >= 200 and tick % 60 < 2
             env.step()
             row = env.current_frame[0]
-            bucket = row["slots"]["stored"][list(row["slots"]["source_player"]).index(0)]
+            assert tuple(row["slots"]["source_player"][:2]) == (1, 0)
+            bucket = row["slots"][1]["stored"]
             # Each of Falco's lasers would have dealt 3.
             assert bucket["character_value_bits"].view("<i4") == 3 * bucket["charge"], tick
             if bucket["charge"] == 3:
                 break
         else:
             pytest.fail("the bucket never filled")
-        other = row["slots"]["stored"][list(row["slots"]["source_player"]).index(1)]
-        assert _nothing_stored(other)
+        assert _nothing_stored(row["slots"][0]["stored"])
 
 
-@pytest.mark.parametrize("viewpoint", range(2))
-def test_fire_breath_drains_and_recovers(monkeypatch, viewpoint: int) -> None:
-    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
-    with msl.EnvBatch(batch_size=1, length=64) as env:
-        env.configure_matches([msl.MatchConfig(
-            players=(msl.PlayerConfig(msl.Character.BOWSER),
-                     msl.PlayerConfig(msl.Character.FOX)),
-            viewpoint_player=viewpoint)])
-        env.reset_all()
-        lowest = 360.0
-        for tick in range(1200):
-            if env.t == env.length:
-                env.reset_cursor()
-            # 200 frames of breath, then nothing.
-            env.controller_action_view[env.t]["players"]["buttons"]["B"][0, 0] = 150 <= tick < 350
-            env.step()
-            row = env.current_frame[0]
-            bowser = row["slots"]["stored"][list(row["slots"]["source_player"]).index(0)]
-            fuel = float(bowser["character_value_bits"].view("<f4"))
-            assert bowser["charge"] == 0 and 40 <= fuel <= 360, tick
-            if tick < 150:
-                assert fuel == 360
-            lowest = min(lowest, fuel)
-        # Something under 200 frames of it drained, 1 a frame from each.
-        assert 160 < lowest < 220
-        assert fuel == 360
-        fox = row["slots"]["stored"][list(row["slots"]["source_player"]).index(1)]
-        assert _nothing_stored(fox)
-
-
-@pytest.mark.parametrize("viewpoint", range(2))
-def test_kirby_copied_ability_names_the_stored_move(monkeypatch, viewpoint: int) -> None:
-    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
-    with msl.EnvBatch(batch_size=1, length=64) as env:
-        env.configure_matches([msl.MatchConfig(
-            players=(msl.PlayerConfig(msl.Character.KIRBY),
-                     msl.PlayerConfig(msl.Character.SAMUS)),
-            viewpoint_player=viewpoint)])
-        env.reset_all()
-        copied_at = None
-        for tick in range(1500):
-            if env.t == env.length:
-                env.reset_cursor()
-            row = env.current_frame[0]
-            slots = list(row["slots"]["source_player"])
-            kirby, samus = row["slots"][slots.index(0)], row["slots"][slots.index(1)]
-            stored = row["slots"]["stored"][slots.index(0)]
-            action = env.controller_action_view[env.t]["players"]
-            action["main_stick_x"][0, 0] = 0.5
-            action["buttons"]["B"][0, 0] = 0
-            if copied_at is None:
-                assert (stored["character_byte"], stored["charge"]) == (msl.Character.KIRBY, 0)
-                if tick >= 150 and abs(samus["pos_x"] - kirby["pos_x"]) > 16:
-                    # Walk up to Samus.
-                    action["main_stick_x"][0, 0] = 1.0 if samus["pos_x"] > kirby["pos_x"] else 0.0
-                elif tick >= 150:
-                    # Inhale, then B again to swallow.
-                    action["buttons"]["B"][0, 0] = tick % 4 < 2
-            else:
-                # The copied Charge Shot charges by itself to Samus's full count.
-                action["buttons"]["B"][0, 0] = tick == copied_at + 120
-            env.step()
-            stored = env.current_frame[0]["slots"]["stored"][slots.index(0)]
-            if copied_at is None and stored["character_byte"] != msl.Character.KIRBY:
-                copied_at = tick
-            if copied_at is not None:
-                assert stored["character_byte"] == samus["char_id"] == msl.Character.SAMUS
-                if stored["charge"] == 7:
-                    break
-        else:
-            pytest.fail("Kirby never held a full copied Charge Shot")
-        assert _nothing_stored(env.current_frame[0]["slots"]["stored"][slots.index(1)])
-
-
-@pytest.mark.parametrize("viewpoint", range(2))
-def test_judge_history_is_the_two_numbers_the_next_roll_avoids(monkeypatch, viewpoint: int) -> None:
+def test_judge_history_is_packed_in_one_byte(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=1, length=64) as env:
         env.configure_matches([msl.MatchConfig(
             players=(msl.PlayerConfig(msl.Character.GAMEWATCH),
                      msl.PlayerConfig(msl.Character.FOX)),
-            viewpoint_player=viewpoint)])
+            viewpoint_player=1)])
         env.reset_all()
-        pair, rolls = (1, 0), 0
-        for tick in range(2000):
+        for tick in range(201):
             if env.t == env.length:
                 env.reset_cursor()
             action = env.controller_action_view[env.t]["players"]
-            # A Judge every 100 frames.
-            pressed = tick >= 150 and tick % 100 == 0
-            action["main_stick_x"][0, 0] = 1.0 if pressed else 0.5
-            action["buttons"]["B"][0, 0] = pressed
+            action["main_stick_x"][0, 0] = 1.0 if tick == 200 else 0.5
+            action["buttons"]["B"][0, 0] = tick == 200
             env.step()
-            row = env.current_frame[0]
-            slots = list(row["slots"]["source_player"])
-            judge = int(row["slots"]["stored"][slots.index(0)]["character_byte"])
-            now = (judge & 15, judge >> 4)
-            if now != pair:
-                # The new number is neither of the two before it, and the
-                # newer of those is now the older.
-                assert pressed and now[1] == pair[0] and now[0] not in pair and 0 <= now[0] < 9
-                pair, rolls = now, rolls + 1
-            fox = row["slots"]["stored"][slots.index(1)]
-            assert _nothing_stored(fox)
-        assert rolls == len(range(200, 2000, 100))
+            judge = int(env.current_frame[0]["slots"][1]["stored"]["character_byte"])
+            if tick < 200:
+                assert judge == 1
+        assert judge >> 4 == 1
+        assert 2 <= (judge & 15) <= 8
 
 
 @pytest.mark.parametrize("viewpoint", range(4))

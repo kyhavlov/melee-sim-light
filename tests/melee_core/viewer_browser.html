@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Live viewer test</title>
+  </head>
+  <body>
+    <slippi-viewer></slippi-viewer>
+    <p id="status"></p>
+    <p id="input-status"></p>
+    <button id="reset"></button>
+    <button id="save-trace"></button>
+    <button id="connect-adapter"></button>
+    <select id="adapter-port"><option value="0">1</option></select>
+    <button id="control-p1"></button>
+    <button id="control-p2"></button>
+    <select id="p1-character"></select>
+    <select id="p2-character"></select>
+    <div id="stage-selector"></div>
+    <script>
+      class TestViewer extends HTMLElement {
+        setLiveReplayData(data) { this.replayData = data; }
+        pausePlayback() {}
+        setFrame(frame) { this.frame = frame; }
+        setFrameData(frame, data) { this.frame = frame; this.frameData = data; }
+      }
+      customElements.define("slippi-viewer", TestViewer);
+    </script>
+    <script type="module" src="/tools/viewer/live/main.js"></script>
+  </body>
+</html>

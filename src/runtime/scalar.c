@@ -1472,7 +1472,7 @@ static int match_construct(MslCoreMatch* match,
     // mem-piece pools first -- so Samus keeps its established 256 per fighter
     // rather than being reduced to Ness's measured rate.
     // refs/melee/src/melee/it/items/{itnesspkflashexplode.c,itsamusgrapple.c}
-    // tests/melee_core/article_pool_smoke.c
+    // tests/melee_core/article_pool.c
     // Chaos soaks measured two more lineups sitting close to the flat base:
     // four Link peaked at 258 live FObjs and four Peach at 240 against the
     // 283-slot capacity it bought them. Link and Young Link overlap bow,
@@ -1481,7 +1481,7 @@ static int match_construct(MslCoreMatch* match,
     // tests/melee_core/pool_chaos_soak.c
     // Five forward-throw Shadow Ball graphs use 185 tracks per Mewtwo.
     // Reserve that burst per fighter; the 20-shot stress leaves at least 20%
-    // headroom. it_802C519C -> Item_80268E5C; mewtwo_smoke.c.
+    // headroom. it_802C519C -> Item_80268E5C; tests/melee_core/mewtwo_moves.c.
     HSD_ObjAllocEnsureFree(HSD_FObjGetAllocData(),
                            256 + 128 * ness_count + 256 * samus_count +
                                32 * link_count + 32 * peach_count +
