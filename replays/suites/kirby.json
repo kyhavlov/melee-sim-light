@@ -125,6 +125,12 @@
     },
     {
       "replay": "replays/validation/kirby/greg_zelda_20240826T194839.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/kirby/greg_zelda_20240826T194839.post320.zst",
+        "replay_sha256": "fad555203fc5021e3e0c94d1b1017310407af2f2ce995a087815ebaac8a83744",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2
@@ -233,6 +239,12 @@
     },
     {
       "replay": "replays/validation/kirby/scripted_samus_20260920T123226.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/kirby/scripted_samus_20260920T123226.post320.zst",
+        "replay_sha256": "5f06e8996654c53ba8401d58eec468818e04566f789d66ee09757198dbd5c107",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2
@@ -281,6 +293,12 @@
     },
     {
       "replay": "replays/validation/kirby/scripted_mewtwo_20260920T123352.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/kirby/scripted_mewtwo_20260920T123352.post320.zst",
+        "replay_sha256": "7078def3eb47d2fcb1c41fdf52cf671ef673f12f3853d768f2d11e4f078e8bc5",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2
@@ -293,6 +311,12 @@
     },
     {
       "replay": "replays/validation/kirby/scripted_dk_20260920T123401.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/kirby/scripted_dk_20260920T123401.post320.zst",
+        "replay_sha256": "0a43169b49835256ebdb7066fa72ff88b64688f3dc2105581d59575573d21ee4",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2

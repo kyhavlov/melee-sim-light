@@ -70,9 +70,10 @@ def test_stockout_disappears_after_ko_and_returns_on_stock_share(monkeypatch):
             pytest.fail('fighter never finished its final KO')
         assert saw_ko
         assert (slot['source_player'], slot['team_id'], slot['char_id'], slot['stocks']) == (0, 0, 1, 0)
+        zero = np.zeros((), dtype=slot.dtype)
         for name in slot.dtype.names:
             if name not in ('source_player', 'team_relation', 'team_id', 'char_id', 'stocks'):
-                assert np.all(slot[name] == 0), name
+                np.testing.assert_array_equal(slot[name], zero[name], err_msg=name)
         # Observing and restoring preserve the absence contract and roster.
         snapshot = env.save(0)
         env.reset_cursor()

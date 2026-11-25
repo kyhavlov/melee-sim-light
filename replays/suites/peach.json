@@ -11,6 +11,12 @@
     },
     {
       "replay": "replays/validation/peach/peach_demo_1.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/peach/peach_demo_1.post320.zst",
+        "replay_sha256": "0be0712d0cd32ca76fd537718566204511b7118246c23d36c39683b867b9f1f7",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2

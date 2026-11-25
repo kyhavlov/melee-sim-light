@@ -29,6 +29,12 @@
     },
     {
       "replay": "replays/validation/mewtwo_interactions/absorb.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/mewtwo_interactions/absorb.post320.zst",
+        "replay_sha256": "76b3c3911214e3659a48ab82b536b4feddcbbfd8c1a533732bc6320dcc607ca2",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2
@@ -77,6 +83,12 @@
     },
     {
       "replay": "replays/validation/mewtwo_interactions/missile_early.slpz",
+      "stored_sidecar": {
+        "path": "replays/validation/mewtwo_interactions/missile_early.post320.zst",
+        "replay_sha256": "45fbdafe89af171bfbf8f6b33069a1ee3d9c8517469212be642ed8a25e9304d5",
+        "playback_build": "Linux Playback AppImage SHA-256 b26527c782e640ca52886d16d3886b9d0741a17d7ceb5addd2a6974e9ed66d54",
+        "recording_codeset": "project-slippi/Ishiiruka v3.7.0 Data/PlaybackGeckoCodes/GALE01r2.ini"
+      },
       "ports": [
         1,
         2

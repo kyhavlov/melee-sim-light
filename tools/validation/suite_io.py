@@ -6,6 +6,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from tools.validation.stored import StoredSidecar
+
 
 @dataclass(frozen=True)
 class SuiteReplay:
@@ -21,6 +23,7 @@ class SuiteReplay:
     played_on: str | None = None
     fnmsubs_profile: str | None = None
     jit_arithmetic: str | None = None
+    stored_sidecar: StoredSidecar | None = None
 
 
 @dataclass(frozen=True)
@@ -181,6 +184,7 @@ def _load_suite(path: Path, stack: tuple[Path, ...]) -> ReplaySuite:
                 played_on=(str(r["played_on"]) if "played_on" in r else None),
                 fnmsubs_profile=fnmsubs_profile,
                 jit_arithmetic=jit_arithmetic,
+                stored_sidecar=StoredSidecar(**r["stored_sidecar"]) if "stored_sidecar" in r else None,
             )
         )
     replay_path_counts = Counter(replay.replay for replay in replays)

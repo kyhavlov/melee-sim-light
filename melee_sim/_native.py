@@ -55,14 +55,19 @@ def library() -> ctypes.CDLL:
     lib.msl_batch_destroy.argtypes = [pointer]
     lib.msl_batch_size.argtypes = [pointer]
     lib.msl_batch_size.restype = u32
-    lib.msl_batch_reset.argtypes = [pointer, pointer, pointer, pointer]
-    lib.msl_batch_reset.restype = ctypes.c_int
-    lib.msl_batch_step.argtypes = [pointer, pointer, pointer, pointer]
-    lib.msl_batch_step.restype = ctypes.c_int
-    lib.msl_batch_step_masked.argtypes = [pointer, pointer, pointer, pointer, pointer]
-    lib.msl_batch_step_masked.restype = ctypes.c_int
-    lib.msl_batch_observe.argtypes = [pointer, pointer, pointer]
-    lib.msl_batch_observe.restype = ctypes.c_int
+    for name, args in (
+        ("msl_batch_reset", [pointer, pointer, pointer, pointer]),
+        ("msl_batch_step", [pointer, pointer, pointer, pointer]),
+        ("msl_batch_step_masked", [pointer, pointer, pointer, pointer, pointer]),
+        ("msl_batch_observe", [pointer, pointer, pointer]),
+    ):
+        try:
+            function = getattr(lib, f"{name}_v2")
+        except AttributeError as exc:
+            raise NativeError("native library has an incompatible observation ABI") from exc
+        function.argtypes = args
+        function.restype = ctypes.c_int
+        setattr(lib, name, function)
     lib.msl_batch_copy.argtypes = [pointer, pointer, pointer, pointer, u32]
     lib.msl_batch_copy.restype = ctypes.c_int
     lib.msl_batch_save_size.argtypes = [pointer, u32, ctypes.POINTER(size)]

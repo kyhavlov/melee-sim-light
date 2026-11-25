@@ -224,7 +224,10 @@ typedef struct StreamState {
   uint8_t write_buf[IO_CHUNK_BYTES];
   size_t write_len;
   size_t write_off;
-  uint8_t output_row[sizeof(MslCoreCompare)];
+  uint8_t output_row[sizeof(MslCoreCompare) + sizeof(MslCoreStoredFrame)];
+  size_t output_size;
+  const uint8_t* stored_expected;
+  int64_t stored_fighter_rows;
   size_t output_have;
   uint8_t header_written;
   uint8_t server_protocol;
@@ -1806,16 +1809,83 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
   return result->mismatch_count == mismatch_before;
 }
 
+// The expected table is indexed by finalized frame and physical controller
+// port. The runner writes the same records in compact match-slot order.
+static int check_stored_coverage(const ReplayView* replay, const FrameRows* rows,
+                                 const uint8_t* expected, Py_ssize_t size) {
+  const size_t stride = 1 + sizeof(MslCoreStoredFrame);
+  if (size < 4 || (size - 4) % stride != 0 || (size - 4) / stride != (size_t)rows->count) {
+    PyErr_SetString(PyExc_ValueError, "stored fighter state has incorrect frame coverage");
+    return -1;
+  }
+  int32_t first = (int32_t)msl_core_get_le32(expected);
+  for (int64_t pos = 0; pos < rows->count; ++pos) {
+    uint8_t mask = 0;
+    int32_t frame = get_i32(&replay->frame_id, rows->raw[pos]);
+    for (int player = 0; player < replay->num_players; ++player) {
+      int port = replay->port_1based[player] - 1;
+      mask |= rows->player_present[player][pos] << port;
+      mask |= rows->follower_present[player][pos] << (MSL_CORE_MAX_PLAYERS + port);
+    }
+    if (frame != (int64_t)first + pos || mask != expected[4 + stride * pos]) {
+      PyErr_Format(PyExc_ValueError, "stored fighter state has incorrect coverage at frame %d",
+                   frame);
+      return -1;
+    }
+  }
+  return 0;
+}
+
+static int compare_stored(StreamState* state, int64_t pos, int32_t frame) {
+  const size_t record = sizeof(MslObservationStored);
+  const size_t stride = 1 + sizeof(MslCoreStoredFrame);
+  const uint8_t* expected = state->stored_expected + 4 + stride * pos;
+  const uint8_t* actual = state->output_row + sizeof(MslCoreCompare);
+  const uint8_t present = *expected++;
+  const int64_t before = state->result.mismatch_count;
+  static const char* fields[2][5] = {
+    { "stored.charge", "stored.spent", "stored.wall_jumps", "stored.character_byte",
+      "stored.character_value_bits" },
+    { "follower_stored.charge", "follower_stored.spent", "follower_stored.wall_jumps",
+      "follower_stored.character_byte", "follower_stored.character_value_bits" },
+  };
+  for (int follower = 0; follower < 2; ++follower) {
+    for (int player = 0; player < state->replay->num_players; ++player) {
+      int port = state->replay->port_1based[player] - 1;
+      int expected_slot = MSL_CORE_MAX_PLAYERS * follower + port;
+      if ((present & (1U << expected_slot)) == 0) {
+        continue;
+      }
+      const uint8_t* want = expected + record * expected_slot;
+      const uint8_t* got = actual + record * (MSL_CORE_MAX_PLAYERS * follower + player);
+      ++state->stored_fighter_rows;
+      if (memcmp(want, got, record) == 0) {
+        continue;
+      }
+      for (int field = 0; field < 5; ++field) {
+        FieldKind kind = field == 4 ? FIELD_U32 : FIELD_U8;
+        size_t width = field_width(kind);
+        uint32_t want_bits = load_bits(want + field, width);
+        uint32_t got_bits = load_bits(got + field, width);
+        if (want_bits != got_bits) {
+          record_detail(&state->result, frame, fields[follower][field], player, kind,
+                        want_bits, got_bits);
+        }
+      }
+    }
+  }
+  return state->result.mismatch_count == before;
+}
+
 static void refill_write_buffer(StreamState* state) {
   state->write_len = 0;
   state->write_off = 0;
   if (!state->header_written) {
     if (state->server_protocol) {
-      uint32_t frame_count = (uint32_t)(state->process_end_pos + 1);
-      state->write_buf[state->write_len++] = (uint8_t)frame_count;
-      state->write_buf[state->write_len++] = (uint8_t)(frame_count >> 8);
-      state->write_buf[state->write_len++] = (uint8_t)(frame_count >> 16);
-      state->write_buf[state->write_len++] = (uint8_t)(frame_count >> 24);
+      msl_core_put_le32(state->write_buf, (uint32_t)(state->process_end_pos + 1));
+      msl_core_put_le32(state->write_buf + 4,
+                       state->stored_expected ? MSL_CORE_STREAM_STORED : 0);
+      state->write_len = 8;
     }
     memcpy(state->write_buf + state->write_len, &state->config, sizeof(state->config));
     state->write_len += sizeof(state->config);
@@ -1892,13 +1962,13 @@ static void refill_write_buffer(StreamState* state) {
 static int consume_output(StreamState* state, const uint8_t* data, size_t size, char* error,
                           size_t error_size) {
   while (size != 0) {
-    size_t remaining = sizeof(state->output_row) - state->output_have;
+    size_t remaining = state->output_size - state->output_have;
     size_t take = size < remaining ? size : remaining;
     memcpy(state->output_row + state->output_have, data, take);
     state->output_have += take;
     data += take;
     size -= take;
-    if (state->output_have == sizeof(state->output_row)) {
+    if (state->output_have == state->output_size) {
       int64_t logical_pos = state->output_rows++;
       if (logical_pos > state->process_end_pos) {
         snprintf(error, error_size, "core runner produced too many rows");
@@ -1909,8 +1979,12 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
         int64_t frame = get_i32(&state->replay->frame_id, raw);
         const MslCoreCompare* actual = (const MslCoreCompare*)(const void*)state->output_row;
         fingerprint_actual_output(&state->result, actual);
-        if (compare_row(state->replay, state->rows, logical_pos, actual, state->signed_zero_equal,
-                        &state->result)) {
+        int matches = compare_row(state->replay, state->rows, logical_pos, actual,
+                                  state->signed_zero_equal, &state->result);
+        if (state->stored_expected) {
+          matches = compare_stored(state, logical_pos, (int32_t)frame) && matches;
+        }
+        if (matches) {
           state->result.matched_frames += 1;
           state->result.strict_suffix_frames += 1;
           if (state->result.first_mismatch_frame == INT64_MIN) {
@@ -2112,13 +2186,14 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
     snprintf(error, error_size, "posix_spawn file action: %s", strerror(spawn_error));
     goto done;
   }
+  char* stream = state->stored_expected ? "--stream-stored" : "--stream";
   if (direct_native) {
-    char* const argv[] = {(char*)binary_path, (char*)data_root, "--stream", NULL};
+    char* const argv[] = {(char*)binary_path, (char*)data_root, stream, NULL};
     spawn_error = posix_spawn(&child, binary_path, &actions, NULL, argv, environ);
   } else {
     char* const argv[] = {
         (char*)qemu_path, "-L", (char*)sysroot, (char*)binary_path, (char*)data_root,
-        "--stream",       NULL};
+        stream,           NULL};
     spawn_error = posix_spawn(&child, qemu_path, &actions, NULL, argv, environ);
   }
   if (spawn_error != 0) {
@@ -2322,6 +2397,7 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
   } while (0)
   PUT("pass", PyBool_FromLong(passed));
   PUT("frames", PyLong_FromLongLong(compare_count));
+  PUT("stored_fighter_rows", PyLong_FromLongLong(state->stored_fighter_rows));
   PUT("available", PyLong_FromLongLong(rows->count - state->compare_start_pos));
   PUT("processed", PyLong_FromLongLong(state->process_end_pos));
   PUT("total", PyLong_FromLongLong(rows->count - 1));
@@ -2438,6 +2514,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "fnmsubs_profile",
       "slippi_patches",
       "jit_arithmetic",
+      "stored_expected",
       NULL,
   };
   PyObject* frames_obj;
@@ -2463,6 +2540,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   const char* fnmsubs_profile = NULL;
   int slippi_patches = 0;
   int jit_arithmetic = 0;
+  const uint8_t* stored_expected = NULL;
+  Py_ssize_t stored_expected_size = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2481,13 +2560,13 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiizii:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiziiy#:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &slippi_patches,
-          &jit_arithmetic)) {
+          &jit_arithmetic, &stored_expected, &stored_expected_size)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2554,6 +2633,14 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
                          error, sizeof(error)) != 0) {
     PyErr_SetString(PyExc_ValueError, error);
     goto done;
+  }
+  state.output_size = sizeof(MslCoreCompare);
+  if (stored_expected_size != 0) {
+    if (check_stored_coverage(&replay, &rows, stored_expected, stored_expected_size) != 0) {
+      goto done;
+    }
+    state.stored_expected = stored_expected;
+    state.output_size += sizeof(MslCoreStoredFrame);
   }
   if (start_frame_obj != Py_None) {
     long long requested = PyLong_AsLongLong(start_frame_obj);

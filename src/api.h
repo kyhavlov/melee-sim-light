@@ -172,6 +172,31 @@ typedef struct MslItem {
   uint8_t misc3;
 } MslItem;
 
+// MslObservationStored.spent uses Slippi's Post-Frame flag assignments.
+enum {
+  MSL_SPENT_NEUTRAL_LIFT = 1 << 0,
+  MSL_SPENT_SIDE_LIFT = 1 << 1,
+  MSL_SPENT_DOWN_LIFT = 1 << 2,
+  MSL_SPENT_FLOAT = 1 << 3,
+  MSL_SPENT_TETHER = 1 << 4,
+  MSL_SPENT_AIR_ITEM_CATCH = 1 << 5,
+};
+
+// Slippi 3.20's fighter state from the Post-Frame update. An absent fighter
+// has a zero record. Multi-byte values in the observation are little-endian.
+typedef struct MslObservationStored {
+  uint8_t charge;
+  uint8_t spent;
+  uint8_t wall_jumps;
+  // Kirby's internal copy ID (Kirby's own ID means no copy), or Game &
+  // Watch's Judge history (most recent in the low nibble, 0 = hammer 1).
+  uint8_t character_byte;
+  union {
+    float character_value;    // Fire Breath fuel or Peach's float timer.
+    int32_t oil_panic_damage; // Game & Watch only.
+  };
+} MslObservationStored;
+
 typedef struct MslObservationPlayer {
   uint8_t present; /* Fighter is awake; roster metadata remains when absent. */
   uint8_t source_player; /* UINT8_MAX for unused roster slots. */
@@ -198,6 +223,7 @@ typedef struct MslObservationPlayer {
   uint8_t hurtbox_state;
   uint8_t invulnerable;
   uint8_t _pad0;
+  MslObservationStored stored;
 } MslObservationPlayer;
 
 typedef struct MslObservationRandall {
@@ -269,6 +295,13 @@ MSL_API MslResult msl_batch_create(const char* data_root, uint32_t batch_size,
                                    MslBatch** out_batch);
 MSL_API void msl_batch_destroy(MslBatch* batch);
 MSL_API uint32_t msl_batch_size(const MslBatch* batch);
+
+// Name the observation-writing exports by layout so an older binary cannot
+// resolve them against a library that writes a larger observation.
+#define msl_batch_reset msl_batch_reset_v2
+#define msl_batch_step msl_batch_step_v2
+#define msl_batch_step_masked msl_batch_step_masked_v2
+#define msl_batch_observe msl_batch_observe_v2
 
 // A NULL reset mask resets every environment; otherwise nonzero bytes select.
 MSL_API MslResult msl_batch_reset(MslBatch* batch, const MslMatchConfig configs[],

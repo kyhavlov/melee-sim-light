@@ -10,7 +10,7 @@ _SIZES = {
     "controller_input": 112,
     "input": 32,
     "match_config": 52,
-    "gamestate": 1208,
+    "gamestate": 1272,
     "terminal": 16,
 }
 
@@ -157,6 +157,20 @@ def item_dtype() -> np.dtype:
 
 
 @lru_cache(maxsize=1)
+def gamestate_stored_dtype() -> np.dtype:
+    return np.dtype(
+        [
+            ("charge", "u1"),
+            ("spent", "u1"),
+            ("wall_jumps", "u1"),
+            ("character_byte", "u1"),
+            ("character_value_bits", "<u4"),
+        ],
+        align=False,
+    )
+
+
+@lru_cache(maxsize=1)
 def gamestate_player_dtype() -> np.dtype:
     return np.dtype(
         [
@@ -185,6 +199,7 @@ def gamestate_player_dtype() -> np.dtype:
             ("hurtbox_state", "u1"),
             ("invulnerable", "u1"),
             ("_pad0", "u1"),
+            ("stored", gamestate_stored_dtype()),
         ],
         align=False,
     )
