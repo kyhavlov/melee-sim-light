@@ -445,7 +445,8 @@ union ftCommon_MotionVars {
     struct {
         /* fp+2340 */ bool unk_bool;
         /* fp+2344 */ float anim_timer;
-        /* fp+2348 */ UNK_T x8;
+        // Keep the shared CaptureWait jump flag at fp+234C on 64-bit hosts.
+        /* fp+2348 */ int x8;
         /* fp+234C */ u8 xC;
     } thrown;
     struct {
@@ -477,6 +478,11 @@ union ftCommon_MotionVars {
 STATIC_ASSERT(offsetof(union ftCommon_MotionVars, wobbling.count) == 0x44);
 STATIC_ASSERT(offsetof(union ftCommon_MotionVars, wobbling.last_move) == 0x46);
 STATIC_ASSERT(sizeof(((union ftCommon_MotionVars*) 0)->itemthrow) == 0x24);
+#ifdef MSL_CORE_NATIVE
+_Static_assert(offsetof(union ftCommon_MotionVars, thrown.xC) ==
+                   offsetof(union ftCommon_MotionVars, capturewait.xC),
+               "Thrown and CaptureWait must share the jump flag");
+#endif
 
 /// @todo Fake, need to find real size of #HitCapsule
 struct SmallerHitCapsule {
