@@ -67,12 +67,8 @@ MslCoreResult msl_core_batch_restore_match(
 
 #define MSL_CORE_CHECKPOINT_PAGE 4096u
 
-// In-place checkpoint and rollback of one match, for search that steps a
-// match forward and takes the frames back. The buffer holds the match struct
-// followed by its whole arena. `pages` lists the arena pages to copy; NULL
-// copies every page. A rollback returns the bytes to the address they came
-// from, so nothing is relocated and the buffer is only valid for the match it
-// was taken from, until that match is reset, restored or copied into.
+// In-place checkpoints belong to one match generation. A NULL page list
+// captures or restores the whole arena. See src/api.h for the buffer contract.
 MslCoreResult msl_core_batch_checkpoint_size(
     const MslCoreBatch* batch, uint32_t match_index, size_t* required_size);
 MslCoreResult msl_core_batch_checkpoint(
