@@ -728,10 +728,6 @@ static int validate_config(MslCoreMatchConfig* config)
             fprintf(stderr, "player team id must be in the source range 0..2\n");
             return -1;
         }
-        if (config->players[i].start_percent > 100) {
-            fprintf(stderr, "starting percent must be in 0..100\n");
-            return -1;
-        }
     }
     if (config->stock_count == 0) {
         config->stock_count = 4;
@@ -1290,7 +1286,8 @@ static int match_construct(MslCoreMatch* match,
         Player_SetPlayerAndEntityCpuLevel(slot,
                                          match->config.players[i].cpu_level);
         Player_SetTeam(slot, match->config.players[i].team_id);
-        Player_SetStocks(slot, match->config.stock_count);
+        uint8_t start_stocks = match->config.players[i].start_stocks;
+        Player_SetStocks(slot, start_stocks ? start_stocks : match->config.stock_count);
         // Player_SetHUDDamage initializes both player entities; Fighter_Create
         // reads Player_GetDamage before entry, without damage/hitstun callbacks.
         Player_SetHUDDamage(slot, match->config.players[i].start_percent);

@@ -58,11 +58,12 @@ Ban captures with any of these properties, even when they currently compare exac
    assignment and a previously sleeping Sheik/Zelda partner's first L-cancel byte.
    The value may happen to match zeroed simulator memory; it remains ineligible.
 5. **Unsupported settings or gameplay modifications.** Require supported NTSC
-   fighters/stages, UCF, eight-minute, no-random-item rules and Team Attack in
-   teams. Shared starting stock counts, per-player handicaps and positive finite
-   damage ratios are supported; they need not equal the defaults. Stadium must
-   be frozen. The recorded frozen toggle or the source-reviewed older transformation-bypass patch proves
-   that property; an older false toggle alone does not prove unfrozen play.
+   fighters/stages, UCF, no random items, a positive finite damage ratio and
+   Team Attack in teams. Starting stocks, damage and handicap come from each
+   port. A custom timer is allowed for a stockout before the earliest possible
+   expiry. Stadium must be frozen. The recorded frozen toggle or the
+   source-reviewed older transformation-bypass patch proves that property;
+   an older false toggle alone does not prove unfrozen play.
    Unknown modifications require source review. Header and hook checks cannot
    establish the absence of an arbitrary unrecorded modification.
 6. **Incomplete or unreconstructible history.** Require the normal -123 seed,

@@ -56,6 +56,7 @@ int main(void)
     FIELD(MslCoreMatchPlayerConfig, costume_id, "costumeId");
     FIELD(MslCoreMatchPlayerConfig, handicap, "handicap");
     FIELD(MslCoreMatchPlayerConfig, start_percent, "startPercent");
+    FIELD(MslCoreMatchPlayerConfig, start_stocks, "startStocks");
     puts("});");
 
     puts("export const inputPlayerOffsets = Object.freeze({");

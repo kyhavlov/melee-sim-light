@@ -48,8 +48,8 @@ def test_native_preprocessor_writes_packed_benchmark_case(tmp_path: Path) -> Non
     magic, version, header_size, input_size, stored_frames = struct.unpack(
         "<8sIIII", output.read_bytes()[:24]
     )
-    assert magic == b"MSLRPB05"
-    assert version == 5
+    assert magic == b"MSLRPB06"
+    assert version == 6
     assert input_size == 52
     assert stored_frames == frame_count
     assert output.stat().st_size == header_size + input_size * frame_count
@@ -146,7 +146,7 @@ def test_benchmark_preparation_reports_cpu_exclusions(
     prepare(args)
     manifest = output.read_text()
     lines = manifest.splitlines()
-    assert lines[0] == "# MSL replay benchmark cases v5"
+    assert lines[0] == "# MSL replay benchmark cases v6"
     assert len(lines) == 2
     tape, replay = lines[1].split("\t")
     assert replay == STARTER_REPLAY.relative_to(ROOT).as_posix()

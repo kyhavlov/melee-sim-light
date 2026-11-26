@@ -86,6 +86,7 @@ typedef struct MslCoreMatchPlayerConfig {
     uint8_t handicap;
     uint8_t start_percent;
     uint8_t cpu_level; // Zero selects a controller; 1..9 retain a CPU slot.
+    uint8_t start_stocks; // Zero uses MslCoreMatchConfig.stock_count.
 } MslCoreMatchPlayerConfig;
 
 typedef struct MslCoreMatchConfig {
@@ -381,9 +382,9 @@ _Static_assert(sizeof(MslCoreInputPlayer) == 13, "MslCoreInputPlayer wire size")
 _Static_assert(sizeof(MslCoreInput) == 52, "MslCoreInput wire size");
 _Static_assert(sizeof(MslCoreStageEvents) == 132, "stage events wire size");
 _Static_assert(sizeof(MslCoreStreamFrame) == 188, "stream frame wire size");
-_Static_assert(sizeof(MslCoreMatchConfig) == 64,
+_Static_assert(sizeof(MslCoreMatchConfig) == 68,
                "MslCoreMatchConfig wire size");
-_Static_assert(sizeof(MslCoreStreamJobHeader) == 124,
+_Static_assert(sizeof(MslCoreStreamJobHeader) == 128,
                "stream job header wire size");
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreStoredFrame) == 64, "stored fighter frame wire size");

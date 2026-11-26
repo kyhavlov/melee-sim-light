@@ -18,18 +18,18 @@ from tools.validation.validate_replay import (
     load_suite_cases,
     ReplayCase,
 )
-from tools.validation.admission import gecko_codes, require_admissible, slippi_patches
+from tools.validation.admission import gecko_codes, require_admissible, slippi_patches, whispy_patch
 from tools.validation.slpz import replay_path_for_peppi
 
 
-FORMAT_VERSION = 5
+FORMAT_VERSION = 6
 # Export semantics can change without changing the tape layout.
 CACHE_VERSION = 9
 DEFAULT_SUITE = ROOT / "replays/suites/melee_core_aggregate.json"
 DEFAULT_OUTPUT = ROOT / "build/melee_core/benchmark/cases.tsv"
 
 
-def _cache_key(case: ReplayCase) -> str:
+def _cache_key(case: ReplayCase, whispy: int = -1) -> str:
     replay = case.replay
     stat = replay.stat()
     identity = "\0".join(
@@ -51,6 +51,8 @@ def _cache_key(case: ReplayCase) -> str:
         identity += "\0fnmsubs=" + case.fnmsubs_profile
     if case.jit_arithmetic is not None:
         identity += "\0jit=" + case.jit_arithmetic
+    if whispy != -1:
+        identity += f"\0whispy={whispy}"
     return hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
@@ -62,7 +64,7 @@ def _cached_frame_count(path: Path) -> int | None:
     except (OSError, struct.error):
         return None
     if (
-        magic != b"MSLRPB05"
+        magic != b"MSLRPB06"
         or version != FORMAT_VERSION
         or header_size < 24
         or input_size != 52
@@ -104,7 +106,12 @@ def prepare(args: argparse.Namespace) -> None:
                 print(f"skipping replay-only arithmetic: {case.display_path}")
                 skipped_arithmetic += 1
                 continue
-            case_path = case_dir / f"{_cache_key(case)}.mslrpb"
+            codes = None
+            whispy = -1
+            if game.start["stage"] == 28:
+                codes = gecko_codes(peppi_path.read_bytes())
+                whispy = whispy_patch(codes)
+            case_path = case_dir / f"{_cache_key(case, whispy)}.mslrpb"
             frame_count = None if args.force else _cached_frame_count(case_path)
             if frame_count is None:
                 temporary = case_path.with_suffix(f".tmp.{os.getpid()}")
@@ -121,8 +128,11 @@ def prepare(args: argparse.Namespace) -> None:
                         ucf_shield_drop_extended_enabled=case.ucf_shield_drop_extended_enabled,
                         ucf_shield_drop_084_enabled=case.ucf_shield_drop_084_enabled,
                         fnmsubs_profile=case.fnmsubs_profile,
-                        slippi_patches=slippi_patches(gecko_codes(peppi_path.read_bytes())),
+                        slippi_patches=slippi_patches(
+                            codes if codes is not None else gecko_codes(peppi_path.read_bytes())
+                        ),
                         jit_arithmetic=1 if case.jit_arithmetic == "split-fma" else 0,
+                        whispy_dead_fighter_fix=whispy,
                     )
                     os.replace(temporary, case_path)
                 finally:

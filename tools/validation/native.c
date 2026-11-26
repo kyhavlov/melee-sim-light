@@ -147,6 +147,7 @@ typedef struct ReplayView {
   int port_1based[MSL_CORE_MAX_PLAYERS];
   uint8_t team_id[MSL_CORE_MAX_PLAYERS];
   uint8_t start_stocks[MSL_CORE_MAX_PLAYERS];
+  uint8_t start_percent[MSL_CORE_MAX_PLAYERS];
   uint8_t costume_id[MSL_CORE_MAX_PLAYERS];
   uint8_t handicap[MSL_CORE_MAX_PLAYERS];
   uint8_t cpu_level[MSL_CORE_MAX_PLAYERS];
@@ -449,7 +450,15 @@ static int parse_start(PyObject* start, ReplayView* replay) {
       replay->cpu_level[slot] = (uint8_t)cpu_level;
     }
     replay->port_1based[slot] = port;
-    replay->start_stocks[slot] = (uint8_t)PyLong_AsUnsignedLong(stocks_obj);
+    long stocks = PyLong_AsLong(stocks_obj);
+    value = PyDict_GetItemString(player, "damage_start");
+    long percent = value == NULL ? 0 : PyLong_AsLong(value);
+    if (PyErr_Occurred() || stocks < 1 || stocks > UINT8_MAX || percent < 0 || percent > UINT8_MAX) {
+      PyErr_SetString(PyExc_ValueError, "unsupported starting stocks or damage");
+      return -1;
+    }
+    replay->start_stocks[slot] = (uint8_t)stocks;
+    replay->start_percent[slot] = (uint8_t)percent;
     replay->handicap[slot] = (uint8_t)PyLong_AsUnsignedLong(handicap_obj);
     value = PyDict_GetItemString(player, "costume");
     replay->costume_id[slot] =
@@ -481,18 +490,21 @@ static int parse_start(PyObject* start, ReplayView* replay) {
       if (replay->port_1based[j] < replay->port_1based[i]) {
         int port = replay->port_1based[i];
         uint8_t stocks = replay->start_stocks[i];
+        uint8_t percent = replay->start_percent[i];
         uint8_t team = replay->team_id[i];
         uint8_t costume = replay->costume_id[i];
         uint8_t handicap = replay->handicap[i];
         uint8_t cpu_level = replay->cpu_level[i];
         replay->port_1based[i] = replay->port_1based[j];
         replay->start_stocks[i] = replay->start_stocks[j];
+        replay->start_percent[i] = replay->start_percent[j];
         replay->team_id[i] = replay->team_id[j];
         replay->costume_id[i] = replay->costume_id[j];
         replay->handicap[i] = replay->handicap[j];
         replay->cpu_level[i] = replay->cpu_level[j];
         replay->port_1based[j] = port;
         replay->start_stocks[j] = stocks;
+        replay->start_percent[j] = percent;
         replay->team_id[j] = team;
         replay->costume_id[j] = costume;
         replay->handicap[j] = handicap;
@@ -1180,11 +1192,14 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     config->players[i].team_id = replay->team_id[i];
     config->players[i].costume_id = replay->costume_id[i];
     config->players[i].handicap = replay->handicap[i];
+    config->players[i].start_percent = replay->start_percent[i];
     config->players[i].facing_and_port =
         (uint8_t)((replay->port_1based[i] << 1) | (get_f32(&player->direction, player_raw) > 0.0F));
   }
-  if (config->stock_count == 0) {
-    config->stock_count = 1;
+  for (i = 0; i < replay->num_players; ++i) {
+    if (replay->start_stocks[i] != config->stock_count) {
+      config->players[i].start_stocks = replay->start_stocks[i];
+    }
   }
   return 0;
 }
@@ -2515,6 +2530,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "slippi_patches",
       "jit_arithmetic",
       "stored_expected",
+      "whispy_dead_fighter_fix",
       NULL,
   };
   PyObject* frames_obj;
@@ -2542,6 +2558,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int jit_arithmetic = 0;
   const uint8_t* stored_expected = NULL;
   Py_ssize_t stored_expected_size = 0;
+  int whispy_dead_fighter_fix = -1;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -2560,13 +2577,14 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiiziiy#:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiziiy#i:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &slippi_patches,
-          &jit_arithmetic, &stored_expected, &stored_expected_size)) {
+          &jit_arithmetic, &stored_expected, &stored_expected_size,
+          &whispy_dead_fighter_fix)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2590,6 +2608,9 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     goto done;
   }
 
+  if (whispy_dead_fighter_fix >= 0) {
+    replay.whispy_dead_fighter_fix = whispy_dead_fighter_fix != 0;
+  }
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;
   }
@@ -2724,6 +2745,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
       "fnmsubs_profile",
       "slippi_patches",
       "jit_arithmetic",
+      "whispy_dead_fighter_fix",
       NULL,
   };
   PyObject* frames_obj;
@@ -2734,6 +2756,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   const char* fnmsubs_profile = NULL;
   int slippi_patches = 0;
   int jit_arithmetic = 0;
+  int whispy_dead_fighter_fix = -1;
   int ucf_cardinals_1_0_enabled = 1;
   int ucf_shield_sdi_enabled = 1;
   int ucf_sdi_enabled = 1;
@@ -2752,12 +2775,12 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   PyObject* result = NULL;
   (void)self;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppppzii:write_benchmark_case", keywords,
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOs|pppppziii:write_benchmark_case", keywords,
                                    &frames_obj, &start_obj, &metadata_obj, &output_path,
                                    &ucf_cardinals_1_0_enabled, &ucf_shield_sdi_enabled,
                                    &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
                                    &ucf_shield_drop_084_enabled, &fnmsubs_profile, &slippi_patches,
-                                   &jit_arithmetic)) {
+                                   &jit_arithmetic, &whispy_dead_fighter_fix)) {
     return NULL;
   }
   memset(&replay, 0, sizeof(replay));
@@ -2771,6 +2794,9 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
                       "CPU replay inputs cannot be represented in a controller-only benchmark tape");
       goto done;
     }
+  }
+  if (whispy_dead_fighter_fix >= 0) {
+    replay.whispy_dead_fighter_fix = whispy_dead_fighter_fix != 0;
   }
   if (msl_set_fnmsubs_profile(&replay, fnmsubs_profile) != 0) {
     goto done;

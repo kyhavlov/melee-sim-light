@@ -92,6 +92,21 @@ PATCH_ALLOW_WOBBLING = 1 << 1
 PATCH_RETAIL_SPAWNS = 1 << 2
 
 
+def whispy_patch(codes: dict[int, bytes]) -> int:
+    """Return -1 if no Gecko list is available, otherwise the recorded setting."""
+    if not codes:
+        return -1
+    patch = codes.get(0xC208653C)
+    if patch is None:
+        return 0
+    # Online/Core/WhispyBlowDirFix at 0x8008653c.
+    if (len(patch) != 56 or hashlib.sha256(patch[8:-4]).hexdigest() !=
+            "af4349210f7c59046e021bda981813dd3d5ef641ec6fc9d3afd76cb63b6cc79c" or
+            int.from_bytes(patch[-4:], "big") & 0xFC000003 != 0x48000000):
+        raise ValueError("unsupported-whispy-direction-patch")
+    return 1
+
+
 def slippi_patches(codes: dict[int, bytes]) -> int:
     """Identify supported Slippi patches from their recorded instructions."""
     patches = 0
@@ -136,12 +151,13 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
         issues.append("unreviewed-offscreen-patch")
 
     start = game.start
+    timer = start.get("timer")
     if (start.get("stage") not in {2, 3, 8, 28, 31, 32} or
         start.get("is_pal") is not False or
         start.get("is_raining_bombs") is not False or
         start.get("item_spawn_frequency") != -1 or
         not math.isfinite(start.get("damage_ratio", float("nan"))) or
-        start.get("damage_ratio", 0) <= 0 or start.get("timer") != 480 or
+        start.get("damage_ratio", 0) <= 0 or
         start.get("bitfield") not in ([50, 1, 134, 76], [50, 1, 142, 76])):
         issues.append("unsupported-settings")
     if start.get("stage") == 3 and not stadium_is_frozen(start, codes):
@@ -149,15 +165,11 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
     players = start["players"]
     if len(players) not in (2, 3, 4) or (len(players) > 2 and not start.get("is_teams")):
         issues.append("unsupported-settings")
-    # build_match_config carries one shared stock count, individual handicaps
-    # and match_damage_ratio. These supported values need not equal defaults.
-    if len({p.get("stocks") for p in players}) != 1:
-        issues.append("unsupported-settings")
     for player in players:
         if (player.get("character") not in range(26) or
             player.get("type") not in ("Human", "Cpu") or
             player.get("stocks") not in range(1, 256) or player.get("handicap") not in range(1, 10) or
-            player.get("damage_start") != 0 or player.get("damage_spawn") != 0 or
+            player.get("damage_start") not in range(256) or player.get("damage_spawn") != 0 or
             any(player.get(key) != 1 for key in ("offense_ratio", "defense_ratio", "model_scale")) or
             player.get("ucf") != {"dash_back": "Ucf", "shield_drop": "Ucf"}):
             issues.append("unsupported-settings")
@@ -187,6 +199,13 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
         game.end is None or (game.metadata.get("lastFrame") is not None and
                             game.metadata["lastFrame"] != int(frames[-1]))):
         issues.append("incomplete-history")
+    # A nonstandard timer does not affect a stockout before the earliest
+    # possible expiry, even if the clock started on the first recorded frame.
+    if timer not in range(1, 2**32) or (timer != 480 and (
+        not game.end or game.end.get("method") != "Game" or
+        len(frames) < 2 or int(frames[-1]) - int(frames[0]) >= 60 * timer
+    )):
+        issues.append("unsupported-settings")
     ports = game.frames.field("ports")
     for player in players:
         port = player["port"]

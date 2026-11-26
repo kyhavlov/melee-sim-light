@@ -169,7 +169,21 @@ def test_suite_cannot_bypass_strict_admission(monkeypatch, capsys, arguments):
 def test_supported_rule_values_do_not_become_capture_bans(properties_only):
     game, raw = read_game(VALID)
     game.start["damage_ratio"] = 1.2
-    for player in game.start["players"]:
-        player["stocks"] = 3
+    game.start["timer"] = 900
+    game.end = {"method": "Game"}
+    for index, player in enumerate(game.start["players"]):
+        player["stocks"] = 2 + index
+        player["damage_start"] = 108 * index
         player["handicap"] = 8
     assert "unsupported-settings" not in admission.capture_issues(game, raw)
+
+    game.start["players"][-1]["damage_start"] = 256
+    assert "unsupported-settings" in admission.capture_issues(game, raw)
+
+
+@pytest.mark.parametrize("timer,method", [(900, "Time"), (1, "Game")])
+def test_custom_timer_requires_stockout_before_expiry(properties_only, timer, method):
+    game, raw = read_game(VALID)
+    game.start["timer"] = timer
+    game.end = {"method": method}
+    assert "unsupported-settings" in admission.capture_issues(game, raw)

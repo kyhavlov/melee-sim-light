@@ -24,7 +24,7 @@ from tools.validation.slpz import (
     resolve_replay_path,
     set_native_unorder_events,
 )
-from tools.validation.admission import gecko_codes, require_admissible, slippi_patches
+from tools.validation.admission import gecko_codes, require_admissible, slippi_patches, whispy_patch
 from tools.validation.stored import StoredSidecar, expected_stored
 from tools.validation.suite_io import ReplaySuite, display_path_under_repo, load_suite
 
@@ -373,6 +373,7 @@ def validate_one(
             slippi_patches=slippi_patches(codes),
             jit_arithmetic=1 if jit_arithmetic == "split-fma" else 0,
             stored_expected=stored,
+            whispy_dead_fighter_fix=whispy_patch(codes) if game.start.get("stage") == 28 else -1,
         )
     result["admitted"] = not diagnostic
     result["diagnostic"] = diagnostic or signed_zero_equal or frames != 0 or start_frame is not None
