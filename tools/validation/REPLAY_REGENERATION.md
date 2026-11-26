@@ -21,4 +21,21 @@ The converter requires a complete replay with a Game End event.
 
 By default, the converter requires an exact match on the
 [gameplay projection](../../agent_docs/VALIDATION.md). It verifies stored fighter
-state on replays that already contain it.
+state on replays that already contain it. `--disable-strict-exactness` allows
+the differences below when filling in missing stored state. The original
+recorded values are preserved and the manifest counts accepted differences.
+
+| Field | Maximum difference | Conditions |
+| --- | --- | --- |
+| Fighter X or Y position | 0.0002 game units | Includes Nana. |
+| Item X or Y position | 0.002 game units | |
+| Item X or Y velocity | 0.00005 game units/frame | |
+| Nana's self-induced ground X speed | 0.00005 game units/frame | |
+| Grabber's self-induced ground X speed | 0.00001 game units/frame | Both grounded in the same `CatchPull` or `CatchWait` state. One speed must be zero. |
+| Falco's self-induced vertical speed | 1e-20 game units/frame | Both airborne on animation frame 1 of aerial Phantasm. One speed must be zero. |
+| Fox/Falco laser or lowest-charge Shadow Ball angle | 0.000005 radians | The sampled angle byte must agree with a value within two ULPs of the direction of travel on each side. |
+| Fox/Falco laser angle after a shield bounce | 0.00001 radians | The same reconstruction check applies and the validator must identify the bounce on both sides. |
+| Sheik needle trail anchor Y | 0.00001 game units | The sampled bytes must agree with both anchors reconstructed from projectile movement and frame history. |
+| Mario/Dr. Mario cape item state | States 0 and 1 compare equal | These states use the same item script and callbacks. |
+
+The numeric limits are grouped in [the native validator](native.c).

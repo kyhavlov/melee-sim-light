@@ -44,7 +44,7 @@ def _decode_member(archive: ZipFile, member: ZipInfo) -> tuple[str, bytes]:
     return name, raw
 
 
-def _regenerate_member(archive, member, native, pool, timeout):
+def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats):
     try:
         name, raw = _decode_member(archive, member)
         # Peppi's file API need only see one member per worker. Keep its
@@ -106,6 +106,7 @@ def _regenerate_member(archive, member, native, pool, timeout):
             slippi_patches=slippi_patches(codes),
             stored_expected=stored,
             regenerate_slp=b"" if stored else raw,
+            relaxed_floats=relaxed_floats and not stored,
             whispy_dead_fighter_fix=whispy,
         )
     except RuntimeError as exc:
@@ -129,12 +130,19 @@ def _regenerate_member(archive, member, native, pool, timeout):
         "frames": result["frames"],
         "version": game.start["slippi"]["version"],
     }
+    if result["tolerated_values"]:
+        report["status"] = "regenerated_with_tolerance"
+        report["tolerated_values"] = result["tolerated_values"]
+        for field in ("tolerated_laser_angles", "tolerated_shadow_ball_angles",
+                      "tolerated_needle_anchors", "tolerated_cape_states"):
+            if result[field]:
+                report[field] = result[field]
     return (name, raw if stored else result["regenerated_slp"]), report
 
 
 def regenerate_zip(
     source: Path, destination: Path, *, workers: int, cores: tuple[int, ...],
-    start: int = 0, limit: int | None = None, timeout: float = 60,
+    start: int = 0, limit: int | None = None, timeout: float = 60, relaxed_floats: bool = False,
 ) -> dict:
     if source.resolve() == destination.resolve() or destination.exists():
         raise FileExistsError(destination)
@@ -157,7 +165,7 @@ def regenerate_zip(
 
             def submit(member):
                 future = executor.submit(
-                    _regenerate_member, archive, member, native, pool, timeout
+                    _regenerate_member, archive, member, native, pool, timeout, relaxed_floats
                 )
                 jobs[future] = member
 
@@ -211,6 +219,8 @@ def main() -> int:
     parser.add_argument("--workers", type=int, help="number of persistent simulation workers")
     parser.add_argument("--cores", help="comma-separated logical CPUs, one per native worker (Linux)")
     parser.add_argument("--timeout", type=float, default=60, help="timeout per simulation in seconds")
+    parser.add_argument("--disable-strict-exactness", action="store_true",
+                        help="allow the documented regeneration tolerances")
     parser.add_argument("--no-build", action="store_true", help="reuse the native runner and validator")
     args = parser.parse_args()
     cores = ()
@@ -231,7 +241,8 @@ def main() -> int:
     if not args.no_build:
         validation.build_validation(backend="native")
     summary = regenerate_zip(args.archive, destination, workers=workers, cores=cores,
-                             start=args.start, limit=args.limit, timeout=args.timeout)
+                             start=args.start, limit=args.limit, timeout=args.timeout,
+                             relaxed_floats=args.disable_strict_exactness)
     print(json.dumps(summary))
     return int(summary["outcomes"].get("error", 0) != 0)
 

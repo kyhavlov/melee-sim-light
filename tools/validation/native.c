@@ -207,6 +207,11 @@ typedef struct ValidationResult {
   int64_t strict_suffix_frames;
   int64_t render_visibility_mismatch_count;
   int64_t signed_zero_equal_count;
+  int64_t tolerated_values;
+  int64_t tolerated_laser_angles;
+  int64_t tolerated_shadow_ball_angles;
+  int64_t tolerated_needle_anchors;
+  int64_t tolerated_cape_states;
   int64_t mismatch_count;
   uint64_t mismatch_fingerprint;
   uint64_t actual_output_fingerprint;
@@ -215,6 +220,12 @@ typedef struct ValidationResult {
   MismatchDetail details[MAX_DETAILS];
   MismatchField mismatch_fields[MAX_MISMATCH_FIELDS];
 } ValidationResult;
+
+typedef struct NeedleAnchor {
+  float expected;
+  float actual;
+  uint8_t verified;
+} NeedleAnchor;
 
 typedef struct StreamState {
   const ReplayView* replay;
@@ -237,6 +248,11 @@ typedef struct StreamState {
   MslCoreMatchConfig config;
   MslCoreInput previous;
   uint8_t signed_zero_equal;
+  uint8_t relaxed_floats;
+  MslCoreItem previous_expected_items[MSL_CORE_MAX_ITEMS];
+  MslCoreItem previous_actual_items[MSL_CORE_MAX_ITEMS];
+  NeedleAnchor previous_needle_anchors[MSL_CORE_MAX_ITEMS];
+  uint8_t previous_laser_bounces[MSL_CORE_MAX_ITEMS];
   ValidationResult result;
 } StreamState;
 
@@ -1381,6 +1397,19 @@ static void build_expected(const ReplayView* replay, const FrameRows* rows, int6
   }
 }
 
+// Limits used by --disable-strict-exactness during replay regeneration.
+// See REPLAY_REGENERATION.md for the fields and conditions they apply to.
+#define MSL_REGEN_FIGHTER_POSITION_TOLERANCE 0.0002F
+#define MSL_REGEN_NANA_GROUND_SPEED_TOLERANCE 0.00005F
+#define MSL_REGEN_ITEM_POSITION_TOLERANCE 0.002F
+#define MSL_REGEN_ITEM_VELOCITY_TOLERANCE 0.00005F
+#define MSL_REGEN_GRAB_GROUND_SPEED_TOLERANCE 0.00001F
+#define MSL_REGEN_PHANTASM_VERTICAL_SPEED_TOLERANCE 1e-20F
+#define MSL_REGEN_PROJECTILE_ANGLE_TOLERANCE 0.000005
+#define MSL_REGEN_LASER_BOUNCE_ANGLE_TOLERANCE 0.00001
+#define MSL_REGEN_PROJECTILE_ANGLE_ULPS 2
+#define MSL_REGEN_NEEDLE_ANCHOR_TOLERANCE 0.00001
+
 typedef enum FieldKind {
   FIELD_U8,
   FIELD_U16,
@@ -1399,13 +1428,17 @@ typedef struct FieldSpec {
   // report a live Nana; the follower_present lane itself owns life-cycle
   // disagreement.
   uint8_t follower;
+  float tolerance;
 } FieldSpec;
 
 #define SPEC(NAME, MEMBER, COUNT, KIND) \
-  { NAME, offsetof(MslCoreCompare, MEMBER), COUNT, KIND, 0 }
+  { NAME, offsetof(MslCoreCompare, MEMBER), COUNT, KIND, 0, 0 }
 
 #define FOLLOWER_SPEC(NAME, MEMBER, COUNT, KIND) \
-  { NAME, offsetof(MslCoreCompare, MEMBER), COUNT, KIND, 1 }
+  { NAME, offsetof(MslCoreCompare, MEMBER), COUNT, KIND, 1, 0 }
+
+#define MOVEMENT_SPEC(MEMBER, FOLLOWER, TOLERANCE) \
+  { #MEMBER, offsetof(MslCoreCompare, MEMBER), MSL_CORE_MAX_PLAYERS, FIELD_F32, FOLLOWER, TOLERANCE }
 
 static const FieldSpec compare_fields[] = {
     SPEC("frame_id", frame_id, 1, FIELD_I32),
@@ -1415,8 +1448,8 @@ static const FieldSpec compare_fields[] = {
     SPEC("is_teams", is_teams, 1, FIELD_U8),
     SPEC("team_id", team_id, MSL_CORE_MAX_PLAYERS, FIELD_U8),
     SPEC("char_id", char_id, MSL_CORE_MAX_PLAYERS, FIELD_U8),
-    SPEC("pos_x", pos_x, MSL_CORE_MAX_PLAYERS, FIELD_F32),
-    SPEC("pos_y", pos_y, MSL_CORE_MAX_PLAYERS, FIELD_F32),
+    MOVEMENT_SPEC(pos_x, 0, MSL_REGEN_FIGHTER_POSITION_TOLERANCE),
+    MOVEMENT_SPEC(pos_y, 0, MSL_REGEN_FIGHTER_POSITION_TOLERANCE),
     SPEC("speed_air_x_self", speed_air_x_self, MSL_CORE_MAX_PLAYERS, FIELD_F32),
     SPEC("speed_ground_x_self", speed_ground_x_self, MSL_CORE_MAX_PLAYERS, FIELD_F32),
     SPEC("speed_y_self", speed_y_self, MSL_CORE_MAX_PLAYERS, FIELD_F32),
@@ -1445,12 +1478,11 @@ static const FieldSpec compare_fields[] = {
     SPEC("state_flags", state_flags, MSL_CORE_MAX_PLAYERS* MSL_CORE_STATE_FLAGS_BYTES, FIELD_U8),
     FOLLOWER_SPEC("follower_present", follower_present, MSL_CORE_MAX_PLAYERS, FIELD_U8),
     FOLLOWER_SPEC("follower_char_id", follower_char_id, MSL_CORE_MAX_PLAYERS, FIELD_U8),
-    FOLLOWER_SPEC("follower_pos_x", follower_pos_x, MSL_CORE_MAX_PLAYERS, FIELD_F32),
-    FOLLOWER_SPEC("follower_pos_y", follower_pos_y, MSL_CORE_MAX_PLAYERS, FIELD_F32),
+    MOVEMENT_SPEC(follower_pos_x, 1, MSL_REGEN_FIGHTER_POSITION_TOLERANCE),
+    MOVEMENT_SPEC(follower_pos_y, 1, MSL_REGEN_FIGHTER_POSITION_TOLERANCE),
     FOLLOWER_SPEC("follower_speed_air_x_self", follower_speed_air_x_self, MSL_CORE_MAX_PLAYERS,
                   FIELD_F32),
-    FOLLOWER_SPEC("follower_speed_ground_x_self", follower_speed_ground_x_self,
-                  MSL_CORE_MAX_PLAYERS, FIELD_F32),
+    MOVEMENT_SPEC(follower_speed_ground_x_self, 1, MSL_REGEN_NANA_GROUND_SPEED_TOLERANCE),
     FOLLOWER_SPEC("follower_speed_y_self", follower_speed_y_self, MSL_CORE_MAX_PLAYERS, FIELD_F32),
     FOLLOWER_SPEC("follower_speed_x_attack", follower_speed_x_attack, MSL_CORE_MAX_PLAYERS,
                   FIELD_F32),
@@ -1485,6 +1517,7 @@ static const FieldSpec compare_fields[] = {
 
 #undef SPEC
 #undef FOLLOWER_SPEC
+#undef MOVEMENT_SPEC
 
 static size_t field_width(FieldKind kind) {
   switch (kind) {
@@ -1624,10 +1657,14 @@ typedef struct ItemFieldSpec {
   const char* name;
   size_t offset;
   uint8_t kind;
+  float tolerance;
 } ItemFieldSpec;
 
 #define ITEM_SPEC(NAME, MEMBER, KIND) \
-  { NAME, offsetof(MslCoreItem, MEMBER), KIND }
+  { NAME, offsetof(MslCoreItem, MEMBER), KIND, 0 }
+
+#define ITEM_MOVEMENT_SPEC(MEMBER, TOLERANCE) \
+  { "item." #MEMBER, offsetof(MslCoreItem, MEMBER), FIELD_F32, TOLERANCE }
 
 static const ItemFieldSpec item_compare_fields[] = {
     ITEM_SPEC("item.exists", exists, FIELD_U8),
@@ -1636,10 +1673,10 @@ static const ItemFieldSpec item_compare_fields[] = {
     ITEM_SPEC("item.owner", owner, FIELD_U8),
     ITEM_SPEC("item.instance_id", instance_id, FIELD_U16),
     ITEM_SPEC("item.direction", direction, FIELD_F32),
-    ITEM_SPEC("item.vel_x", vel_x, FIELD_F32),
-    ITEM_SPEC("item.vel_y", vel_y, FIELD_F32),
-    ITEM_SPEC("item.pos_x", pos_x, FIELD_F32),
-    ITEM_SPEC("item.pos_y", pos_y, FIELD_F32),
+    ITEM_MOVEMENT_SPEC(vel_x, MSL_REGEN_ITEM_VELOCITY_TOLERANCE),
+    ITEM_MOVEMENT_SPEC(vel_y, MSL_REGEN_ITEM_VELOCITY_TOLERANCE),
+    ITEM_MOVEMENT_SPEC(pos_x, MSL_REGEN_ITEM_POSITION_TOLERANCE),
+    ITEM_MOVEMENT_SPEC(pos_y, MSL_REGEN_ITEM_POSITION_TOLERANCE),
     ITEM_SPEC("item.damage", damage, FIELD_U16),
     ITEM_SPEC("item.timer", timer, FIELD_F32),
     ITEM_SPEC("item.spawn_id", spawn_id, FIELD_U32),
@@ -1650,6 +1687,7 @@ static const ItemFieldSpec item_compare_fields[] = {
 };
 
 #undef ITEM_SPEC
+#undef ITEM_MOVEMENT_SPEC
 
 static int item_field_is_gameplay_state(const MslCoreItem* item, const ItemFieldSpec* spec) {
   int misc_index;
@@ -1692,9 +1730,229 @@ static void fingerprint_actual_output(ValidationResult* result, const MslCoreCom
                                   sizeof(canonical));
 }
 
-static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t logical_pos,
-                       const MslCoreCompare* actual, int signed_zero_equal,
-                       ValidationResult* result) {
+static int accept_movement_delta(uint32_t expected, uint32_t actual, float tolerance,
+                                 int relaxed_floats, ValidationResult* result) {
+  if (!relaxed_floats || tolerance == 0) {
+    return 0;
+  }
+  float a, b;
+  memcpy(&a, &expected, sizeof(a));
+  memcpy(&b, &actual, sizeof(b));
+  if (!isfinite(a) || !isfinite(b) || fabs((double)a - (double)b) > tolerance) {
+    return 0;
+  }
+  ++result->tolerated_values;
+  return 1;
+}
+
+static int accept_near_zero_speed(const MslCoreCompare* expected, const MslCoreCompare* actual,
+                                  size_t offset, int player, ValidationResult* result) {
+  enum { CATCH_PULL = 213, CATCH_WAIT = 216, FOX_SPECIAL_AIR_S = 351 };
+  int action = expected->action_id[player];
+  if (action != actual->action_id[player]) {
+    return 0;
+  }
+  float a, b, bound;
+  if (offset == offsetof(MslCoreCompare, speed_ground_x_self) &&
+      (action == CATCH_PULL || action == CATCH_WAIT) &&
+      expected->on_ground[player] && actual->on_ground[player]) {
+    // fn_800DA054 writes the difference between two nearly coincident
+    // world-space joint positions. A rounded tie leaves the grabber at rest.
+    a = expected->speed_ground_x_self[player];
+    b = actual->speed_ground_x_self[player];
+    bound = MSL_REGEN_GRAB_GROUND_SPEED_TOLERANCE;
+  } else if (offset == offsetof(MslCoreCompare, speed_y_self) &&
+             action == FOX_SPECIAL_AIR_S &&
+             expected->char_id[player] == MSL_CHARACTER_FALCO &&
+             actual->char_id[player] == MSL_CHARACTER_FALCO &&
+             expected->action_frame[player] == 1 && actual->action_frame[player] == 1 &&
+             !expected->on_ground[player] && !actual->on_ground[player]) {
+    // ft_80085134 copies the vertical animation-root delta at Phantasm entry.
+    a = expected->speed_y_self[player];
+    b = actual->speed_y_self[player];
+    bound = MSL_REGEN_PHANTASM_VERTICAL_SPEED_TOLERANCE;
+  } else {
+    return 0;
+  }
+  if ((a == 0.0F && fabsf(b) <= bound) || (b == 0.0F && fabsf(a) <= bound)) {
+    ++result->tolerated_values;
+    return 1;
+  }
+  return 0;
+}
+
+static const double projectile_tau = 6.283185307179586;
+
+// Slippi samples the low byte of the angle at xDDB. Recover the only float
+// within two ULPs of the direction of travel that could have produced it.
+// refs/melee/src/melee/it/items/{itfoxlaser.c,itmewtwoshadowball.c}
+// refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+static int projectile_angle(const MslCoreItem* item, float* angle) {
+  if (!isfinite(item->vel_x) || !isfinite(item->vel_y) ||
+      (item->vel_x == 0 && item->vel_y == 0)) {
+    return 0;
+  }
+  double direction = atan2(item->vel_y, item->vel_x);
+  float rounded = direction < 0 ? (float)(direction + projectile_tau) : 0.0F + (float)direction;
+  uint32_t bits;
+  memcpy(&bits, &rounded, sizeof(bits));
+  for (int offset = -MSL_REGEN_PROJECTILE_ANGLE_ULPS;
+       offset <= MSL_REGEN_PROJECTILE_ANGLE_ULPS; ++offset) {
+    uint32_t candidate = bits + offset;
+    if (candidate <= UINT32_C(0x40c90fdb) && (uint8_t)candidate == item->misc1) {
+      // 0x40c90fdb is 2*pi rounded to binary32.
+      memcpy(angle, &candidate, sizeof(*angle));
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int same_item(const MslCoreItem* a, const MslCoreItem* b) {
+  return a->exists && b->exists && a->type == b->type && a->spawn_id == b->spawn_id;
+}
+
+static const MslCoreItem* previous_item(const MslCoreItem* items, const MslCoreItem* item) {
+  for (int slot = 0; slot < MSL_CORE_MAX_ITEMS && items[slot].exists; ++slot) {
+    if (same_item(&items[slot], item)) {
+      return &items[slot];
+    }
+  }
+  return NULL;
+}
+
+static int matching_laser_bounce(const StreamState* state, const MslCoreItem* expected,
+                                 const MslCoreItem* actual) {
+  const MslCoreItem* prev_a = previous_item(state->previous_expected_items, expected);
+  const MslCoreItem* prev_b = previous_item(state->previous_actual_items, actual);
+  if (!prev_a || !prev_b || prev_a->state != expected->state || prev_b->state != actual->state ||
+      prev_a->owner != expected->owner || prev_b->owner != actual->owner) {
+    return 0;
+  }
+  if (expected->misc1 == prev_a->misc1 && actual->misc1 == prev_b->misc1) {
+    size_t slot = prev_a - state->previous_expected_items;
+    return prev_b == &state->previous_actual_items[slot] && state->previous_laser_bounces[slot];
+  }
+  // ShieldBounced in itfoxlaser.c rewrites the angle and resets scale to
+  // 0.001f (0x3A83126F). A reflector reset also changes the owner.
+  return expected->misc0 == 0x6F && actual->misc0 == 0x6F &&
+         expected->misc1 != prev_a->misc1 && actual->misc1 != prev_b->misc1 &&
+         (expected->vel_x != prev_a->vel_x || expected->vel_y != prev_a->vel_y) &&
+         (actual->vel_x != prev_b->vel_x || actual->vel_y != prev_b->vel_y);
+}
+
+static int needle_frozen(const MslCoreItem* item, const MslCoreItem* previous) {
+  // Motion 4 normally integrates its nonzero velocity. During hitlag both
+  // its animation callback and position integration are skipped.
+  // refs/melee/src/melee/it/item.c::{Item_80269528,Item_802697D4}
+  return item->state == 4 && previous->state == 4 && item->owner == previous->owner &&
+         (item->vel_x != 0.0F || item->vel_y != 0.0F) &&
+         item->vel_x == previous->vel_x && item->vel_y == previous->vel_y &&
+         item->pos_x == previous->pos_x && item->pos_y == previous->pos_y &&
+         item->timer == previous->timer;
+}
+
+// xDEB samples xDE4.y. Air launch initializes it with a fused pos - 3*vel.
+// Motion 0 and motion 4 copy the item's pre-integration Y in their Anim callbacks.
+// refs/melee/src/melee/it/items/itseakneedlethrown.c
+static NeedleAnchor reconstruct_needle_anchor(const StreamState* state,
+                                              const MslCoreItem* expected,
+                                              const MslCoreItem* actual) {
+  const NeedleAnchor unknown = {0};
+  const MslCoreItem* prev_a = previous_item(state->previous_expected_items, expected);
+  const MslCoreItem* prev_b = previous_item(state->previous_actual_items, actual);
+  NeedleAnchor anchor;
+  if (!prev_a && !prev_b && expected->state == 0) {
+    anchor.expected = fmaf(-3.0F, expected->vel_y, expected->pos_y);
+    anchor.actual = fmaf(-3.0F, actual->vel_y, actual->pos_y);
+  } else if (prev_a && prev_b && prev_a->state == prev_b->state &&
+             expected->owner == prev_a->owner && actual->owner == prev_b->owner) {
+    int frozen_a = needle_frozen(expected, prev_a);
+    int frozen_b = needle_frozen(actual, prev_b);
+    if (frozen_a || frozen_b) {
+      size_t slot = prev_a - state->previous_expected_items;
+      if (!frozen_a || !frozen_b || prev_b != &state->previous_actual_items[slot] ||
+          !state->previous_needle_anchors[slot].verified) {
+        return unknown;
+      }
+      anchor = state->previous_needle_anchors[slot];
+    } else if ((prev_a->state == 0 && expected->state == 0) ||
+               ((prev_a->state == 0 || prev_a->state == 4) &&
+                (expected->state == 2 || expected->state == 4))) {
+      anchor.expected = prev_a->pos_y;
+      anchor.actual = prev_b->pos_y;
+    } else {
+      return unknown;
+    }
+  } else {
+    return unknown;
+  }
+  uint32_t a_bits, b_bits;
+  memcpy(&a_bits, &anchor.expected, sizeof(a_bits));
+  memcpy(&b_bits, &anchor.actual, sizeof(b_bits));
+  anchor.verified = isfinite(anchor.expected) && isfinite(anchor.actual) &&
+                    (uint8_t)a_bits == expected->misc2 && (uint8_t)b_bits == actual->misc2;
+  return anchor;
+}
+
+static int accept_item_difference(StreamState* state, const MslCoreItem* expected,
+                                  const MslCoreItem* actual, size_t offset,
+                                  NeedleAnchor anchor, uint8_t* laser_bounce) {
+  ValidationResult* result = &state->result;
+  if (!same_item(expected, actual)) {
+    return 0;
+  }
+  if (offset == offsetof(MslCoreItem, state) && expected->state <= 1 && actual->state <= 1 &&
+      (expected->type == MSL_CORE_ITEM_KIND_MARIO_CAPE ||
+       expected->type == MSL_CORE_ITEM_KIND_DRMARIO_SHEET)) {
+    // The two cape animations share the item script and callbacks. Hit and
+    // reflect behavior belongs to the fighter's SpecialS.
+    // refs/melee/src/melee/it/items/itmariocape.c
+    ++result->tolerated_cape_states;
+  } else if (expected->state != actual->state) {
+    return 0;
+  } else if (offset == offsetof(MslCoreItem, misc1)) {
+    int laser = expected->state <= 1 &&
+                (expected->type == MSL_CORE_ITEM_KIND_FOX_LASER ||
+                 expected->type == MSL_CORE_ITEM_KIND_FALCO_LASER);
+    int shadow_ball = expected->state == 1 && expected->type == MSL_ITEM_KIND_MEWTWO_SHADOW_BALL;
+    float a, b;
+    if ((!laser && !shadow_ball) ||
+        !projectile_angle(expected, &a) || !projectile_angle(actual, &b)) {
+      return 0;
+    }
+    double delta = fabs((double)a - b);
+    delta = fmin(delta, fabs(projectile_tau - delta));
+    if (delta > MSL_REGEN_PROJECTILE_ANGLE_TOLERANCE) {
+      // Shield contact geometry can vary within the item velocity budget.
+      // Verify the bounce on both sides before allowing the angular residue.
+      if (!laser || delta > MSL_REGEN_LASER_BOUNCE_ANGLE_TOLERANCE ||
+          !matching_laser_bounce(state, expected, actual)) {
+        return 0;
+      }
+      *laser_bounce = 1;
+    }
+    if (laser) {
+      ++result->tolerated_laser_angles;
+    } else {
+      ++result->tolerated_shadow_ball_angles;
+    }
+  } else if (offset == offsetof(MslCoreItem, misc2) && anchor.verified &&
+             fabs((double)anchor.expected - anchor.actual) <= MSL_REGEN_NEEDLE_ANCHOR_TOLERANCE) {
+    ++result->tolerated_needle_anchors;
+  } else {
+    return 0;
+  }
+  ++result->tolerated_values;
+  return 1;
+}
+
+static int compare_row(StreamState* state, int64_t logical_pos, const MslCoreCompare* actual) {
+  const ReplayView* replay = state->replay;
+  const FrameRows* rows = state->rows;
+  ValidationResult* result = &state->result;
+  int signed_zero_equal = state->signed_zero_equal;
+  int relaxed_floats = state->relaxed_floats;
   MslCoreCompare expected;
   int64_t raw = rows->raw[logical_pos];
   int64_t frame = get_i32(&replay->frame_id, raw);
@@ -1769,8 +2027,13 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
       }
       if (!compare_bits_equal((FieldKind)spec->kind, expected_bits, actual_bits,
                               signed_zero_equal)) {
-        record_detail(result, frame, spec->name, spec->count == 1 ? -1 : element,
-                      (FieldKind)spec->kind, expected_bits, actual_bits);
+        if (!accept_movement_delta(expected_bits, actual_bits, spec->tolerance,
+                                   relaxed_floats, result) &&
+            !(relaxed_floats && player >= 0 &&
+              accept_near_zero_speed(&expected, actual, spec->offset, player, result))) {
+          record_detail(result, frame, spec->name, spec->count == 1 ? -1 : element,
+                        (FieldKind)spec->kind, expected_bits, actual_bits);
+        }
       } else if (expected_bits != actual_bits) {
         result->signed_zero_equal_count += 1;
       }
@@ -1787,9 +2050,19 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
   {
     size_t item_field;
     int slot;
+    NeedleAnchor anchors[MSL_CORE_MAX_ITEMS];
+    uint8_t laser_bounces[MSL_CORE_MAX_ITEMS] = {0};
     for (slot = 0; slot < MSL_CORE_MAX_ITEMS; ++slot) {
-      const uint8_t* expected_item = (const uint8_t*)(const void*)&expected.items[slot];
-      const uint8_t* actual_item = (const uint8_t*)(const void*)&actual->items[slot];
+      const MslCoreItem* a = &expected.items[slot];
+      const MslCoreItem* b = &actual->items[slot];
+      const uint8_t* expected_item = (const uint8_t*)(const void*)a;
+      const uint8_t* actual_item = (const uint8_t*)(const void*)b;
+      NeedleAnchor anchor = {0};
+      if (relaxed_floats && a->type == MSL_CORE_ITEM_KIND_SHEIK_NEEDLE_THROWN &&
+          a->state == b->state && same_item(a, b)) {
+        anchor = reconstruct_needle_anchor(state, a, b);
+      }
+      anchors[slot] = anchor;
       for (item_field = 0;
            item_field < sizeof(item_compare_fields) / sizeof(item_compare_fields[0]);
            ++item_field) {
@@ -1815,12 +2088,23 @@ static int compare_row(const ReplayView* replay, const FrameRows* rows, int64_t 
         }
         if (!compare_bits_equal((FieldKind)spec->kind, expected_bits, actual_bits,
                                 signed_zero_equal)) {
-          record_detail(result, frame, spec->name, slot, (FieldKind)spec->kind, expected_bits,
-                        actual_bits);
+          if (!accept_movement_delta(expected_bits, actual_bits, spec->tolerance,
+                                     relaxed_floats, result) &&
+              !(relaxed_floats &&
+                accept_item_difference(state, a, b, spec->offset, anchor, &laser_bounces[slot]))) {
+            record_detail(result, frame, spec->name, slot, (FieldKind)spec->kind, expected_bits,
+                          actual_bits);
+          }
         } else if (expected_bits != actual_bits) {
           result->signed_zero_equal_count += 1;
         }
       }
+    }
+    if (relaxed_floats) {
+      memcpy(state->previous_expected_items, expected.items, sizeof(expected.items));
+      memcpy(state->previous_actual_items, actual->items, sizeof(actual->items));
+      memcpy(state->previous_needle_anchors, anchors, sizeof(anchors));
+      memcpy(state->previous_laser_bounces, laser_bounces, sizeof(laser_bounces));
     }
   }
   return result->mismatch_count == mismatch_before;
@@ -2031,8 +2315,7 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
         int64_t frame = get_i32(&state->replay->frame_id, raw);
         const MslCoreCompare* actual = (const MslCoreCompare*)(const void*)state->output_row;
         fingerprint_actual_output(&state->result, actual);
-        int matches = compare_row(state->replay, state->rows, logical_pos, actual,
-                                  state->signed_zero_equal, &state->result);
+        int matches = compare_row(state, logical_pos, actual);
         if (state->stored_expected) {
           matches = compare_stored(state, logical_pos, (int32_t)frame) && matches;
         }
@@ -2463,6 +2746,11 @@ static PyObject* result_object(const ReplayView* replay, const FrameRows* rows,
   PUT("runner_seconds", PyFloat_FromDouble(runner_seconds));
   PUT("render_visibility_mismatch_count",
       PyLong_FromLongLong(state->result.render_visibility_mismatch_count));
+  PUT("tolerated_values", PyLong_FromLongLong(state->result.tolerated_values));
+  PUT("tolerated_laser_angles", PyLong_FromLongLong(state->result.tolerated_laser_angles));
+  PUT("tolerated_shadow_ball_angles", PyLong_FromLongLong(state->result.tolerated_shadow_ball_angles));
+  PUT("tolerated_needle_anchors", PyLong_FromLongLong(state->result.tolerated_needle_anchors));
+  PUT("tolerated_cape_states", PyLong_FromLongLong(state->result.tolerated_cape_states));
   PUT("signed_zero_equal_count", PyLong_FromLongLong(state->result.signed_zero_equal_count));
   PUT("mismatch_count", PyLong_FromLongLong(state->result.mismatch_count));
   {
@@ -2568,6 +2856,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "jit_arithmetic",
       "stored_expected",
       "regenerate_slp",
+      "relaxed_floats",
       "whispy_dead_fighter_fix",
       NULL,
   };
@@ -2598,6 +2887,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   Py_ssize_t stored_expected_size = 0;
   const uint8_t* regenerate_slp = NULL;
   Py_ssize_t regenerate_size = 0;
+  int relaxed_floats = 0;
   int whispy_dead_fighter_fix = -1;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
@@ -2617,14 +2907,14 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiiziiy#y#i:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiziiy#y#pi:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &slippi_patches,
           &jit_arithmetic, &stored_expected, &stored_expected_size,
-          &regenerate_slp, &regenerate_size, &whispy_dead_fighter_fix)) {
+          &regenerate_slp, &regenerate_size, &relaxed_floats, &whispy_dead_fighter_fix)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2638,6 +2928,11 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   memset(&replay, 0, sizeof(replay));
   memset(&rows, 0, sizeof(rows));
   memset(&state, 0, sizeof(state));
+  if (relaxed_floats && regenerate_size == 0) {
+    PyErr_SetString(PyExc_ValueError, "movement tolerances require replay regeneration");
+    return NULL;
+  }
+  state.relaxed_floats = (uint8_t)relaxed_floats;
   state.signed_zero_equal = (uint8_t)signed_zero_equal;
   state.result.first_mismatch_frame = INT64_MIN;
   state.result.last_mismatch_frame = INT64_MIN;
