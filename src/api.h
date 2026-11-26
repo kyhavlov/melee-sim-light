@@ -198,6 +198,43 @@ typedef struct MslObservationStored {
   };
 } MslObservationStored;
 
+enum {
+  MSL_STATE_FLAGS_BYTES = 5,
+};
+
+// Slippi Post-Frame masks, indexed by byte in state_flags.
+enum {
+  // state_flags[0], Fighter 0x2218
+  MSL_STATE0_ALLOW_INTERRUPT = 0x80,
+  MSL_STATE0_REFLECT = 0x10,
+  MSL_STATE0_REFLECT_KEEPS_OWNER = 0x08,
+  MSL_STATE0_ABSORB = 0x02,
+  // state_flags[1], Fighter 0x221A
+  MSL_STATE1_HITLAG = 0x20,
+  MSL_STATE1_DEFENDER_HITLAG = 0x10,
+  MSL_STATE1_FAST_FALL = 0x08,
+  MSL_STATE1_SUBACTION_INVULNERABLE = 0x04,
+  // state_flags[2], Fighter 0x221B
+  MSL_STATE2_SHIELD = 0x80,
+  MSL_STATE2_HOLDING = 0x04,
+  // state_flags[3], Fighter 0x221C
+  MSL_STATE3_POWERSHIELD = 0x20,
+  MSL_STATE3_DETECTION_ON_SHIELD = 0x04,
+  MSL_STATE3_HITSTUN = 0x02,
+  // state_flags[4], Fighter 0x221F
+  MSL_STATE4_OFFSCREEN = 0x80,
+  MSL_STATE4_DEAD = 0x40,
+  MSL_STATE4_INACTIVE = 0x10,
+  MSL_STATE4_FOLLOWER = 0x08,
+  MSL_STATE4_CLOAK = 0x02,
+};
+
+typedef enum MslLCancel {
+  MSL_L_CANCEL_NONE = 0,
+  MSL_L_CANCEL_HIT = 1,
+  MSL_L_CANCEL_MISSED = 2,
+} MslLCancel;
+
 typedef struct MslObservationPlayer {
   uint8_t present; /* Fighter is awake; roster metadata remains when absent. */
   uint8_t source_player; /* UINT8_MAX for unused roster slots. */
@@ -223,7 +260,10 @@ typedef struct MslObservationPlayer {
   uint8_t jumps_left;
   uint8_t hurtbox_state;
   uint8_t invulnerable;
-  uint8_t _pad0;
+  uint8_t l_cancel; /* MSL_L_CANCEL_* */
+  uint16_t ground_id;
+  uint8_t last_attack_landed;
+  uint8_t state_flags[MSL_STATE_FLAGS_BYTES];
   MslObservationStored stored;
 } MslObservationPlayer;
 
@@ -299,10 +339,10 @@ MSL_API uint32_t msl_batch_size(const MslBatch* batch);
 
 // Name the observation-writing exports by layout so an older binary cannot
 // resolve them against a library that writes a larger observation.
-#define msl_batch_reset msl_batch_reset_v2
-#define msl_batch_step msl_batch_step_v2
-#define msl_batch_step_masked msl_batch_step_masked_v2
-#define msl_batch_observe msl_batch_observe_v2
+#define msl_batch_reset msl_batch_reset_v3
+#define msl_batch_step msl_batch_step_v3
+#define msl_batch_step_masked msl_batch_step_masked_v3
+#define msl_batch_observe msl_batch_observe_v3
 
 // A NULL reset mask resets every environment; otherwise nonzero bytes select.
 MSL_API MslResult msl_batch_reset(MslBatch* batch, const MslMatchConfig configs[],

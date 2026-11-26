@@ -44,8 +44,8 @@ _Static_assert(sizeof(MslInputPlayer) == 8, "MslInputPlayer layout");
 _Static_assert(sizeof(MslInput) == 32, "MslInput layout");
 _Static_assert(sizeof(MslItem) == 48, "MslItem layout");
 _Static_assert(sizeof(MslObservationStored) == 8, "MslObservationStored layout");
-_Static_assert(offsetof(MslObservationPlayer, stored) == 56, "MslObservationPlayer stored offset");
-_Static_assert(sizeof(MslObservation) == 1272, "MslObservation layout");
+_Static_assert(offsetof(MslObservationPlayer, stored) == 64, "MslObservationPlayer stored offset");
+_Static_assert(sizeof(MslObservation) == 1336, "MslObservation layout");
 _Static_assert(sizeof(MslTerminal) == 16, "MslTerminal layout");
 _Static_assert(sizeof(MslSaveHeader) == 20, "MslSaveHeader layout");
 

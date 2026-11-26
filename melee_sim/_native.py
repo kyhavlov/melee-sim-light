@@ -62,7 +62,7 @@ def library() -> ctypes.CDLL:
         ("msl_batch_observe", [pointer, pointer, pointer]),
     ):
         try:
-            function = getattr(lib, f"{name}_v2")
+            function = getattr(lib, f"{name}_v3")
         except AttributeError as exc:
             raise NativeError("native library has an incompatible observation ABI") from exc
         function.argtypes = args

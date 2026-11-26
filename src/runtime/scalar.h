@@ -150,6 +150,9 @@ HSD_GObjEvent msl_core_match_scheduler_invoke_owner(MslCoreMatch* match,
                                                     HSD_GObjEvent owner);
 int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed);
 const MslCoreCompare* msl_core_match_output(const MslCoreMatch* match);
+void msl_core_pack_fighter_state_flags(
+    const struct Fighter* fp, uint8_t render_visibility,
+    uint8_t flags[MSL_CORE_STATE_FLAGS_BYTES]);
 int msl_core_write_items_into_zeroed(
     const MslCoreMatch* match, MslCoreItem items[MSL_CORE_MAX_ITEMS]);
 

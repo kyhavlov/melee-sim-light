@@ -11,7 +11,7 @@ enum {
     MSL_CORE_MAX_PLAYERS = MSL_MAX_PLAYERS,
     MSL_CORE_MAX_ITEMS = MSL_MAX_ITEMS,
     MSL_CORE_MAX_HITBOXES = 4,
-    MSL_CORE_STATE_FLAGS_BYTES = 5,
+    MSL_CORE_STATE_FLAGS_BYTES = MSL_STATE_FLAGS_BYTES,
 };
 
 #pragma pack(push, 1)
@@ -388,13 +388,13 @@ _Static_assert(sizeof(MslCoreStreamJobHeader) == 124,
 _Static_assert(sizeof(MslCoreItem) == 48, "MslCoreItem wire size");
 _Static_assert(sizeof(MslCoreStoredFrame) == 64, "stored fighter frame wire size");
 _Static_assert(sizeof(MslCoreCompare) == 1302, "MslCoreCompare wire size");
-_Static_assert(sizeof(MslCoreObservationPlayer) == 64,
+_Static_assert(sizeof(MslCoreObservationPlayer) == 72,
                "MslCoreObservationPlayer wire size");
 _Static_assert(sizeof(MslCoreObservationStage) == 24,
                "MslCoreObservationStage wire size");
 _Static_assert(sizeof(MslCoreObservationStored) == 8,
                "MslCoreObservationStored wire size");
-_Static_assert(sizeof(MslCoreObservation) == 1272,
+_Static_assert(sizeof(MslCoreObservation) == 1336,
                "MslCoreObservation wire size");
 _Static_assert(sizeof(MslCoreTerminal) == 16,
                "MslCoreTerminal wire size");

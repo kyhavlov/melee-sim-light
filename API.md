@@ -155,7 +155,19 @@ Top-level fields:
 | `jumps_left` | `uint8_t` | remaining air jumps |
 | `hurtbox_state` | `uint8_t` | GALE01 hurtbox state id |
 | `invulnerable` | `uint8_t` | `0` or `1` |
+| `l_cancel` | `uint8_t` | `MSL_L_CANCEL_NONE` (`0`), `MSL_L_CANCEL_HIT` (`1`), `MSL_L_CANCEL_MISSED` (`2`) |
+| `ground_id` | `uint16_t` | collision line last stood on, or `65535` if none |
+| `last_attack_landed` | `uint8_t` | Slippi attack id of the last hit dealt, or `0` if none |
+| `state_flags` | `uint8_t[5]` | Slippi Post-Frame state flag bytes in order |
 | `stored` | `MslObservationStored` | Slippi stored state |
+
+`l_cancel` reports success or failure on the first frame of aerial landing lag.
+It is `0` on autocancels and every other frame.
+
+The `MSL_STATE0_*` through `MSL_STATE4_*` masks match the index in `state_flags`.
+For example, `state_flags[1] & MSL_STATE1_FAST_FALL` checks for fast fall.
+`MSL_STATE4_OFFSCREEN` reflects the preceding render pass.
+See the [Slippi Post-Frame spec](https://github.com/project-slippi/slippi-wiki/blob/master/SPEC.md#post-frame-update).
 
 `MslObservationStored`:
 

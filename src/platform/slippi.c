@@ -122,44 +122,43 @@ void msl_slippi_apply_cpu_input(struct Fighter* fp)
     input->valid = 0;
 }
 
-static MslCoreSlippiFighterState* find_state(const struct Fighter* fp,
-                                             bool create)
+static size_t msl_slippi_fighter_state_index(
+    const MslCoreSlippiState* state, const struct Fighter* fp)
 {
-    int i;
-    MslCoreSlippiFighterState* fighter_state =
-        msl_bound_slippi_state->fighters;
-    MslCoreSlippiFighterState* free_state = NULL;
-
-    for (i = 0;
-         i < (int) (sizeof(msl_bound_slippi_state->fighters) /
-                    sizeof(msl_bound_slippi_state->fighters[0]));
-         ++i)
-    {
-        if (fighter_state[i].fighter == fp) {
-            return &fighter_state[i];
-        }
-        if (free_state == NULL && fighter_state[i].fighter == NULL) {
-            free_state = &fighter_state[i];
+    const size_t count = ARRAY_SIZE(state->fighters);
+    // Entries are assigned in order and kept until the match resets.
+    for (size_t i = 0; i < count; ++i) {
+        if (state->fighters[i].fighter == fp ||
+            state->fighters[i].fighter == NULL)
+        {
+            return i;
         }
     }
-    if (!create) {
-        return NULL;
-    }
-    if (free_state == NULL) {
-        fprintf(stderr, "hosted Slippi fighter-state capacity exceeded\n");
-        abort();
-    }
-    free_state->fighter = fp;
-    return free_state;
+    return count;
 }
 
 void msl_slippi_lcancel_set(struct Fighter* fp, u8 value)
 {
-    find_state(fp, true)->lcancel = value;
+    MslCoreSlippiState* state = msl_bound_slippi_state;
+    size_t i = msl_slippi_fighter_state_index(state, fp);
+
+    if (i == ARRAY_SIZE(state->fighters)) {
+        fprintf(stderr, "hosted Slippi fighter-state capacity exceeded\n");
+        abort();
+    }
+    state->fighters[i].fighter = fp;
+    state->fighters[i].lcancel = value;
 }
 
-u8 msl_slippi_lcancel_get(const struct Fighter* fp)
+u8 msl_slippi_lcancel_get(const MslCoreSlippiState* state,
+                         const struct Fighter* fp)
 {
-    MslCoreSlippiFighterState* state = find_state(fp, false);
-    return state == NULL ? 0 : state->lcancel;
+    size_t i = msl_slippi_fighter_state_index(state, fp);
+
+    if (i == ARRAY_SIZE(state->fighters) ||
+        state->fighters[i].fighter == NULL)
+    {
+        return 0;
+    }
+    return state->fighters[i].lcancel;
 }
