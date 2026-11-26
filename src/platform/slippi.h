@@ -33,6 +33,7 @@ bool msl_slippi_dreamland_whispy_direction(u8* direction);
 void msl_slippi_apply_fighter_pre_random_seed(void);
 void msl_slippi_apply_cpu_input(struct Fighter* fp);
 void msl_slippi_lcancel_set(struct Fighter* fp, u8 value);
-u8 msl_slippi_lcancel_get(const struct Fighter* fp);
+u8 msl_slippi_lcancel_get(const MslCoreSlippiState* state,
+                         const struct Fighter* fp);
 
 #endif

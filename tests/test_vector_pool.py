@@ -12,6 +12,8 @@ FIXTURE_PATH = Path(__file__).with_name('fixtures') / 'yoshi_vector_pool.npz'
 
 def _copy_recorded_fields(destination, source):
     for name in destination.dtype.names:
+        if name.startswith("_pad"):
+            continue
         if destination[name].dtype.names:
             _copy_recorded_fields(destination[name], source[name])
         else:

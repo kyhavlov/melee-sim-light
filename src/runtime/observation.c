@@ -112,6 +112,7 @@ static void write_player_from_compare(const MslCoreCompare* compare,
     COPY_U16(action_frame);
     COPY_U16(hitlag);
     COPY_U16(hitstun);
+    COPY_U16(ground_id);
 #undef COPY_F32
 #undef COPY_U16
     out[offsetof(MslCoreObservationPlayer, facing)] =
@@ -122,6 +123,10 @@ static void write_player_from_compare(const MslCoreCompare* compare,
         source[offsetof(MslCoreCompare, jumps_left) + player];
     out[offsetof(MslCoreObservationPlayer, hurtbox_state)] = hurtbox;
     out[offsetof(MslCoreObservationPlayer, invulnerable)] = hurtbox != 0;
+    output->l_cancel = compare->l_cancel[player];
+    output->last_attack_landed = compare->last_attack_landed[player];
+    memcpy(output->state_flags, compare->state_flags[player],
+           sizeof(output->state_flags));
 }
 
 // Slippi records the low byte of each charge and the raw 32-bit character
@@ -213,8 +218,9 @@ static inline void msl_core_write_stored_fighter(const Fighter* fp,
 }
 
 static void write_fighter(const MslCoreMatch* match, const Fighter* fp,
-                          float pos_x, float pos_y, int player,
-                          uint8_t relation, MslCoreObservationPlayer* output)
+                          float pos_x, float pos_y, uint8_t render_visibility,
+                          int player, uint8_t relation,
+                          MslCoreObservationPlayer* output)
 {
     uint8_t* out = (uint8_t*) output;
     float hitstun = fp->x221C_b6 ? fp->mv.co.damage.x0 : 0.0F;
@@ -265,6 +271,12 @@ static void write_fighter(const MslCoreMatch* match, const Fighter* fp,
         jumps_left > 0 ? (uint8_t) jumps_left : 0;
     out[offsetof(MslCoreObservationPlayer, hurtbox_state)] = (uint8_t) hurtbox;
     out[offsetof(MslCoreObservationPlayer, invulnerable)] = hurtbox != 0;
+    output->l_cancel = msl_slippi_lcancel_get(&match->slippi, fp);
+    put_u16(out, offsetof(MslCoreObservationPlayer, ground_id),
+            (uint16_t) fp->coll_data.floor.index);
+    output->last_attack_landed = (uint8_t) fp->x208C;
+    msl_core_pack_fighter_state_flags(fp, render_visibility,
+                                      output->state_flags);
     msl_core_write_stored_fighter(fp, &output->stored);
 }
 
@@ -298,6 +310,7 @@ static void write_slot(const MslCoreMatch* match, int player, uint8_t relation,
 
     write_fighter(match, fp,
                   match->output_pos_x[player], match->output_pos_y[player],
+                  match->output_render_visibility[player],
                   player, relation, &output->slots[slot]);
     if (match->follower_fighters[player] == NULL) {
         return;
@@ -307,7 +320,9 @@ static void write_slot(const MslCoreMatch* match, int player, uint8_t relation,
         return;
     }
     write_fighter(match, follower, match->follower_output_pos_x[player],
-                  match->follower_output_pos_y[player], player, relation,
+                  match->follower_output_pos_y[player],
+                  match->follower_output_render_visibility[player],
+                  player, relation,
                   &output->followers[slot]);
 }
 
@@ -355,16 +370,21 @@ static void write_follower_from_compare(const MslCoreCompare* compare,
     COPY_U16(action_frame);
     COPY_U16(hitlag);
     COPY_U16(hitstun);
+    COPY_U16(ground_id);
     COPY_U8(char_id);
     COPY_U8(stocks);
     COPY_U8(facing);
     COPY_U8(on_ground);
     COPY_U8(jumps_left);
+    COPY_U8(l_cancel);
+    COPY_U8(last_attack_landed);
 #undef COPY_F32
 #undef COPY_U16
 #undef COPY_U8
     out[offsetof(MslCoreObservationPlayer, hurtbox_state)] = hurtbox;
     out[offsetof(MslCoreObservationPlayer, invulnerable)] = hurtbox != 0;
+    memcpy(output->state_flags, compare->follower_state_flags[player],
+           sizeof(output->state_flags));
 }
 
 int msl_match_randall_position(const MslCoreMatch* match, float* x, float* y)

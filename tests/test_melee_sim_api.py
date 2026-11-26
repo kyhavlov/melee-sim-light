@@ -236,17 +236,23 @@ def test_python_wire_layout_matches_public_c_api() -> None:
     assert dtypes.controller_input_dtype().itemsize == 112
     assert dtypes.input_dtype().itemsize == 32
     assert dtypes.match_config_dtype().itemsize == 52
-    assert dtypes.gamestate_dtype().itemsize == 1272
+    assert dtypes.gamestate_dtype().itemsize == 1336
     assert dtypes.gamestate_stored_dtype().itemsize == 8
     assert dtypes.gamestate_stored_dtype().fields["spent"][1] == 1
     assert dtypes.gamestate_stored_dtype().fields["wall_jumps"][1] == 2
     assert dtypes.gamestate_stored_dtype().fields["character_byte"][1] == 3
     assert dtypes.gamestate_stored_dtype().fields["character_value_bits"][1] == 4
     assert np.dtype(dtypes.gamestate_dtype().descr) == dtypes.gamestate_dtype()
-    assert dtypes.gamestate_player_dtype().itemsize == 64
-    assert dtypes.gamestate_player_dtype().fields["stored"][1] == 56
-    assert dtypes.gamestate_dtype().fields["items"][1] == 296
-    assert dtypes.gamestate_dtype().fields["followers"][1] == 1016
+    player = dtypes.gamestate_player_dtype()
+    assert player.itemsize == 72
+    assert player.fields["l_cancel"][1] == 55
+    assert player.fields["ground_id"][1] == 56
+    assert player.fields["last_attack_landed"][1] == 58
+    assert player.fields["state_flags"][1] == 59
+    assert player.fields["state_flags"][0].shape == (5,)
+    assert player.fields["stored"][1] == 64
+    assert dtypes.gamestate_dtype().fields["items"][1] == 328
+    assert dtypes.gamestate_dtype().fields["followers"][1] == 1048
     assert dtypes.gamestate_stage_dtype().itemsize == 24
     assert dtypes.gamestate_stage_dtype().fields["whispy"][1] == 20
     assert dtypes.terminal_dtype().itemsize == 16

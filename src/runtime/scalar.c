@@ -2075,7 +2075,9 @@ static uint8_t ppc_state_bit(unsigned int value, unsigned int index)
     return value != 0 ? (uint8_t) (0x80U >> index) : 0;
 }
 
-static void pack_fighter_state_flags(const Fighter* fp, uint8_t flags[5])
+void msl_core_pack_fighter_state_flags(
+    const Fighter* fp, uint8_t render_visibility,
+    uint8_t flags[MSL_CORE_STATE_FLAGS_BYTES])
 {
     flags[0] = ppc_state_bit(fp->allow_interrupt, 0) |
                ppc_state_bit(fp->x2218_b1, 1) | ppc_state_bit(fp->x2218_b2, 2) |
@@ -2096,7 +2098,8 @@ static void pack_fighter_state_flags(const Fighter* fp, uint8_t flags[5])
                ppc_state_bit(fp->x221C_b4, 4) | ppc_state_bit(fp->x221C_b5, 5) |
                ppc_state_bit(fp->x221C_b6, 6) |
                ppc_state_bit(fp->x221C_u16_y & 4U, 7);
-    flags[4] = ppc_state_bit(fp->x221F_b0, 0) | ppc_state_bit(fp->x221F_b1, 1) |
+    flags[4] = ppc_state_bit(render_visibility, 0) |
+               ppc_state_bit(fp->x221F_b1, 1) |
                ppc_state_bit(fp->x221F_b2, 2) | ppc_state_bit(fp->x221F_b3, 3) |
                ppc_state_bit(fp->x221F_b4, 4) | ppc_state_bit(fp->x221F_b5, 5) |
                ppc_state_bit(fp->x221F_b6, 6) | ppc_state_bit(fp->x221F_b7, 7);
@@ -2125,7 +2128,6 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
 
     for (i = 0; i < match->config.num_players; ++i) {
         Fighter* fp = GET_FIGHTER(match->fighters[i]);
-        uint8_t state_flags[5];
         float hitstun = fp->x221C_b6 ? fp->mv.co.damage.x0 : 0.0F;
         int hurtbox = fp->x1988 != 0 ? fp->x1988 : fp->x198C;
         int jumps_left = fp->co_attrs.max_jumps - fp->x1968_jumpsUsed;
@@ -2173,7 +2175,7 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
         // Slippi's ExtendPlayerBlock/GetLCancelStatus patches own this byte.
         // refs/slippi-ssbm-asm/Recording/{Recording.s,GetLCancelStatus/}
         out[offsetof(MslCoreCompare, l_cancel) + i] =
-            msl_slippi_lcancel_get(fp);
+            msl_slippi_lcancel_get(&match->slippi, fp);
         out[offsetof(MslCoreCompare, hurtbox_state) + i] = (uint8_t) hurtbox;
         put_player_u16(out, offsetof(MslCoreCompare, ground_id), i,
                        (uint16_t) fp->coll_data.floor.index);
@@ -2188,12 +2190,9 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
         out[offsetof(MslCoreCompare, combo_count) + i] = (uint8_t) fp->x2090;
         out[offsetof(MslCoreCompare, last_hit_by) + i] =
             (uint8_t) fp->dmg.x18c4_source_ply;
-        pack_fighter_state_flags(fp, state_flags);
-        state_flags[4] =
-            (state_flags[4] & 0x7FU) |
-            ppc_state_bit(match->output_render_visibility[i], 0);
-        memcpy(out + offsetof(MslCoreCompare, state_flags) + i * 5, state_flags,
-               sizeof(state_flags));
+        msl_core_pack_fighter_state_flags(
+            fp, match->output_render_visibility[i],
+            compare->state_flags[i]);
     }
 
     // Follower (Nana) lanes mirror the leader extraction above. Slippi's
@@ -2203,7 +2202,6 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
     // refs/melee/src/melee/ft/ftcolanim.c::ftCo_800BFD04
     for (i = 0; i < match->config.num_players; ++i) {
         Fighter* fp;
-        uint8_t state_flags[5];
         float hitstun;
         int hurtbox;
         int jumps_left;
@@ -2257,7 +2255,7 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
         put_player_u16(out, offsetof(MslCoreCompare, follower_hitstun), i,
                        float_frames_u16(hitstun));
         out[offsetof(MslCoreCompare, follower_l_cancel) + i] =
-            msl_slippi_lcancel_get(fp);
+            msl_slippi_lcancel_get(&match->slippi, fp);
         out[offsetof(MslCoreCompare, follower_hurtbox_state) + i] =
             (uint8_t) hurtbox;
         put_player_u16(out, offsetof(MslCoreCompare, follower_ground_id), i,
@@ -2274,12 +2272,9 @@ static void write_compare(const MslCoreMatch* match, uint32_t frame_seed,
             (uint8_t) fp->x2090;
         out[offsetof(MslCoreCompare, follower_last_hit_by) + i] =
             (uint8_t) fp->dmg.x18c4_source_ply;
-        pack_fighter_state_flags(fp, state_flags);
-        state_flags[4] =
-            (state_flags[4] & 0x7FU) |
-            ppc_state_bit(match->follower_output_render_visibility[i], 0);
-        memcpy(out + offsetof(MslCoreCompare, follower_state_flags) + i * 5,
-               state_flags, sizeof(state_flags));
+        msl_core_pack_fighter_state_flags(
+            fp, match->follower_output_render_visibility[i],
+            compare->follower_state_flags[i]);
     }
 
     (void) msl_core_write_items_into_zeroed(match, compare->items);
