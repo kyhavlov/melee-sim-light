@@ -287,7 +287,7 @@ SUBSYSTEM_PROFILE_REPLAY_BENCH := $(SUBSYSTEM_PROFILE_BUILD)/replay-bench
 SUBSYSTEM_PROFILE_RAW := $(SUBSYSTEM_PROFILE_BUILD)/profile.txt
 VIEWER_SCHEMA_TOOL := $(NATIVE_BUILD)/viewer-schema
 VIEWER_SCHEMA_JS := $(ROOT)/tools/viewer/live/schema.generated.js
-VALIDATION_NATIVE_SRC := $(ROOT)/tools/validation/native.c
+VALIDATION_NATIVE_SRC := $(ROOT)/tools/validation/native.c $(ROOT)/tools/validation/regenerate.c
 VALIDATION_NATIVE := $(VALIDATION_BUILD)/_msl_replay_validate.so
 
 MSL_REPLAY_ARITHMETIC ?= 0
@@ -521,12 +521,12 @@ source-check:
 
 validator: $(VALIDATION_NATIVE)
 
-$(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(CORE)/runtime/wire.h $(CORE)/runtime/benchmark_wire.h $(CORE)/runtime/item_projection.h
+$(VALIDATION_NATIVE): $(VALIDATION_NATIVE_SRC) $(ROOT)/tools/validation/regenerate.h $(CORE)/runtime/wire.h $(CORE)/runtime/benchmark_wire.h $(CORE)/runtime/item_projection.h
 	@mkdir -p "$(@D)"
 	@PY_INCLUDE="$$($(PY) -c 'import sysconfig; print(sysconfig.get_path("include"))')"; \
 		"$(HOST_CC)" -O3 -std=c11 -fPIC -shared $(PY_EXT_LINK_FLAGS) -Wall -Wextra \
 			-D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -I"$$PY_INCLUDE" \
-			-I"$(CORE)" "$<" -lm -o "$@"
+			-I"$(CORE)" $(VALIDATION_NATIVE_SRC) -lm -o "$@"
 
 toolchain: $(TOOLCHAIN_STAMP)
 

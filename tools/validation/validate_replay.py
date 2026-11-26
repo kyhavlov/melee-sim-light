@@ -91,25 +91,29 @@ class _NativeRunner:
     process: subprocess.Popen[bytes]
     stdin_fd: int
     stdout_fd: int
+    core: int | None
 
 
 class _NativeRunnerPool:
-    def __init__(self, count: int) -> None:
+    def __init__(self, count: int, cores: tuple[int, ...] = ()) -> None:
         self._available: queue.LifoQueue[_NativeRunner] = queue.LifoQueue()
         self._runners: list[_NativeRunner] = []
         self._lock = threading.Lock()
         try:
-            for _ in range(count):
-                runner = self._spawn()
+            for index in range(count):
+                runner = self._spawn(cores[index] if cores else None)
                 self._runners.append(runner)
                 self._available.put(runner)
         except Exception:
             self.close()
             raise
 
-    def _spawn(self) -> _NativeRunner:
+    def _spawn(self, core: int | None) -> _NativeRunner:
+        command = [str(NATIVE_BINARY), str(game_data_dir()), "--server"]
+        if core is not None:
+            command[:0] = ["taskset", "-c", str(core)]
         process = subprocess.Popen(
-            [str(NATIVE_BINARY), str(game_data_dir()), "--server"],
+            command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -120,6 +124,7 @@ class _NativeRunnerPool:
             process=process,
             stdin_fd=process.stdin.fileno(),
             stdout_fd=process.stdout.fileno(),
+            core=core,
         )
 
     def acquire(self) -> _NativeRunner:
@@ -144,7 +149,7 @@ class _NativeRunnerPool:
         if runner.process.stderr is not None:
             detail = runner.process.stderr.read().decode(errors="replace").strip()
             runner.process.stderr.close()
-        replacement = self._spawn()
+        replacement = self._spawn(runner.core)
         with self._lock:
             self._runners.append(replacement)
         self._available.put(replacement)

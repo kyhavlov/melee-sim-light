@@ -182,6 +182,20 @@ sparse-delta frame, input, and item streams. `make viewer-build` downloads the
 display assets into `build/cache/viewer-zips/` on first use and
 verifies them by checksum on later builds.
 
+## Regenerate Slippi replays
+
+The project also supports regenerating Slippi replays up to Slippi version 3.20.0:
+
+```sh
+python -m tools.regenerate_replays archive.zip --limit 1000 --workers 8
+```
+
+This can be used to add missing data and observations to older-versioned replays.
+The simulator verifies each replay and adds stored fighter state to older
+recordings. Results and a per-replay manifest go in `archive.regenerated.zip`.
+See the [replay regeneration guide](tools/validation/REPLAY_REGENERATION.md)
+for batch options and validation rules.
+
 ## Runtime API Reference
 
 See the [runtime API reference](API.md) for native calls, match configuration,

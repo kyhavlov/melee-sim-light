@@ -20,6 +20,7 @@
 #include "runtime/benchmark_wire.h"
 #include "runtime/item_projection.h"
 #include "runtime/wire.h"
+#include "regenerate.h"
 
 extern char** environ;
 
@@ -228,6 +229,7 @@ typedef struct StreamState {
   uint8_t output_row[sizeof(MslCoreCompare) + sizeof(MslCoreStoredFrame)];
   size_t output_size;
   const uint8_t* stored_expected;
+  uint8_t* regeneration;
   int64_t stored_fighter_rows;
   size_t output_have;
   uint8_t header_written;
@@ -1892,6 +1894,38 @@ static int compare_stored(StreamState* state, int64_t pos, int32_t frame) {
   return state->result.mismatch_count == before;
 }
 
+static void msl_capture_replay_frame(StreamState* state, int64_t pos) {
+  const MslCoreCompare* row = (const MslCoreCompare*)(const void*)state->output_row;
+  const uint8_t* stored = state->output_row + sizeof(*row);
+  uint8_t* frame = state->regeneration + pos * MSL_REGEN_FRAME_BYTES;
+  for (int follower = 0; follower < 2; ++follower) {
+    for (int player = 0; player < state->replay->num_players; ++player) {
+      const uint8_t* present = follower ? state->rows->follower_present[player]
+                                        : state->rows->player_present[player];
+      if (!present[pos]) {
+        continue;
+      }
+      int slot = MSL_CORE_MAX_PLAYERS * follower + player;
+      int port_slot = MSL_CORE_MAX_PLAYERS * follower + state->replay->port_1based[player] - 1;
+      uint8_t* dest = frame + 1 + port_slot * MSL_REGEN_FIGHTER_BYTES;
+      uint16_t hit_by = msl_core_get_le16(follower ? &row->follower_instance_hit_by[player]
+                                                   : &row->instance_hit_by[player]);
+      uint16_t instance = msl_core_get_le16(follower ? &row->follower_instance_id[player]
+                                                     : &row->instance_id[player]);
+      const uint8_t* source = stored + sizeof(MslObservationStored) * slot;
+      frame[0] |= (uint8_t)(1U << port_slot);
+      dest[0] = (uint8_t)(hit_by >> 8);
+      dest[1] = (uint8_t)hit_by;
+      dest[2] = (uint8_t)(instance >> 8);
+      dest[3] = (uint8_t)instance;
+      memcpy(dest + 4, source, 4);
+      for (int byte = 0; byte < 4; ++byte) {
+        dest[8 + byte] = source[7 - byte];
+      }
+    }
+  }
+}
+
 static void refill_write_buffer(StreamState* state) {
   state->write_len = 0;
   state->write_off = 0;
@@ -1899,7 +1933,7 @@ static void refill_write_buffer(StreamState* state) {
     if (state->server_protocol) {
       msl_core_put_le32(state->write_buf, (uint32_t)(state->process_end_pos + 1));
       msl_core_put_le32(state->write_buf + 4,
-                       state->stored_expected ? MSL_CORE_STREAM_STORED : 0);
+                       state->output_size > sizeof(MslCoreCompare) ? MSL_CORE_STREAM_STORED : 0);
       state->write_len = 8;
     }
     memcpy(state->write_buf + state->write_len, &state->config, sizeof(state->config));
@@ -1988,6 +2022,9 @@ static int consume_output(StreamState* state, const uint8_t* data, size_t size, 
       if (logical_pos > state->process_end_pos) {
         snprintf(error, error_size, "core runner produced too many rows");
         return -1;
+      }
+      if (state->regeneration != NULL && state->result.first_mismatch_frame == INT64_MIN) {
+        msl_capture_replay_frame(state, logical_pos);
       }
       if (logical_pos >= state->compare_start_pos) {
         int64_t raw = state->rows->raw[logical_pos];
@@ -2201,7 +2238,7 @@ static int stream_runner(const char* qemu_path, const char* sysroot, const char*
     snprintf(error, error_size, "posix_spawn file action: %s", strerror(spawn_error));
     goto done;
   }
-  char* stream = state->stored_expected ? "--stream-stored" : "--stream";
+  char* stream = state->output_size > sizeof(MslCoreCompare) ? "--stream-stored" : "--stream";
   if (direct_native) {
     char* const argv[] = {(char*)binary_path, (char*)data_root, stream, NULL};
     spawn_error = posix_spawn(&child, binary_path, &actions, NULL, argv, environ);
@@ -2530,6 +2567,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "slippi_patches",
       "jit_arithmetic",
       "stored_expected",
+      "regenerate_slp",
       "whispy_dead_fighter_fix",
       NULL,
   };
@@ -2558,6 +2596,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int jit_arithmetic = 0;
   const uint8_t* stored_expected = NULL;
   Py_ssize_t stored_expected_size = 0;
+  const uint8_t* regenerate_slp = NULL;
+  Py_ssize_t regenerate_size = 0;
   int whispy_dead_fighter_fix = -1;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
@@ -2577,14 +2617,14 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiiziiy#i:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiziiy#y#i:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &slippi_patches,
           &jit_arithmetic, &stored_expected, &stored_expected_size,
-          &whispy_dead_fighter_fix)) {
+          &regenerate_slp, &regenerate_size, &whispy_dead_fighter_fix)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -2661,6 +2701,20 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       goto done;
     }
     state.stored_expected = stored_expected;
+  }
+  if (regenerate_size != 0) {
+    if (frames_limit != 0 || start_frame_obj != Py_None || signed_zero_equal ||
+        stored_expected_size != 0) {
+      PyErr_SetString(PyExc_ValueError, "regeneration requires a complete strict legacy replay");
+      goto done;
+    }
+    state.regeneration = calloc((size_t)rows.count, MSL_REGEN_FRAME_BYTES);
+    if (state.regeneration == NULL) {
+      PyErr_NoMemory();
+      goto done;
+    }
+  }
+  if (state.stored_expected || state.regeneration) {
     state.output_size += sizeof(MslCoreStoredFrame);
   }
   if (start_frame_obj != Py_None) {
@@ -2718,8 +2772,18 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     goto done;
   }
   result = result_object(&replay, &rows, &state, compare_count, runner_seconds);
+  if (result != NULL && state.regeneration != NULL &&
+      state.result.first_mismatch_frame == INT64_MIN) {
+    int32_t first = get_i32(&replay.frame_id, rows.raw[0]);
+    PyObject* slp = msl_regenerate_slp(regenerate_slp, regenerate_size, state.regeneration,
+                                       first, (size_t)rows.count);
+    if (dict_set_owned(result, "regenerated_slp", slp) != 0) {
+      Py_CLEAR(result);
+    }
+  }
 
 done:
+  free(state.regeneration);
   for (i = 0; i < MSL_CORE_MAX_PLAYERS; ++i) {
     free(rows.player_raw[i]);
     free(rows.player_present[i]);

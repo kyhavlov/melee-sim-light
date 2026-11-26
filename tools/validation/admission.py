@@ -34,6 +34,27 @@ PREVENT_WOBBLING_BODIES = {
     0xC20DBBD4: (32, "db2d14ce9fed80a7a34ac9fb911097d3e6b5a624fb2c58df662accea793da60f"),
 }
 
+# Slippi ASM 9eff55f Output/Netplay/GALE01r2.ini, before 6d3e140.
+# These UCF 0.8 mechanics consume raw main-stick X and processed axes.
+UCF_08_BODIES = {
+    0xC20C9A44: (352, "b7df39bd809882969cfd2b464a4ae0018bf9a20e0738ef420edb17dc7ff02e0e"),
+    0xC20998A4: (312, "f12ab1dfb51574be5bbc5e5ef7aba4e313386e94de2a3ee697eb29402224ab2e"),
+    0xC20908F4: (192, "366450d63b99b8a454fb1c4d41ba5930af017d6c74681fcec01971f173e1697a"),
+}
+UCF_084_HOOKS = {0xC206B460, 0xC208E54C, 0xC2093294, 0xC209A0B8, 0xC20D65EC}
+
+
+def is_ucf_08(codes: dict[int, bytes]) -> bool:
+    if UCF_084_HOOKS.intersection(codes):
+        return False
+    for address, (size, digest) in UCF_08_BODIES.items():
+        patch = codes.get(address, b"")
+        if (len(patch) != size or hashlib.sha256(patch[8:-4]).hexdigest() != digest or
+                int.from_bytes(patch[-4:], "big") & 0xFC000003 != 0x48000000):
+            return False
+    return True
+
+
 @lru_cache(maxsize=1)
 def evidence() -> dict:
     return json.loads(EVIDENCE.read_text())
@@ -130,14 +151,21 @@ def slippi_patches(codes: dict[int, bytes]) -> int:
 
 def capture_issues(game, raw: bytes, *, played_on: str | None = None,
                    fnmsubs_profile: str | None = None,
-                   jit_arithmetic: str | None = None) -> list[str]:
+                   jit_arithmetic: str | None = None,
+                   codes: dict[int, bytes] | None = None,
+                   allow_ucf_08: bool = False) -> list[str]:
     """Return property violations without running or consulting simulator output."""
     issues = []
     identity = hashlib.sha256(raw).hexdigest()
     record = next((r for r in evidence()["excluded"] if r["sha256_slp"] == identity), None)
+    if codes is None:
+        codes = gecko_codes(raw)
+    legacy_ucf = allow_ucf_08 and is_ucf_08(codes)
     if record is not None:
-        issues.extend(record["reasons"])
-    codes = gecko_codes(raw)
+        # Recheck the inputs below against the identified UCF 0.8 profile.
+        issues.extend(reason for reason in record["reasons"]
+                      if not (legacy_ucf and reason == "missing-recorded-inputs"))
+    raw_axes = {"raw_analog_x"} if legacy_ucf else RAW_AXES
     try:
         slippi_patches(codes)
     except ValueError as exc:
@@ -229,7 +257,7 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
             _, last = np.unique(ids[present][::-1], return_index=True)
             player_rows = np.sort(present[len(present) - 1 - last])
             if role == "leader":
-                required = PROCESSED_INPUTS | (RAW_AXES | PHYSICAL_INPUTS if player["type"] == "Human" else set())
+                required = PROCESSED_INPUTS | (raw_axes | PHYSICAL_INPUTS if player["type"] == "Human" else set())
                 if required - set(pre.type.names):
                     issues.append("missing-recorded-inputs")
                 if not np.all(pre.is_valid().to_numpy(zero_copy_only=False)[player_rows]):
