@@ -281,11 +281,13 @@ MSL_API MslResult msl_batch_observe(const MslBatch* batch, MslObservation observ
 MSL_API MslResult msl_batch_copy(MslBatch* destination, const MslBatch* source,
                                  const uint32_t destination_indices[],
                                  const uint32_t source_indices[], uint32_t count);
-// In-place checkpoint and rollback of one environment, for search. `pages` lists the
-// MSL_CHECKPOINT_PAGE_SIZE-byte pages of environment memory to copy; NULL copies all of them.
-// msl_batch_diff_pages sets page_flags[i] for each page that differs from the checkpoint. A
-// checkpoint is only valid for the environment it was taken from, until that environment is reset,
-// restored or copied into.
+// In-place checkpoint and rollback of one environment. Use the exact buffer size returned by
+// msl_batch_checkpoint_size. Treat the buffer as opaque. Reset, restore and copy into the
+// environment invalidate its checkpoints.
+// `pages` lists the aligned uint32 indices of MSL_CHECKPOINT_PAGE_SIZE-byte arena pages to copy.
+// NULL with a count of zero selects the whole arena. Rollback can use only captured pages.
+// msl_batch_diff_pages takes a full checkpoint and writes one difference flag per arena page,
+// up to flag_count. Keep the checkpoint buffer separate from the page and flag arrays.
 MSL_API MslResult msl_batch_checkpoint_size(const MslBatch* batch, uint32_t env_index,
                                             size_t* required_size);
 MSL_API MslResult msl_batch_checkpoint(const MslBatch* batch, uint32_t env_index, void* buffer,

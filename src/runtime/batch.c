@@ -8,6 +8,7 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -21,7 +22,11 @@ struct MslCoreBatch {
     uint8_t* initialized;
     uint32_t match_count;
     uint32_t reset_index_capacity;
+    uint64_t* checkpoint_generations;
+    uint32_t checkpoint_id;
 };
+
+static _Atomic uint32_t msl_last_checkpoint_batch_id;
 
 static inline int selected(const uint8_t* mask, size_t stride, uint32_t index)
 {
@@ -162,6 +167,8 @@ MslCoreResult msl_core_batch_create(
     batch->match_count = match_count;
     batch->matches = calloc(match_count, sizeof(*batch->matches));
     batch->initialized = calloc(match_count, sizeof(*batch->initialized));
+    batch->checkpoint_generations =
+        calloc(match_count, sizeof(*batch->checkpoint_generations));
     batch->reset_index_capacity = 1;
     while (batch->reset_index_capacity < match_count * 2) {
         batch->reset_index_capacity *= 2;
@@ -170,6 +177,7 @@ MslCoreResult msl_core_batch_create(
                                 sizeof(*batch->reset_index));
     batch->match_arenas = msl_memory_map_match_arenas(match_count);
     if (batch->matches == NULL || batch->initialized == NULL ||
+        batch->checkpoint_generations == NULL ||
         batch->reset_index == NULL || batch->match_arenas == NULL)
     {
         msl_core_batch_destroy(batch);
@@ -186,6 +194,17 @@ MslCoreResult msl_core_batch_create(
             return MSL_CORE_OUT_OF_MEMORY;
         }
     }
+    uint32_t previous_id =
+        atomic_load_explicit(&msl_last_checkpoint_batch_id, memory_order_relaxed);
+    do {
+        if (previous_id == UINT32_MAX) {
+            msl_core_batch_destroy(batch);
+            return MSL_CORE_OUT_OF_MEMORY;
+        }
+    } while (!atomic_compare_exchange_weak_explicit(
+        &msl_last_checkpoint_batch_id, &previous_id, previous_id + 1,
+        memory_order_relaxed, memory_order_relaxed));
+    batch->checkpoint_id = previous_id + 1;
     *out_batch = batch;
     return MSL_CORE_OK;
 }
@@ -203,6 +222,7 @@ void msl_core_batch_destroy(MslCoreBatch* batch)
     }
     msl_memory_unmap_match_arenas(batch->match_arenas, batch->match_count);
     free(batch->reset_index);
+    free(batch->checkpoint_generations);
     free(batch->initialized);
     free(batch->matches);
     free(batch);
@@ -272,6 +292,7 @@ MslCoreResult msl_core_batch_reset_matches(
                 }
                 slot = (slot + 1) & (batch->reset_index_capacity - 1);
             }
+            ++batch->checkpoint_generations[i];
             if (source == UINT32_MAX) {
                 if (msl_core_match_reset(&batch->matches[i], batch->game_data,
                                          config, &previous) != 0)
@@ -515,6 +536,7 @@ MslCoreResult msl_core_batch_copy_matches(
         MslCoreMatch* dst = &destination->matches[destination_indices[i]];
         const MslCoreMatch* src = &source->matches[source_indices[i]];
         if (dst != src) {
+            ++destination->checkpoint_generations[destination_indices[i]];
             dst->game_data = destination->game_data;
             if (msl_core_match_copy(dst, src) != 0) {
                 return MSL_CORE_INCOMPATIBLE;
@@ -565,6 +587,7 @@ MslCoreResult msl_core_batch_restore_match(
         return MSL_CORE_INVALID_ARGUMENT;
     }
     match = &batch->matches[match_index];
+    ++batch->checkpoint_generations[match_index];
     match->game_data = batch->game_data;
     if (msl_core_match_restore(match, buffer, buffer_size) != 0) {
         return MSL_CORE_INCOMPATIBLE;
@@ -573,33 +596,102 @@ MslCoreResult msl_core_batch_restore_match(
     return MSL_CORE_OK;
 }
 
+typedef struct MslCheckpointHeader {
+    uint64_t generation;
+    uint32_t batch_id;
+    uint16_t match_index;
+    uint16_t full;
+} MslCheckpointHeader;
 
-static int checkpoint_args(const MslCoreBatch* batch, uint32_t match_index,
-                           const void* buffer, size_t buffer_size)
+static inline uint32_t msl_checkpoint_page_count(size_t capacity)
+{
+    return (uint32_t) ((capacity + MSL_CORE_CHECKPOINT_PAGE - 1) /
+                       MSL_CORE_CHECKPOINT_PAGE);
+}
+
+static inline size_t msl_checkpoint_match_offset(uint32_t arena_pages)
+{
+    return sizeof(MslCheckpointHeader) + (arena_pages + 7) / 8;
+}
+
+static inline size_t msl_checkpoint_size(size_t capacity)
+{
+    return msl_checkpoint_match_offset(msl_checkpoint_page_count(capacity)) +
+           sizeof(MslCoreMatch) + capacity;
+}
+
+static inline int msl_checkpoint_buffer_valid(const MslCoreBatch* batch,
+                                              uint32_t match_index,
+                                              const void* buffer,
+                                              size_t buffer_size)
 {
     return batch != NULL && buffer != NULL &&
            match_index < batch->match_count &&
            batch->initialized[match_index] &&
-           buffer_size == sizeof(MslCoreMatch) +
-                              batch->matches[match_index].memory.capacity;
+           buffer_size == msl_checkpoint_size(
+                              batch->matches[match_index].memory.capacity);
 }
 
-static void copy_pages(uint8_t* destination, const uint8_t* source,
-                       size_t capacity, const uint32_t* pages,
-                       uint32_t page_count)
+static inline int msl_checkpoint_header_valid(const MslCheckpointHeader* header,
+                                              const MslCoreBatch* batch,
+                                              uint32_t match_index)
 {
-    uint32_t i;
+    return header->batch_id == batch->checkpoint_id &&
+           header->match_index == match_index &&
+           header->generation == batch->checkpoint_generations[match_index] &&
+           header->full <= 1;
+}
+
+static inline int msl_checkpoint_overlaps(const void* first, size_t first_size,
+                                          const void* second, size_t second_size)
+{
+    uintptr_t a = (uintptr_t) first;
+    uintptr_t b = (uintptr_t) second;
+    return first_size != 0 && second_size != 0 &&
+           (a <= b ? b - a < first_size : a - b < second_size);
+}
+
+static int msl_checkpoint_pages_valid(const uint32_t* pages,
+                                      uint32_t page_count, uint32_t arena_pages,
+                                      const uint8_t* coverage)
+{
+    if (pages == NULL) {
+        return page_count == 0 && coverage == NULL;
+    }
+    if (page_count > arena_pages ||
+        (uintptr_t) pages % _Alignof(uint32_t) != 0)
+    {
+        return 0;
+    }
+    for (uint32_t i = 0; i < page_count; ++i) {
+        uint32_t page = pages[i];
+        if (page >= arena_pages ||
+            (coverage != NULL && !(coverage[page / 8] & (1u << (page % 8)))))
+        {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static void msl_checkpoint_copy_pages(uint8_t* destination,
+                                      const uint8_t* source, size_t capacity,
+                                      const uint32_t* pages, uint32_t page_count,
+                                      uint8_t* coverage)
+{
     if (pages == NULL) {
         memcpy(destination, source, capacity);
         return;
     }
-    for (i = 0; i < page_count; ++i) {
-        size_t offset = (size_t) pages[i] * MSL_CORE_CHECKPOINT_PAGE;
-        if (offset < capacity) {
-            size_t size = capacity - offset < MSL_CORE_CHECKPOINT_PAGE
-                              ? capacity - offset
-                              : MSL_CORE_CHECKPOINT_PAGE;
-            memcpy(destination + offset, source + offset, size);
+    for (uint32_t i = 0; i < page_count; ++i) {
+        uint32_t page = pages[i];
+        size_t offset = (size_t) page * MSL_CORE_CHECKPOINT_PAGE;
+        size_t size = capacity - offset < MSL_CORE_CHECKPOINT_PAGE
+                          ? capacity - offset
+                          : MSL_CORE_CHECKPOINT_PAGE;
+        memcpy(destination + offset, source + offset, size);
+        if (coverage != NULL) {
+            coverage[page / 8] |= 1u << (page % 8);
         }
     }
 }
@@ -616,7 +708,7 @@ MslCoreResult msl_core_batch_checkpoint_size(
         return MSL_CORE_INVALID_STATE;
     }
     *required_size =
-        sizeof(MslCoreMatch) + batch->matches[match_index].memory.capacity;
+        msl_checkpoint_size(batch->matches[match_index].memory.capacity);
     return MSL_CORE_OK;
 }
 
@@ -624,14 +716,33 @@ MslCoreResult msl_core_batch_checkpoint(
     const MslCoreBatch* batch, uint32_t match_index, void* buffer,
     size_t buffer_size, const uint32_t* pages, uint32_t page_count)
 {
-    const MslCoreMatch* match;
-    if (!checkpoint_args(batch, match_index, buffer, buffer_size)) {
+    if (!msl_checkpoint_buffer_valid(batch, match_index, buffer, buffer_size)) {
         return MSL_CORE_INVALID_ARGUMENT;
     }
-    match = &batch->matches[match_index];
-    memcpy(buffer, match, sizeof(*match));
-    copy_pages((uint8_t*) buffer + sizeof(*match), match->memory.arena,
-               match->memory.capacity, pages, page_count);
+    const MslCoreMatch* match = &batch->matches[match_index];
+    uint32_t arena_pages = msl_checkpoint_page_count(match->memory.capacity);
+    if (!msl_checkpoint_pages_valid(pages, page_count, arena_pages, NULL) ||
+        msl_checkpoint_overlaps(buffer, buffer_size, pages,
+                                page_count * sizeof(*pages)))
+    {
+        return MSL_CORE_INVALID_ARGUMENT;
+    }
+
+    MslCheckpointHeader header = {
+        .generation = batch->checkpoint_generations[match_index],
+        .batch_id = batch->checkpoint_id,
+        .match_index = (uint16_t) match_index,
+        .full = pages == NULL,
+    };
+    uint8_t* coverage = (uint8_t*) buffer + sizeof(header);
+    size_t match_offset = msl_checkpoint_match_offset(arena_pages);
+    uint8_t* saved_match = (uint8_t*) buffer + match_offset;
+    memcpy(buffer, &header, sizeof(header));
+    memset(coverage, 0, match_offset - sizeof(header));
+    memcpy(saved_match, match, sizeof(*match));
+    msl_checkpoint_copy_pages(saved_match + sizeof(*match), match->memory.arena,
+                              match->memory.capacity, pages, page_count,
+                              coverage);
     return MSL_CORE_OK;
 }
 
@@ -639,21 +750,32 @@ MslCoreResult msl_core_batch_rollback(
     MslCoreBatch* batch, uint32_t match_index, const void* buffer,
     size_t buffer_size, const uint32_t* pages, uint32_t page_count)
 {
-    MslCoreMatch* match;
-    const uint8_t* arena;
-    if (!checkpoint_args(batch, match_index, buffer, buffer_size)) {
+    if (!msl_checkpoint_buffer_valid(batch, match_index, buffer, buffer_size)) {
         return MSL_CORE_INVALID_ARGUMENT;
     }
-    match = &batch->matches[match_index];
-    memcpy(&arena,
-           (const uint8_t*) buffer + offsetof(MslCoreMatch, memory.arena),
+    MslCoreMatch* match = &batch->matches[match_index];
+    uint32_t arena_pages = msl_checkpoint_page_count(match->memory.capacity);
+    const uint8_t* saved_match =
+        (const uint8_t*) buffer + msl_checkpoint_match_offset(arena_pages);
+    MslCheckpointHeader header;
+    const uint8_t* arena;
+    memcpy(&header, buffer, sizeof(header));
+    memcpy(&arena, saved_match + offsetof(MslCoreMatch, memory.arena),
            sizeof(arena));
-    if (arena != match->memory.arena) {
+    if (!msl_checkpoint_header_valid(&header, batch, match_index) ||
+        arena != match->memory.arena)
+    {
         return MSL_CORE_INVALID_STATE;
     }
-    copy_pages(match->memory.arena, (const uint8_t*) buffer + sizeof(*match),
-               match->memory.capacity, pages, page_count);
-    memcpy(match, buffer, sizeof(*match));
+    const uint8_t* coverage =
+        header.full ? NULL : (const uint8_t*) buffer + sizeof(header);
+    if (!msl_checkpoint_pages_valid(pages, page_count, arena_pages, coverage)) {
+        return MSL_CORE_INVALID_ARGUMENT;
+    }
+
+    msl_checkpoint_copy_pages(match->memory.arena, saved_match + sizeof(*match),
+                              match->memory.capacity, pages, page_count, NULL);
+    memcpy(match, saved_match, sizeof(*match));
     msl_core_bind_match(match);
     return MSL_CORE_OK;
 }
@@ -662,29 +784,32 @@ MslCoreResult msl_core_batch_diff_pages(
     const MslCoreBatch* batch, uint32_t match_index, const void* buffer,
     size_t buffer_size, uint8_t* page_flags, uint32_t flag_count)
 {
-    const MslCoreMatch* match;
-    const uint8_t* saved;
-    size_t capacity;
-    uint32_t page;
     if (page_flags == NULL ||
-        !checkpoint_args(batch, match_index, buffer, buffer_size))
+        !msl_checkpoint_buffer_valid(batch, match_index, buffer, buffer_size) ||
+        msl_checkpoint_overlaps(buffer, buffer_size, page_flags, flag_count))
     {
         return MSL_CORE_INVALID_ARGUMENT;
     }
-    match = &batch->matches[match_index];
-    saved = (const uint8_t*) buffer + sizeof(*match);
-    capacity = match->memory.capacity;
-    for (page = 0; page < flag_count; ++page) {
+    MslCheckpointHeader header;
+    memcpy(&header, buffer, sizeof(header));
+    if (!msl_checkpoint_header_valid(&header, batch, match_index) ||
+        !header.full)
+    {
+        return MSL_CORE_INVALID_STATE;
+    }
+    const MslCoreMatch* match = &batch->matches[match_index];
+    size_t capacity = match->memory.capacity;
+    uint32_t arena_pages = msl_checkpoint_page_count(capacity);
+    const uint8_t* saved = (const uint8_t*) buffer +
+                           msl_checkpoint_match_offset(arena_pages) +
+                           sizeof(*match);
+    for (uint32_t page = 0; page < flag_count && page < arena_pages; ++page) {
         size_t offset = (size_t) page * MSL_CORE_CHECKPOINT_PAGE;
-        size_t size;
-        if (offset >= capacity) {
-            break;
-        }
-        size = capacity - offset < MSL_CORE_CHECKPOINT_PAGE ? capacity - offset
-                                                       : MSL_CORE_CHECKPOINT_PAGE;
-        if (memcmp(match->memory.arena + offset, saved + offset, size) != 0) {
-            page_flags[page] = 1;
-        }
+        size_t size = capacity - offset < MSL_CORE_CHECKPOINT_PAGE
+                          ? capacity - offset
+                          : MSL_CORE_CHECKPOINT_PAGE;
+        page_flags[page] =
+            memcmp(match->memory.arena + offset, saved + offset, size) != 0;
     }
     return MSL_CORE_OK;
 }

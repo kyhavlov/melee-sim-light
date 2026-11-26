@@ -41,24 +41,21 @@ env.copy_matches_from(source, destination_indices, source_indices)
 
 ### Checkpoint and rollback
 
-Search that steps a match forward and takes the frames back can use an in-place checkpoint instead of
-`save`/`restore` or `copy_matches_from`. Nothing is serialized or relocated, so it is much cheaper,
-and a checkpoint is only valid for the match it was taken from, until that match is reset, restored
-or copied into.
+Checkpoints rewind one live environment in place. A reset, restore or copy into that environment
+invalidates its checkpoints.
 
 ```python
 root = env.checkpoint(env_index)            # whole match, a uint8 array
 env.step()
-env.rollback(env_index, root)               # exact
-
-pages = env.changed_pages(env_index, root)  # uint32 indices of 4 KiB pages that differ from `root`
-env.checkpoint(env_index, out=node, pages=pages)
-env.rollback(env_index, node, pages=pages)  # copies only those pages
+pages = env.changed_pages(env_index, root)  # uint32 indices of changed 4 KiB pages
+env.rollback(env_index, root, pages=pages)
 ```
 
-A frame writes a small, stable part of match memory, so a search can collect the pages its frames
-touch with `changed_pages` and pass them as `pages`. A partial rollback is exact only if every page
-changed since the checkpoint is listed; `changed_pages` against a full checkpoint is the check.
+Omit `pages` for a full checkpoint or rollback. A partial checkpoint supports rollback of its
+captured pages. For exact rollback, the list passed to rollback must cover every arena page
+changed since capture. `changed_pages` compares against a full checkpoint. Pass a writable,
+contiguous `uint8` array as `out` to reuse storage and a contiguous, aligned `uint32` vector for
+`pages`.
 
 ## Native Input And Match Config
 

@@ -366,6 +366,62 @@ def test_envbatch_checkpoint_rolls_back_in_place(monkeypatch) -> None:
             env.rollback(0, root[:-1])
 
 
+def test_envbatch_checkpoint_validates_lifetime_and_buffers(monkeypatch) -> None:
+    monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
+    with msl.EnvBatch(batch_size=2, length=4) as env:
+        env.reset_all()
+        root = env.checkpoint(0)
+        state = env.save(0)
+        env.reset_matches([1])
+        assert env.changed_pages(0, root).size == 0
+
+        for replace in (
+            lambda: env.reset_matches([0]),
+            lambda: env.restore(0, state),
+            lambda: env.copy_matches_from(env, [0], [1]),
+        ):
+            stale = env.checkpoint(0)
+            replace()
+            with pytest.raises(RuntimeError, match="invalid simulator state"):
+                env.rollback(0, stale)
+            with pytest.raises(RuntimeError, match="invalid simulator state"):
+                env.changed_pages(0, stale)
+
+        root = env.checkpoint(0)
+        state = env.save(0)
+        readonly = root.view()
+        readonly.flags.writeable = False
+        env.rollback(0, readonly)
+        with pytest.raises(ValueError, match="writable"):
+            env.checkpoint(0, out=readonly)
+        with pytest.raises(ValueError, match="uint8"):
+            env.rollback(0, root.view(np.int8))
+        unaligned = np.ndarray((1,), dtype=np.uint32, buffer=bytearray(5), offset=1)
+        with pytest.raises(ValueError, match="aligned"):
+            env.checkpoint(0, pages=unaligned)
+        with pytest.raises(ValueError, match="uint32"):
+            env.rollback(0, root, pages=np.array([0]))
+
+        valid = np.array([0], dtype=np.uint32)
+        invalid = np.array([0, 2**32 - 1], dtype=np.uint32)
+        out = root.copy()
+        with pytest.raises(RuntimeError, match="invalid argument"):
+            env.checkpoint(0, out=out, pages=invalid)
+        np.testing.assert_array_equal(out, root)
+        with pytest.raises(RuntimeError, match="invalid argument"):
+            env.rollback(0, root, pages=invalid)
+
+        partial = env.checkpoint(0, pages=valid)
+        env.rollback(0, partial, pages=valid)
+        with pytest.raises(RuntimeError, match="invalid argument"):
+            env.rollback(0, partial)
+        with pytest.raises(RuntimeError, match="invalid argument"):
+            env.rollback(0, partial, pages=np.array([0, 1], dtype=np.uint32))
+        with pytest.raises(RuntimeError, match="invalid simulator state"):
+            env.changed_pages(0, partial)
+        assert env.save(0) == state
+
+
 def test_match_config_preserves_per_environment_values(monkeypatch) -> None:
     monkeypatch.setenv("MSL_DATA_DIR", str(ROOT / "data"))
     with msl.EnvBatch(batch_size=2, length=1) as env:

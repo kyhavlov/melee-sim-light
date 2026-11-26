@@ -15,7 +15,20 @@ from .config import Character, MatchConfig, PlayerConfig
 
 
 CHECKPOINT_PAGE_SIZE = 4096  # MSL_CHECKPOINT_PAGE_SIZE
+_CHECKPOINT_BYTES = np.dtype(np.uint8)
+_CHECKPOINT_PAGE_INDEX = np.dtype(np.uint32)
 _preloaded = False
+
+
+def _checkpoint_pointer(array: np.ndarray, dtype: np.dtype, *, writable: bool = False) -> int:
+    if not isinstance(array, np.ndarray) or array.ndim != 1 or array.dtype != dtype:
+        raise ValueError(f"checkpoint arrays must be one-dimensional {dtype} arrays")
+    flags = array.flags
+    if not flags.c_contiguous or not flags.aligned:
+        raise ValueError("checkpoint arrays must be contiguous and aligned")
+    if writable and not flags.writeable:
+        raise ValueError("checkpoint output must be writable")
+    return array.ctypes.data
 
 
 def preload_game_data(data_dir: str | os.PathLike[str] | None = None) -> Path:
@@ -433,9 +446,9 @@ class EnvBatch:
     ) -> np.ndarray:
         """Copy one match into `out` for a later `rollback` of the same match.
 
-        `pages` (uint32 page indices, see `changed_pages`) limits the copy to
-        those pages of match memory; the rest of `out` is left as it was.
+        With `pages`, capture only those uint32 arena page indices.
         """
+        page_pointer = None if pages is None else _checkpoint_pointer(pages, _CHECKPOINT_PAGE_INDEX)
         if out is None:
             size = ctypes.c_size_t()
             _native.check(
@@ -449,9 +462,9 @@ class EnvBatch:
             _native.library().msl_batch_checkpoint(
                 self._handle,
                 int(match_index),
-                _native.pointer(out),
+                _checkpoint_pointer(out, _CHECKPOINT_BYTES, writable=True),
                 out.nbytes,
-                _native.pointer(pages),
+                page_pointer,
                 0 if pages is None else pages.size,
             ),
             "checkpoint match",
@@ -466,17 +479,18 @@ class EnvBatch:
     ) -> None:
         """Put a match back to a checkpoint taken from it, in place.
 
-        With `pages`, only those pages are copied back: exact only if every
-        page changed since the checkpoint is listed. The checkpoint stops
-        being valid once the match is reset, restored or copied into.
+        A partial rollback requires a list of captured pages and is exact
+        when that list covers every arena page changed since the checkpoint.
+        Reset, restore and copy into the match invalidate its checkpoints.
         """
+        page_pointer = None if pages is None else _checkpoint_pointer(pages, _CHECKPOINT_PAGE_INDEX)
         _native.check(
             _native.library().msl_batch_rollback(
                 self._handle,
                 int(match_index),
-                _native.pointer(checkpoint),
+                _checkpoint_pointer(checkpoint, _CHECKPOINT_BYTES),
                 checkpoint.nbytes,
-                _native.pointer(pages),
+                page_pointer,
                 0 if pages is None else pages.size,
             ),
             "roll back match",
@@ -484,12 +498,13 @@ class EnvBatch:
 
     def changed_pages(self, match_index: int, checkpoint: np.ndarray) -> np.ndarray:
         """Indices of the match memory pages that differ from a full checkpoint."""
+        checkpoint_pointer = _checkpoint_pointer(checkpoint, _CHECKPOINT_BYTES)
         flags = np.zeros(checkpoint.nbytes // CHECKPOINT_PAGE_SIZE + 1, dtype=np.uint8)
         _native.check(
             _native.library().msl_batch_diff_pages(
                 self._handle,
                 int(match_index),
-                _native.pointer(checkpoint),
+                checkpoint_pointer,
                 checkpoint.nbytes,
                 _native.pointer(flags),
                 flags.size,
