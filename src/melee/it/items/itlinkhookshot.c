@@ -1500,7 +1500,6 @@ s32 it_802A5320(ItemLink* link_0, Vec3* arg1, itLinkHookshotAttributes* attr,
                 }
                 return 0;
             }
-            break;
         }
         link_0 = link_1;
         link_1 = link_1->next;
