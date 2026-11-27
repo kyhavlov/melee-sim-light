@@ -378,7 +378,7 @@ def validate_one(
             slippi_patches=slippi_patches(codes),
             jit_arithmetic=1 if jit_arithmetic == "split-fma" else 0,
             stored_expected=stored,
-            whispy_dead_fighter_fix=whispy_patch(codes) if game.start.get("stage") == 28 else -1,
+            whispy_dead_fighter_fix=whispy_patch(codes),
         )
     result["admitted"] = not diagnostic
     result["diagnostic"] = diagnostic or signed_zero_equal or frames != 0 or start_frame is not None

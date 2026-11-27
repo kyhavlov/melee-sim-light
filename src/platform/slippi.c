@@ -42,7 +42,9 @@ void msl_slippi_stage_events_begin(const MslCoreStageEvents* events)
             events->dreamland_whispy_direction;
     }
     msl_bound_slippi_state->fighter_pre_random_seed_pending =
-        events->fighter_pre_random_seed_valid;
+        (events->replay_frame_flags & MSL_REPLAY_FRAME_FIGHTER_SEED) != 0;
+    msl_bound_slippi_state->skip_screen_ko_model =
+        (events->replay_frame_flags & MSL_REPLAY_FRAME_SKIP_RENDER) != 0;
     msl_bound_slippi_state->fighter_pre_random_seed =
         events->fighter_pre_random_seed;
     memcpy(msl_bound_slippi_state->cpu_inputs, events->cpu_inputs,
@@ -82,6 +84,11 @@ bool msl_slippi_dreamland_whispy_direction(u8* direction)
     }
     *direction = msl_bound_slippi_state->dreamland_whispy_direction;
     return true;
+}
+
+bool msl_slippi_skip_screen_ko_model(void)
+{
+    return msl_bound_slippi_state->skip_screen_ko_model;
 }
 
 void msl_slippi_apply_fighter_pre_random_seed(void)

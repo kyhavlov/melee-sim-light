@@ -76,7 +76,7 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats):
         if issues:
             return None, {"status": "unsupported", "reasons": issues}
         try:
-            whispy = whispy_patch(codes) if game.start["stage"] == 28 else -1
+            whispy = whispy_patch(codes)
         except ValueError as exc:
             return None, {"status": "unsupported", "reasons": [str(exc)]}
         metadata = dict(game.metadata, playedOn=played_on)

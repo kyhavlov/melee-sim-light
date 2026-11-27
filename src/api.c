@@ -118,7 +118,7 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
                                  ? source->num_players == 4
                                  : source->allow_wobbling == MSL_WOBBLING_ALLOW;
   if (allow_wobbling) {
-    target->slippi_patches = MSL_PATCH_ALLOW_WOBBLING;
+    target->replay_flags = MSL_PATCH_ALLOW_WOBBLING;
   }
 
   for (player = 0; player < source->num_players; ++player) {

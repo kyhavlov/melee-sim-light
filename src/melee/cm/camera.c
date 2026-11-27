@@ -53,7 +53,7 @@
 #include <melee/gr/grzebes.h>
 
 #ifdef MSL_CORE_HOSTED
-extern bool msl_core_freezes_dead_up_fall_physics(void);
+#include "runtime/match.h"
 #endif
 
 // Match setup supplies this value from StageInfo; keep that existing owner.
@@ -1436,6 +1436,12 @@ void Camera_8002B3D4(void* arg0)
     f32 temp_f31;
     f32 var_f1;
     f32 var_f1_2;
+#ifdef MSL_CORE_HOSTED
+    // Slippi keeps this transform on the model. Homing missiles and the
+    // unpatched direction vote can still sample it.
+    bool update_copy = !msl_core_freezes_dead_up_fall_physics() ||
+                       msl_core_needs_screen_ko_model();
+#endif
 
     Camera_80030DF8();
     Camera_800293E0();
@@ -1456,15 +1462,7 @@ void Camera_8002B3D4(void* arg0)
         Camera_8002A768(&cm_80452C68.transform, 0);
     }
 #ifdef MSL_CORE_HOSTED
-    // Slippi's FreezeDeadUpFallPhysics patch removes the only gameplay
-    // consumer of the separately maintained DeadUp render transform. Do not
-    // run a duplicate complete camera-bounds/smoothing pipeline for matches
-    // carrying that capability. Offline retail keeps the source copy owner.
-    // refs/melee/src/melee/cm/camera.c::{Camera_8002B3D4,
-    //   Camera_800310B8}
-    // refs/slippi-ssbm-asm/Online/Core/FreezeDeadUpFallPhysics/
-    //   UpdateModelPos.asm
-    if (!msl_core_freezes_dead_up_fall_physics())
+    if (update_copy)
 #endif
     {
         Camera_8002958C(&sp2C, &cm_80452C68.transform_copy);
@@ -1508,7 +1506,7 @@ void Camera_8002B3D4(void* arg0)
     Camera_80029C88(&bounds, &cm_80452C68.transform,
                     Stage_GetCamTrackSmooth());
 #ifdef MSL_CORE_HOSTED
-    if (!msl_core_freezes_dead_up_fall_physics())
+    if (update_copy)
 #endif
     {
         Camera_80029AAC(&sp2C, &cm_80452C68.transform_copy,

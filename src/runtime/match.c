@@ -120,7 +120,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
 
 bool msl_slippi_patch(int patch)
 {
-    return (msl_core_active_match()->config.slippi_patches & patch) != 0;
+    return (msl_core_active_match()->config.replay_flags & patch) != 0;
 }
 
 // Slippi's PreventWobbling, from the code bytes the capture carries: the count
@@ -228,6 +228,21 @@ bool msl_core_has_brawl_offscreen_damage(void)
 bool msl_core_freezes_dead_up_fall_physics(void)
 {
     return msl_freeze_dead_up_fall_physics;
+}
+
+bool msl_core_needs_screen_ko_model(void)
+{
+    // Unpatched ftLib_800864A8 includes dead fighters in its direction vote.
+    if (!msl_whispy_ignores_dead_fighters()) {
+        return true;
+    }
+    const MslCoreMatchConfig* config = &msl_core_active_match()->config;
+    for (int i = 0; i < config->num_players; ++i) {
+        if (config->players[i].char_id == FTKIND_SAMUS) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void msl_core_advance_match_frame(void)

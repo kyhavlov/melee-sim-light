@@ -22,6 +22,7 @@
 #include "ft/ftmaterial.h"
 #include "ft/ftmetal.h"
 #include "ft/types.h"
+#include "ftCommon/ftCo_09F7.h"
 #include "ftCommon/ftCo_Damage.h"
 #include "ftCommon/ftCo_DamageFall.h"
 #include "ftCommon/ftCo_Fall.h"
@@ -44,6 +45,8 @@
 #include "mp/mplib.h"
 #include "pl/player.h"
 #include "pl/plbonuslib.h"
+#include "runtime/match.h"
+#include "runtime/wire.h"
 #include "sfx/crowdsfx.h"
 
 #include <common_structs.h>
@@ -511,6 +514,15 @@ bool ftCommon_CheckFallFast(Fighter* fp)
         fp->fall_fast = true;
         fp->x671_timer_lstick_tilt_y = 0xFE;
         ft_PlaySFX(fp, 0x96, 0x7F, 0x40);
+#ifdef MSL_CORE_HOSTED
+        // Gecko C207D5A0 spawns this effect even with zero random range.
+        // ftCo_8009F834 still consumes three draws before it queues the spawn.
+        if (msl_slippi_patch(MSL_PATCH_FAST_FALL_EFFECT)) {
+            Vec3 offset = { fp->facing_dir < 0.0F ? -8.0F : 8.0F, 0, 0 };
+            Vec3 range = { 0, 0, 0 };
+            ftCo_8009F834(fp->gobj, 0x3F3, 3, 0, 0, &offset, &range, 0);
+        }
+#endif
         return true;
     }
     return false;

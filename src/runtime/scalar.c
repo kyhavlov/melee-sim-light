@@ -1227,6 +1227,8 @@ static int match_construct(MslCoreMatch* match,
 #ifndef MSL_CORE_NATIVE
     Player_80036DD8();
 #endif
+    int first_entry_delay =
+        match->config.replay_flags & MSL_REPLAY_IMMEDIATE_ENTRY ? 0 : 5;
     for (i = 0; i < match->config.num_players; ++i) {
         int slot = match->source_slots[i];
         int spawn_order = neutral_spawn_order(match, i);
@@ -1236,7 +1238,7 @@ static int match_construct(MslCoreMatch* match,
         Vec3 retail_spawn;
         // Without Slippi's NeutralSpawn each fighter enters at the stage's
         // spawn point for its own port (gmvs.c::getSpawnPoint, stage.c::Stage_80224E64).
-        if ((match->config.slippi_patches & MSL_PATCH_RETAIL_SPAWNS) &&
+        if ((match->config.replay_flags & MSL_PATCH_RETAIL_SPAWNS) &&
             Ground_801C2D24(slot, &retail_spawn))
         {
             spawn = &retail_spawn;
@@ -1307,7 +1309,7 @@ static int match_construct(MslCoreMatch* match,
         // Standard versus starts assign staggered five-frame Entry timers.
         // refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC
         Player_SetFlagsBit3(slot, 1);
-        Player_SetUnk4C(slot, (slot + 1) * 5);
+        Player_SetUnk4C(slot, first_entry_delay + slot * 5);
         Player_80032768(slot, (Vec3*) spawn);
     }
     resolve_initial_facing(match);

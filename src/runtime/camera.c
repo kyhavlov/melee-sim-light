@@ -15,6 +15,7 @@
 #include "gr/stage.h"
 #include "lb/lbvector.h"
 #include "lb/types.h"
+#include "platform/slippi.h"
 #include "pl/player.h"
 #include "runtime/camera.h"
 #include "sc/types.h"
@@ -451,18 +452,10 @@ void msl_camera_publish_match_visibility(Fighter_GObj* const* fighters,
                 !headless_camera_point_on_screen(view, fov, point);
         }
 
-        // Offline retail DeadUpFall stores its visible trajectory in camera
-        // coordinates and publishes the inverse-view result through cur_pos
-        // in the fighter render callback. Slippi Online replaces that with a
-        // JObj-only transform. The source transform is Match-wide, so share
-        // its construction while preserving fighter traversal order.
-        // refs/melee/src/melee/ft/ftdrawcommon.c::
-        //     ftDrawCommon_80080E18_inline2
-        // refs/slippi-ssbm-asm/Online/Core/FreezeDeadUpFallPhysics/
-        //     UpdateModelPos.asm
-        // refs/melee/src/melee/cm/camera.c::Camera_800311EC
-        if (!msl_core_freezes_dead_up_fall_physics() && !fp->x221F_b3 &&
-            fp->x2220_b7)
+        if (fp->x2220_b7 && !fp->x221F_b3 &&
+            !msl_slippi_skip_screen_ko_model() &&
+            (!msl_core_freezes_dead_up_fall_physics() ||
+             msl_core_needs_screen_ko_model()))
         {
             Mtx inverse;
 
@@ -472,8 +465,14 @@ void msl_camera_publish_match_visibility(Fighter_GObj* const* fighters,
                 deadup_view_ready = true;
             }
             if (PSMTXInverse(deadup_view, inverse)) {
-                PSMTXMultVec(inverse, &fp->mv.co.unk_deadup.x50,
-                             &fp->cur_pos);
+                Vec3 model_pos;
+                PSMTXMultVec(inverse, &fp->mv.co.unk_deadup.x50, &model_pos);
+                // FreezeDeadUpFallPhysics/UpdateModelPos.asm replaces
+                // the render callback's physics write with a JObj write.
+                if (!msl_core_freezes_dead_up_fall_physics()) {
+                    fp->cur_pos = model_pos;
+                }
+                HSD_JObjSetTranslate(gobj->hsd_obj, &model_pos);
             }
         }
     }

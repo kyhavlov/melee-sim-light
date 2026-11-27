@@ -111,6 +111,7 @@ def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
 PATCH_FD_BACKGROUND_FROZEN = 1 << 0
 PATCH_ALLOW_WOBBLING = 1 << 1
 PATCH_RETAIL_SPAWNS = 1 << 2
+PATCH_FAST_FALL_EFFECT = 1 << 3
 
 
 def whispy_patch(codes: dict[int, bytes]) -> int:
@@ -120,7 +121,8 @@ def whispy_patch(codes: dict[int, bytes]) -> int:
     patch = codes.get(0xC208653C)
     if patch is None:
         return 0
-    # Online/Core/WhispyBlowDirFix at 0x8008653c.
+    # Online/Core/WhispyBlowDirFix at 0x8008653c also affects item spawn
+    # direction through ftLib_800864A8.
     if (len(patch) != 56 or hashlib.sha256(patch[8:-4]).hexdigest() !=
             "af4349210f7c59046e021bda981813dd3d5ef641ec6fc9d3afd76cb63b6cc79c" or
             int.from_bytes(patch[-4:], "big") & 0xFC000003 != 0x48000000):
@@ -146,6 +148,13 @@ def slippi_patches(codes: dict[int, bytes]) -> int:
         patches |= PATCH_ALLOW_WOBBLING
     if codes and 0xC216E510 not in codes:
         patches |= PATCH_RETAIL_SPAWNS
+    patch = codes.get(0xC207D5A0)
+    if patch is not None:
+        if (len(patch) != 120 or hashlib.sha256(patch[8:-4]).hexdigest() !=
+                "f4cdcc3652437230294e27613dc690913bf3615a869db1058758cc54d2678446" or
+                int.from_bytes(patch[-4:], "big") & 0xFC000003 != 0x48000000):
+            raise ValueError("unsupported-fast-fall-effect-patch")
+        patches |= PATCH_FAST_FALL_EFFECT
     return patches
 
 

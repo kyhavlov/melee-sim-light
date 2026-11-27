@@ -233,6 +233,8 @@ typedef struct StreamState {
   int64_t compare_start_pos;
   int64_t process_end_pos;
   int64_t next_input_pos;
+  int64_t next_raw_pos;
+  int32_t latest_raw_frame;
   int64_t output_rows;
   uint8_t write_buf[IO_CHUNK_BYTES];
   size_t write_len;
@@ -1114,6 +1116,7 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
                               int ucf_shield_drop_084_enabled,
                               MslCoreMatchConfig* config, char* error,
                               size_t error_size) {
+  enum { MSL_REPLAY_ACTION_ENTRY_START = 323 };
   int64_t i;
   if (rows->count == 0) {
     snprintf(error, error_size, "replay has no finalized frames");
@@ -1151,7 +1154,7 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
       (replay->jit_arithmetic ? MSL_ARITHMETIC_SPLIT_FMA : 0);
   config->brawl_offscreen_damage = replay->brawl_offscreen_damage;
   config->freeze_dead_up_fall_physics = replay->freeze_dead_up_fall_physics;
-  config->slippi_patches =
+  config->replay_flags =
       replay->slippi_patches | (replay->is_teams ? MSL_PATCH_ALLOW_WOBBLING : 0);
   config->whispy_dead_fighter_fix = replay->whispy_dead_fighter_fix;
   config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
@@ -1165,6 +1168,13 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     const ReplayPlayer* player = &replay->players[i];
     int64_t player_raw = rows->player_raw[i][0];
     uint8_t character = get_u8(&player->character, player_raw);
+    // ftCo_Entry_Anim enters EntryStart at a zero countdown. A recording
+    // already in EntryStart on P1's first update starts the stagger at zero.
+    // Subsequent transitions must match with that initial timer.
+    if (config->frame_id == -124 && replay->port_1based[i] == 1 &&
+        get_u16(&player->action, player_raw) == MSL_REPLAY_ACTION_ENTRY_START) {
+      config->replay_flags |= MSL_REPLAY_IMMEDIATE_ENTRY;
+    }
     config->players[i].cpu_level = replay->cpu_level[i];
     uint8_t stocks = replay->start_stocks[i];
     if (character != 5 && character != 1 && character != 2 && character != 3 && character != 6 && character != 7 &&
@@ -2245,7 +2255,21 @@ static void refill_write_buffer(StreamState* state) {
     frame.stage_events.fighter_pre_random_seed =
         get_u32(&state->replay->players[seed_player].random_seed,
                 state->rows->player_raw[seed_player][logical_pos]);
-    frame.stage_events.fighter_pre_random_seed_valid = 1;
+    frame.stage_events.replay_frame_flags = MSL_REPLAY_FRAME_FIGHTER_SEED;
+    if (state->replay->online_fnmsubs_zero) {
+      // LoopEngineForRollback.asm reaches the draw pass only after catch-up.
+      // A repeated raw frame is still behind the live frame, even when that
+      // repetition is the finalized copy used for simulation.
+      while (state->next_raw_pos < raw) {
+        int32_t id = get_i32(&state->replay->frame_id, state->next_raw_pos++);
+        if (id > state->latest_raw_frame) {
+          state->latest_raw_frame = id;
+        }
+      }
+      if (get_i32(&state->replay->frame_id, raw) <= state->latest_raw_frame) {
+        frame.stage_events.replay_frame_flags |= MSL_REPLAY_FRAME_SKIP_RENDER;
+      }
+    }
     build_input(state->replay, state->rows, logical_pos, &frame.input);
     for (int player = 0; player < state->replay->num_players; ++player) {
       const ReplayPlayer* src = &state->replay->players[player];
@@ -2951,7 +2975,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   if (slippi_patches < 0 ||
       (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_ALLOW_WOBBLING |
-                          MSL_PATCH_RETAIL_SPAWNS))) {
+                          MSL_PATCH_RETAIL_SPAWNS | MSL_PATCH_FAST_FALL_EFFECT))) {
     PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
     goto done;
   }
@@ -3050,6 +3074,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   // warm-up so Entry timers, scheduler state, and RNG consumers reach the
   // pre-frame state for the first compared transition (row 1).
   state.next_input_pos = 0;
+  state.latest_raw_frame = INT32_MIN;
   build_input(&replay, &rows, 0, &state.previous);
 
   runner_started = monotonic_seconds();
@@ -3162,7 +3187,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   }
   if (slippi_patches < 0 ||
       (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_ALLOW_WOBBLING |
-                          MSL_PATCH_RETAIL_SPAWNS))) {
+                          MSL_PATCH_RETAIL_SPAWNS | MSL_PATCH_FAST_FALL_EFFECT))) {
     PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
     goto done;
   }

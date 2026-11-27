@@ -42,8 +42,7 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, whispy_dead_fighter_fix)];
     config->stage_event_streams =
         wire[offsetof(MslCoreMatchConfig, stage_event_streams)];
-    config->slippi_patches =
-        wire[offsetof(MslCoreMatchConfig, slippi_patches)];
+    config->replay_flags = wire[offsetof(MslCoreMatchConfig, replay_flags)];
     memcpy(config->players, wire + offsetof(MslCoreMatchConfig, players),
            sizeof(config->players));
 }
@@ -65,8 +64,8 @@ void msl_core_decode_stage_events(MslCoreStageEvents* events,
         wire[offsetof(MslCoreStageEvents, dreamland_whispy_valid)];
     events->dreamland_whispy_direction =
         wire[offsetof(MslCoreStageEvents, dreamland_whispy_direction)];
-    events->fighter_pre_random_seed_valid =
-        wire[offsetof(MslCoreStageEvents, fighter_pre_random_seed_valid)];
+    events->replay_frame_flags =
+        wire[offsetof(MslCoreStageEvents, replay_frame_flags)];
     for (int i = 0; i < MSL_CORE_MAX_PLAYERS; ++i) {
         const uint8_t* p = wire + offsetof(MslCoreStageEvents, cpu_inputs) +
                            i * sizeof(MslReplayCpuInput);

@@ -106,11 +106,8 @@ def prepare(args: argparse.Namespace) -> None:
                 print(f"skipping replay-only arithmetic: {case.display_path}")
                 skipped_arithmetic += 1
                 continue
-            codes = None
-            whispy = -1
-            if game.start["stage"] == 28:
-                codes = gecko_codes(peppi_path.read_bytes())
-                whispy = whispy_patch(codes)
+            codes = gecko_codes(peppi_path.read_bytes())
+            whispy = whispy_patch(codes)
             case_path = case_dir / f"{_cache_key(case, whispy)}.mslrpb"
             frame_count = None if args.force else _cached_frame_count(case_path)
             if frame_count is None:
@@ -128,9 +125,7 @@ def prepare(args: argparse.Namespace) -> None:
                         ucf_shield_drop_extended_enabled=case.ucf_shield_drop_extended_enabled,
                         ucf_shield_drop_084_enabled=case.ucf_shield_drop_084_enabled,
                         fnmsubs_profile=case.fnmsubs_profile,
-                        slippi_patches=slippi_patches(
-                            codes if codes is not None else gecko_codes(peppi_path.read_bytes())
-                        ),
+                        slippi_patches=slippi_patches(codes),
                         jit_arithmetic=1 if case.jit_arithmetic == "split-fma" else 0,
                         whispy_dead_fighter_fix=whispy,
                     )

@@ -63,9 +63,14 @@ typedef struct MslCoreStageEvents {
     uint8_t fod_platform_mask;
     uint8_t dreamland_whispy_valid;
     uint8_t dreamland_whispy_direction;
-    uint8_t fighter_pre_random_seed_valid;
+    uint8_t replay_frame_flags;
     MslReplayCpuInput cpu_inputs[MSL_CORE_MAX_PLAYERS];
 } MslCoreStageEvents;
+
+enum {
+    MSL_REPLAY_FRAME_FIGHTER_SEED = 1 << 0,
+    MSL_REPLAY_FRAME_SKIP_RENDER = 1 << 1,
+};
 
 typedef struct MslCoreStreamFrame {
     uint32_t frame_pre_random_seed;
@@ -142,8 +147,8 @@ typedef struct MslCoreMatchConfig {
     uint8_t stage_event_streams;
     // Online/Core/WhispyBlowDirFix excludes death animations from the vote.
     uint8_t whispy_dead_fighter_fix;
-    // MSL_PATCH_* capabilities from the replay code list.
-    uint8_t slippi_patches;
+    // Capabilities from the replay code list and initial frame.
+    uint8_t replay_flags;
     MslCoreMatchPlayerConfig players[MSL_CORE_MAX_PLAYERS];
 } MslCoreMatchConfig;
 
@@ -153,6 +158,8 @@ enum {
     MSL_PATCH_ALLOW_WOBBLING = 1 << 1,
     // No External/NeutralSpawn (0x8016E510): each port at its own spawn point.
     MSL_PATCH_RETAIL_SPAWNS = 1 << 2,
+    MSL_PATCH_FAST_FALL_EFFECT = 1 << 3,
+    MSL_REPLAY_IMMEDIATE_ENTRY = 1 << 4,
 };
 
 enum {

@@ -96,6 +96,21 @@ def test_unreviewed_offscreen_body_is_rejected(properties_only, monkeypatch):
     assert "unreviewed-offscreen-patch" in admission.capture_issues(game, raw)
 
 
+def test_fast_fall_effect_uses_the_recorded_patch():
+    address = 0xC207D5A0
+    patch = bytes.fromhex(
+        "c207d5a00000000e7f83e378388003f338a0000338c0000038e000003821ff94"
+        "3901002039210014801f002c2c0000004181000c3c004100480000083c00c100"
+        "900100203800000090010014900100189001001c90010024900100283dc08009"
+        "61cef8347dc903a64e8004213821006c386000014ba130e8"
+    )
+    flag = admission.PATCH_FAST_FALL_EFFECT
+    assert not admission.slippi_patches({}) & flag
+    assert admission.slippi_patches({address: patch}) & flag
+    with pytest.raises(ValueError, match="unsupported-fast-fall-effect-patch"):
+        admission.slippi_patches({address: patch[:16] + b"\0" + patch[17:]})
+
+
 @pytest.mark.parametrize("key,value", [("is_pal", True), ("item_spawn_frequency", 1),
                                         ("damage_ratio", float("nan")), ("is_raining_bombs", True)])
 def test_unsupported_settings_are_rejected(properties_only, key, value):
