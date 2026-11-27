@@ -11,6 +11,7 @@ validation mismatch in rejected replays.
 Use `--start` to skip replay members and `--limit` to select a batch. Use
 `--output` to name each batch's ZIP. `--workers` sets the number of persistent
 simulator workers. On Linux, `--cores 0,2,4,6` pins one worker per listed CPU.
+`--compression-level` sets the ZIP Deflate level and defaults to 5.
 
 Regenerated replays preserve the original recording version, metadata, and
 finalized gameplay events. The Post-Frame payload size identifies the added

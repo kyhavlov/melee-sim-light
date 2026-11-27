@@ -32,6 +32,7 @@ from tools.validation.stored import POST_FRAME, STORED_END, STORED_OFFSET, _size
 
 REPLAY_SUFFIXES = (".slp", ".slp.gz", ".slpz", ".slpz.gz")
 SLIPPI_ICE_CLIMBERS = 14
+DEFAULT_COMPRESSION_LEVEL = 5
 
 
 def _decode_member(archive: ZipFile, member: ZipInfo) -> tuple[str, bytes]:
@@ -249,7 +250,7 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
 def regenerate_zip(
     source: Path, destination: Path, *, workers: int, cores: tuple[int, ...],
     start: int = 0, limit: int | None = None, timeout: float = 60, relaxed_floats: bool = False,
-    include_finalized_prefixes: bool = False,
+    include_finalized_prefixes: bool = False, compression_level: int = DEFAULT_COMPRESSION_LEVEL,
 ) -> dict:
     if source.resolve() == destination.resolve() or destination.exists():
         raise FileExistsError(destination)
@@ -266,7 +267,7 @@ def regenerate_zip(
         frames = 0
         output_names: set[str] = set()
         with validation._NativeRunnerPool(workers, cores) as pool, ZipFile(
-            pending.name, mode="w", compression=ZIP_DEFLATED, compresslevel=1
+            pending.name, mode="w", compression=ZIP_DEFLATED, compresslevel=compression_level
         ) as output, concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             jobs = {}
 
@@ -327,6 +328,9 @@ def main() -> int:
     parser.add_argument("--workers", type=int, help="number of persistent simulation workers")
     parser.add_argument("--cores", help="comma-separated logical CPUs, one per native worker (Linux)")
     parser.add_argument("--timeout", type=float, default=60, help="timeout per simulation in seconds")
+    parser.add_argument("--compression-level", type=int, choices=range(1, 10),
+                        default=DEFAULT_COMPRESSION_LEVEL, metavar="LEVEL",
+                        help="ZIP Deflate compression level from 1 to 9 (default: %(default)s)")
     parser.add_argument("--disable-strict-exactness", action="store_true",
                         help="allow the documented regeneration tolerances")
     parser.add_argument("--include-finalized-prefixes", action="store_true",
@@ -353,7 +357,8 @@ def main() -> int:
     summary = regenerate_zip(args.archive, destination, workers=workers, cores=cores,
                              start=args.start, limit=args.limit, timeout=args.timeout,
                              relaxed_floats=args.disable_strict_exactness,
-                             include_finalized_prefixes=args.include_finalized_prefixes)
+                             include_finalized_prefixes=args.include_finalized_prefixes,
+                             compression_level=args.compression_level)
     print(json.dumps(summary))
     return int(summary["outcomes"].get("error", 0) != 0)
 
