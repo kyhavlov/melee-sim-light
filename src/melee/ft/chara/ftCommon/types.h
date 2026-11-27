@@ -141,10 +141,19 @@ union ftCommon_MotionVars {
         /* fp+234C */ u32 xC;
         /* fp+2350 */ u32 x10;
         /* fp+2354 */ float x14;
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        // Damage's byte stores also update the float at mv+0x18, used by
+        // Yoshi's powershield countdown. Keep each byte's PPC significance.
+        /* fp+235B */ u8 x1B;
+        /* fp+235A */ u8 x1A;
+        /* fp+2359 */ u8 x19;
+        /* fp+2358 */ u8 x18;
+#else
         /* fp+2358 */ u8 x18;
         /* fp+2359 */ u8 x19;
         /* fp+235A */ u8 x1A;
         /* fp+235B */ u8 x1B;
+#endif
     } damage;
     struct {
         /* fp+2340 */ u8 wall_hit_dir;
@@ -381,7 +390,12 @@ union ftCommon_MotionVars {
         /* fp+2340 */ int x0;
         /* fp+2344 */ float x4;
         /* fp+2348 */ u8 pad_x8[0x18 - 0x8];
-        /* fp+2358 */ HSD_JObj* x18;
+#ifdef MSL_CORE_NATIVE
+        // A retail joint pointer in this word behaves as zero when the
+        // guard countdown subtracts 1. Keep host address bits out of it.
+        /* fp+2358 */ u32 x18_lane;
+#endif
+        /* fp+2358 on PPC */ HSD_JObj* x18;
     } capturedamage;
     struct {
         /* fp+2340 */ bool timer;

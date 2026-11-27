@@ -218,6 +218,9 @@ void ftCo_800DE7C0(Fighter_GObj* gobj, Fighter_GObj* victim, bool is_upward)
 
     if (victim != 0) {
         fp->x21EC = fn_800DE798;
+        // The original pointer word at +0xC also serves as the guard
+        // release flag if Yoshi later enters GuardHold out of a roll.
+        fp->mv.co.fighterthrow.xC_victim_lane = 1;
         fp->mv.co.fighterthrow.victim = victim;
     }
 

@@ -1957,6 +1957,9 @@ static void fn_800D9CE8(Fighter_GObj* gobj)
         nextMotion = 0xD7;
     }
 
+#ifdef MSL_CORE_NATIVE
+    fp->mv.co.capturedamage.x18_lane = 0;
+#endif
     switch (fp->kind) {
     case FTKIND_CLINK:
     case FTKIND_LINK:
@@ -2142,6 +2145,9 @@ void fn_800DA1D8(Fighter_GObj* gobj)
     fp->take_dmg_cb = fn_800DA490;
     fp->x221B_b7 = false;
     jobj = fp->parts[fp->ft_data->x8->x11].joint;
+#ifdef MSL_CORE_NATIVE
+    fp->mv.co.capturedamage.x18_lane = 0;
+#endif
     fp->mv.co.capturedamage.x18 = jobj;
     efAsync_Spawn(gobj, &GET_FIGHTER(gobj)->x60C, 1, 0x41D, jobj);
     ftCommon_8007EBAC(fp, 3, 0);

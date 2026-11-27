@@ -1753,36 +1753,54 @@ static inline bool mpColl_RightWall_inline2(CollData* coll, float ax, float ay,
 static bool mpColl_WallBroadphase(CollData* coll, u32 kind)
 {
     const float tolerance = 0.1F;
-    float left = coll->cur_pos.x + coll->ecb.left.x;
-    float prev = coll->prev_pos.x + coll->prev_ecb.left.x;
-    float right = coll->cur_pos.x + coll->ecb.right.x;
-    float bottom = coll->cur_pos.y + coll->ecb.bottom.y;
-    float top = coll->cur_pos.y + coll->ecb.top.y;
+    const ftECB* prev = &coll->prev_ecb;
+    const ftECB* cur = &coll->ecb;
+    const bool left_wall = kind == CollLine_LeftWall;
+    const Vec2 old_points[] = { prev->bottom, prev->top,
+                              left_wall ? prev->right : prev->left };
+    const Vec2 new_points[] = { cur->bottom, cur->top,
+                              left_wall ? cur->right : cur->left };
+    float left = F32_MAX, bottom = F32_MAX;
+    float right = -F32_MAX, top = -F32_MAX;
+    Vec2 min_move = { 0.0F, 0.0F };
+    Vec2 max_move = { 0.0F, 0.0F };
 
-    if (prev < left) {
-        left = prev;
-    }
-    prev = coll->prev_pos.x + coll->prev_ecb.right.x;
-    if (prev > right) {
-        right = prev;
-    }
-    prev = coll->prev_pos.y + coll->prev_ecb.bottom.y;
-    if (prev < bottom) {
-        bottom = prev;
-    }
-    prev = coll->prev_pos.y + coll->prev_ecb.top.y;
-    if (prev > top) {
-        top = prev;
+    for (int i = 0; i < 3; ++i) {
+        const float old_x = coll->prev_pos.x + old_points[i].x;
+        const float old_y = coll->prev_pos.y + old_points[i].y;
+        const float new_x = coll->cur_pos.x + new_points[i].x;
+        const float new_y = coll->cur_pos.y + new_points[i].y;
+        const float dx = new_x - old_x;
+        const float dy = new_y - old_y;
+
+        left = MIN(left, new_x);
+        right = MAX(right, new_x);
+        bottom = MIN(bottom, new_y);
+        top = MAX(top, new_y);
+        min_move.x = MIN(min_move.x, dx);
+        min_move.y = MIN(min_move.y, dy);
+        max_move.x = MAX(max_move.x, dx);
+        max_move.y = MAX(max_move.y, dy);
+
+        // mpRemap2d has a different displacement formula for a short edge.
+        if (!mpColl_IsEcbTiny && i < 2) {
+            const float edge_x = old_x - (coll->prev_pos.x + old_points[2].x);
+            const float edge_y = old_y - (coll->prev_pos.y + old_points[2].y);
+            if ((double) edge_x * edge_x + (double) edge_y * edge_y <= 0.0001) {
+                return true;
+            }
+        }
     }
 
-    // The source intersection helpers admit small endpoint/half-space
-    // tolerances. A broad phase must be conservative across all of them.
-    left -= tolerance;
-    bottom -= tolerance;
-    right += tolerance;
-    top += tolerance;
-
-    return mpLib_LineBroadphase(left, bottom, right, top, kind,
+    // The wall-edge sweep remaps stage vertices by interpolating the two
+    // ECB endpoint movements. A vertex can start outside both ECB boxes
+    // and still cross the new edge. Bound its original position by taking
+    // the current edge bounds back by the range of endpoint movements.
+    // GALE01 mpLib_800511A4 and mpLib_800515A0 call mpRemap2d for this test.
+    return mpLib_LineBroadphase(left - max_move.x - tolerance,
+                                bottom - max_move.y - tolerance,
+                                right - min_move.x + tolerance,
+                                top - min_move.y + tolerance, kind,
                                 coll->joint_id_skip, coll->joint_id_only);
 }
 #endif

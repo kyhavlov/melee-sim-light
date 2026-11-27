@@ -2453,11 +2453,10 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
                     float kb_angle = atan2f(kb_vel_y, kb_vel_x);
 
 #ifdef MSL_CORE_HOSTED
-                    // GALE01 0x8006B948 inlines this sqrtf as frsqrte plus
-                    // three Newton steps; libc sqrtf can differ by one ULP
-                    // and flip the zero clamp on the decay's final frame.
-                    if (msl_gekko_sqrtf(kb_vel_x * kb_vel_x +
-                                        kb_vel_y * kb_vel_y) <
+                    // GALE01 0x8006B938 fuses X² into the rounded Y² before
+                    // the Gekko square root and the final zero clamp.
+                    if (msl_gekko_sqrtf(__fmadds(kb_vel_x, kb_vel_x,
+                                                kb_vel_y * kb_vel_y)) <
                         p_ftCommonData->x204_knockbackFrameDecay)
 #else
                     if (sqrtf(kb_vel_x * kb_vel_x + kb_vel_y * kb_vel_y) <
@@ -2520,8 +2519,8 @@ void Fighter_procUpdate(Fighter_GObj* gobj)
                 float atkShieldKBAngle = atan2f(kb_y, kb_x);
 
 #ifdef MSL_CORE_HOSTED
-                // Same MWCC inline sqrtf as the ordinary knockback decay.
-                if (msl_gekko_sqrtf(kb_x * kb_x + kb_y * kb_y) <
+                // GALE01 0x8006BAA8 uses the same fused squared length.
+                if (msl_gekko_sqrtf(__fmadds(kb_x, kb_x, kb_y * kb_y)) <
                     p_ftCommonData->x3E8_shieldKnockbackFrameDecay)
 #else
                 if (sqrtf(kb_x * kb_x + kb_y * kb_y) <
@@ -2800,7 +2799,9 @@ void Fighter_procMap(Fighter_GObj* gobj)
         // exact map-pass seam before the collision callback.
         msl_slippi_lcancel_set(fp, 0);
 #endif
-        Fighter_SetRootPosition(gobj->hsd_obj, &fp->cur_pos);
+        // The collision callback reads ECB joint matrices from this pose.
+        // Invalidate them through HSD before the callback can resolve them.
+        HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
 
         if (fp->coll_cb) {
 #ifdef MSL_SUBSYSTEM_PROFILE

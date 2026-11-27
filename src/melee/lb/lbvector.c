@@ -5,6 +5,7 @@
 #include "lb/lbrefract.h"
 
 #include <math.h>
+#include <string.h>
 #include <MetroTRK/intrinsics.h>
 #include <math_ppc.h>
 #include <dolphin/gx/GXTransform.h>
@@ -93,28 +94,74 @@ Vec3* lbVector_CrossprodNormalized(Vec3* a, Vec3* b, Vec3* result)
     return result;
 }
 
+static bool lbVector_AngleCosine(Vec3* a, Vec3* b, float* cosine)
+{
+    float lena_lenb = lbVector_Len(a) * lbVector_Len(b);
+    if (!(lena_lenb > 0.0000000001f)) {
+        return false;
+    }
+
+    // GALE01 0x8000D634..0x8000D6C4 rounds the squared lengths before
+    // addition. Only the dot product at 0x8000D748/0x8000D750 fuses.
+    *cosine = __fmadds(a->z, b->z, __fmadds(a->x, b->x, a->y * b->y)) /
+              lena_lenb;
+    if (*cosine > 1.0f) {
+        *cosine = 1.0f;
+    }
+    if (*cosine < -1.0f) {
+        *cosine = -1.0f;
+    }
+    return true;
+}
+
 /// 8000D620 - returns the angle between a and b
 float lbVector_Angle(Vec3* a, Vec3* b)
 {
-    float lena_lenb = lbVector_Len(a) * lbVector_Len(b);
-
-    if (lena_lenb > 0.0000000001f) {
-        // GALE01 0x8000D748/0x8000D750: the x and z dot terms fuse into the
-        // y-product seed via fmadds.
-        float cosine =
-            __fmadds(a->z, b->z, __fmadds(a->x, b->x, a->y * b->y)) /
-            lena_lenb;
-        if (cosine > 1.0f) {
-            cosine = 1.0f;
-        }
-        if (cosine < -1.0f) {
-            cosine = -1.0f;
-        }
-
-        return acosf(cosine); // acos
-    }
-    return 0.0f;
+    float cosine;
+    return lbVector_AngleCosine(a, b, &cosine) ? acosf(cosine) : 0.0f;
 }
+
+#ifdef MSL_CORE_NATIVE
+static u32 msl_cosine_order_key(float cosine)
+{
+    u32 bits;
+    memcpy(&bits, &cosine, sizeof(bits));
+    return bits & 0x80000000U ? ~bits : bits ^ 0x80000000U;
+}
+
+bool msl_dynamics_angle_greater(Vec3* a, Vec3* b, float threshold, u32 cutoff)
+{
+    float cosine;
+    if (!lbVector_AngleCosine(a, b, &cosine)) {
+        return 0.0F > threshold;
+    }
+    return cosine == cosine && msl_cosine_order_key(cosine) < cutoff;
+}
+
+bool msl_dynamics_angle_less(Vec3* a, Vec3* b, float threshold, u32 cutoff)
+{
+    float cosine;
+    if (!lbVector_AngleCosine(a, b, &cosine)) {
+        return 0.0F < threshold;
+    }
+    return cosine == cosine && msl_cosine_order_key(cosine) >= cutoff;
+}
+
+bool msl_dynamics_angle_greater_value(Vec3* a, Vec3* b, float threshold,
+                                      u32 cutoff, float* angle)
+{
+    float cosine;
+    if (!lbVector_AngleCosine(a, b, &cosine)) {
+        *angle = 0.0F;
+        return 0.0F > threshold;
+    }
+    if (cosine != cosine || msl_cosine_order_key(cosine) >= cutoff) {
+        return false;
+    }
+    *angle = acosf(cosine);
+    return true;
+}
+#endif
 
 /// 8000D790 - returns the angle between a and b
 float lbVector_AngleXY(Vec3* a, Vec3* b)
@@ -122,7 +169,8 @@ float lbVector_AngleXY(Vec3* a, Vec3* b)
     float lena_lenb = lbVector_Len_xy(a) * lbVector_Len_xy(b);
 
     if (lena_lenb) {
-        float cosine = (a->x * b->x + a->y * b->y) / lena_lenb;
+        // GALE01 0x8000D8BC fuses the X product into the rounded Y product.
+        float cosine = __fmadds(a->x, b->x, a->y * b->y) / lena_lenb;
         if (cosine > 1.0f) {
             cosine = 1.0f;
         }

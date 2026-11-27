@@ -916,18 +916,12 @@ void ftKb_PrSpecialNTurn_Phys(Fighter_GObj* gobj)
     f32 slope = ABS(fp->coll_data.floor.normal.x);
     f32 x1C = fp->mv.pr.specialn.x1C;
     f32 influence = da->specialn_pr_unk9 * (x1C * slope);
+    // GALE01 0x80104024, 0x80104038, 0x80104054, and 0x80104068
+    // fuse the turn acceleration into ground velocity.
     if (fp->coll_data.floor.normal.x > 0.0f) {
-        if (x1C > 0.0f) {
-            fp->gr_vel += scale * (x1C + influence);
-        } else {
-            fp->gr_vel += scale * (x1C + influence);
-        }
+        fp->gr_vel = __fmadds(scale, x1C + influence, fp->gr_vel);
     } else {
-        if (x1C > 0.0f) {
-            fp->gr_vel += scale * (x1C - influence);
-        } else {
-            fp->gr_vel += scale * (x1C - influence);
-        }
+        fp->gr_vel = __fmadds(scale, x1C - influence, fp->gr_vel);
     }
     fp->x74_anim_vel.y = 0;
     fp->self_vel.y = 0;

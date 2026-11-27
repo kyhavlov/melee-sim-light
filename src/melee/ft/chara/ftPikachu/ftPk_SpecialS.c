@@ -439,9 +439,9 @@ void ftPk_SpecialS_ChangeMotion_Unk10(HSD_GObj* gobj)
 
     {
         float temp = 0.5f * fp->mv.pk.unk3.x0 / sa->x24;
-        // GALE01 0x80125AF0 fuses the charge term onto the half base
-        // (fmadds f0, f2, f4, f0).
-        fp->self_vel.y = __fmadds(temp, sa->x44, 0.5f * sa->x44);
+        // GALE01 0x80125AEC rounds the charge term before the half-base
+        // fmadds at 0x80125AF0.
+        fp->self_vel.y = __fmadds(0.5f, sa->x44, temp * sa->x44);
     }
 
     Fighter_ChangeMotionState(gobj, 350, transition_flags3, fp->cur_anim_frame,

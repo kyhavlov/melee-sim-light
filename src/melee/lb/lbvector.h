@@ -20,6 +20,13 @@ Vec3* lbVector_CrossprodNormalized(Vec3* a, Vec3* b, Vec3* result);
 float lbVector_Angle(Vec3* a, Vec3* b);
 float lbVector_AngleXY(Vec3* a, Vec3* b);
 
+#ifdef MSL_CORE_NATIVE
+bool msl_dynamics_angle_greater(Vec3* a, Vec3* b, float threshold, u32 cutoff);
+bool msl_dynamics_angle_less(Vec3* a, Vec3* b, float threshold, u32 cutoff);
+bool msl_dynamics_angle_greater_value(Vec3* a, Vec3* b, float threshold,
+                                      u32 cutoff, float* angle);
+#endif
+
 // These are private single-precision approximations in lbvector.c. Their
 // original private names collide with hosted libc's ISO C declarations.
 static float lbVector_Sin(float angle);
