@@ -21,8 +21,8 @@ from peppi_py import _read_slippi
 from tools.validation import validate_replay as validation
 from tools.validation.admission import (
     capture_issues,
-    gecko_codes,
     is_ucf_08,
+    replay_events,
     slippi_patches,
     whispy_patch,
 )
@@ -67,14 +67,30 @@ def _finalized_prefix(raw: bytes) -> bytes:
     return raw
 
 
+def _last_stock_winner(game, frame: int) -> str | None:
+    players = game.start["players"]
+    if (len(players) != 2 or game.start["is_teams"] or
+            not 0 <= frame < 60 * game.start["timer"]):
+        return None
+    ports = game.frames.field("ports")
+    stocks = {}
+    for player in players:
+        port = player["port"]
+        post = ports.field(port).field("leader").field("post")
+        stocks[port] = post.field("stocks")[-1].as_py()
+    if None in stocks.values() or list(stocks.values()).count(0) != 1:
+        return None
+    return next(port for port, count in stocks.items() if count > 0)
+
+
 def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
                        include_finalized_prefixes=False):
     try:
         name, raw = _decode_member(archive, member)
-        incomplete = False
+        repaired_envelope = False
         if include_finalized_prefixes and 15 + int.from_bytes(raw[11:15], "big") > len(raw):
             repaired = _finalized_prefix(raw)
-            incomplete = repaired is not raw
+            repaired_envelope = repaired is not raw
             raw = repaired
         # Peppi's file API need only see one member per worker. Keep its
         # temporary file outside the input archive and remove it after parsing.
@@ -91,27 +107,57 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
         post_size = sizes[POST_FRAME]
         if post_size < STORED_END - 1 and post_size not in (0x50, STORED_OFFSET - 1):
             return None, {"status": "unsupported", "reasons": ["post-frame-layout"]}
-        codes = gecko_codes(raw)
+        try:
+            codes, bookend = replay_events(raw)
+        except ValueError as exc:
+            return None, {"status": "parse_failed", "error": str(exc)}
+        missing_end = (
+            game.end is None and bookend is not None and len(game.frames) > 0
+            and game.frames.field("id")[-1].as_py() == bookend[0]
+        )
+        finalized_end = missing_end and bookend[0] == bookend[1]
+        finalized_through = None
+        if missing_end and include_finalized_prefixes and bookend[1] < bookend[0]:
+            finalized_through = bookend[1]
+        allow_missing_end = finalized_end or finalized_through is not None
         legacy = is_ucf_08(codes)
         played_on = game.metadata.get("playedOn")
-        if (played_on is None and (legacy or incomplete) and
+        if (played_on is None and (legacy or allow_missing_end) and
                 game.start.get("scene", {}).get("major") == 8):
-            # The netplay scene still identifies the profile when anonymization
-            # or truncation removes the outer metadata.
+            # The netplay scene still identifies the profile without metadata.
             played_on = "network"
         issues = capture_issues(game, raw, played_on=played_on, codes=codes, allow_ucf_08=True,
-                                allow_missing_game_end=incomplete)
+                                allow_missing_game_end=allow_missing_end,
+                                finalized_through=finalized_through)
         # Transform can publish uninitialized L-cancel data. The native comparison
         # checks the recorded byte on every frame, including the transform.
         issues = [issue for issue in issues if issue != "uninitialized-transform-lcancel"]
         if issues:
             return None, {"status": "unsupported", "reasons": issues}
+        winner = None
+        if finalized_end:
+            if not repaired_envelope:
+                winner = _last_stock_winner(game, bookend[0])
+            if winner is None and not include_finalized_prefixes:
+                return None, {"status": "unsupported", "reasons": ["missing-game-end"]}
         try:
             whispy = whispy_patch(codes)
         except ValueError as exc:
             return None, {"status": "unsupported", "reasons": [str(exc)]}
         metadata = dict(game.metadata, playedOn=played_on)
-        stored = expected_stored(raw, None, validation.ROOT) if post_size >= STORED_END - 1 else b""
+        last_frame = game.metadata.get("lastFrame")
+        if finalized_through is not None and last_frame not in (None, finalized_through):
+            end = 15 + int.from_bytes(raw[11:15], "big")
+            key = b"U\x09lastFramel"
+            previous = key + struct.pack(">i", last_frame)
+            trailer = raw[end:]
+            if trailer.count(previous) != 1:
+                return None, {"status": "unsupported", "reasons": ["ambiguous-last-frame-metadata"]}
+            raw = raw[:end] + trailer.replace(previous, key + struct.pack(">i", finalized_through))
+        stored = b""
+        if post_size >= STORED_END - 1:
+            stored = expected_stored(raw, None, validation.ROOT,
+                                     finalized_through=finalized_through)
     except (BadZipFile, EOFError, OSError, RuntimeError, ValueError) as exc:
         return None, {"status": "error", "error": str(exc)}
 
@@ -133,9 +179,11 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
             runner_stdout=runner.stdout_fd,
             slippi_patches=slippi_patches(codes),
             stored_expected=stored,
-            regenerate_slp=b"" if stored else raw,
+            regenerate_slp=b"" if stored and finalized_through is None else raw,
             whispy_dead_fighter_fix=whispy,
         )
+        if finalized_through is not None:
+            options["finalized_through"] = finalized_through
         result = native.validate_replay(
             game.frames, game.start, metadata, relaxed_floats=relaxed_floats and not stored, **options
         )
@@ -178,8 +226,15 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
     }
     if split_fma:
         report["jit_arithmetic"] = "split-fma"
-    if incomplete:
-        report["complete"] = False
+    if game.end is None:
+        report["game_end"] = "missing"
+        if winner is not None:
+            report["winner"] = winner
+        else:
+            report["complete"] = False
+        if finalized_through is not None:
+            report["finalized_through"] = finalized_through
+            report["discarded_tail_frames"] = bookend[0] - finalized_through
     if result["tolerated_values"]:
         report["status"] = "regenerated_with_tolerance"
         report["tolerated_values"] = result["tolerated_values"]
@@ -187,7 +242,8 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
                       "tolerated_needle_anchors", "tolerated_cape_states"):
             if result[field]:
                 report[field] = result[field]
-    return (name, raw if stored else result["regenerated_slp"]), report
+    output = raw if stored and finalized_through is None else result["regenerated_slp"]
+    return (name, output), report
 
 
 def regenerate_zip(
@@ -274,7 +330,7 @@ def main() -> int:
     parser.add_argument("--disable-strict-exactness", action="store_true",
                         help="allow the documented regeneration tolerances")
     parser.add_argument("--include-finalized-prefixes", action="store_true",
-                        help="also regenerate truncated replays that end on a finalized frame")
+                        help="also regenerate incomplete replays through their last confirmed frame")
     parser.add_argument("--no-build", action="store_true", help="reuse the native runner and validator")
     args = parser.parse_args()
     cores = ()

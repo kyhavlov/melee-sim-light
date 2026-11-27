@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 import pyarrow as pa
 
+from tools.validation.slpz import RAW_HEADER, _event_sizes
+
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "agent_docs/validation/replay_admission.json"
@@ -62,25 +64,40 @@ def evidence() -> dict:
 
 def gecko_codes(raw: bytes) -> dict[int, bytes]:
     """Read direct and split Gecko events from the decoded SLP event stream."""
-    if raw[:11] != b"{U\x03raw[$U#l" or raw[15] != 0x35:
+    return replay_events(raw)[0]
+
+
+def replay_events(raw: bytes) -> tuple[dict[int, bytes], tuple[int, int] | None]:
+    """Read Gecko codes and the frame numbers if the stream ends at a bookend."""
+    if len(raw) < 17 or raw[:11] != RAW_HEADER:
         raise ValueError("unsupported SLP event envelope")
     end = 15 + int.from_bytes(raw[11:15], "big")
-    count = raw[16]
-    sizes = {raw[i]: int.from_bytes(raw[i + 1:i + 3], "big") for i in range(17, 16 + count, 3)}
-    position = 16 + count
+    if end > len(raw):
+        raise ValueError("truncated SLP event stream")
+    sizes, count = _event_sizes(raw[15:min(end, 273)])
+    position = 17 + 3 * count
     chunks = []
+    bookend = None
     while position < end:
         command = raw[position]
         size = sizes[command]
-        payload = raw[position + 1:position + 1 + size]
-        if command == 0x10 and payload[-2] == 0x3D:
-            chunks.append(payload[:int.from_bytes(payload[-4:-2], "big")])
+        if not size:
+            raise ValueError(f"unexpected Slippi event 0x{command:02x} at byte {position}")
+        next_position = position + 1 + size
+        if next_position > end:
+            raise ValueError("truncated SLP event stream")
+        if command == 0x10:
+            payload = raw[position + 1:next_position]
+            if len(payload) >= 4 and payload[-2] == 0x3D:
+                chunks.append(payload[:int.from_bytes(payload[-4:-2], "big")])
         elif command == 0x3D:
-            chunks.append(payload)
-        position += size + 1
-    if position != end or end > len(raw):
-        raise ValueError("truncated SLP event stream")
+            chunks.append(raw[position + 1:next_position])
+        elif next_position == end and command == 0x3C and size >= 8:
+            bookend = struct.unpack_from(">ii", raw, position + 1)
+        position = next_position
     codes = b"".join(chunks)
+    if len(codes) % 8:
+        raise ValueError("truncated Gecko block")
     result = {}
     position = 0
     while position < len(codes):
@@ -93,7 +110,7 @@ def gecko_codes(raw: bytes) -> dict[int, bytes]:
             raise ValueError("truncated Gecko block")
         result[address] = codes[position:position + size]
         position += size
-    return result
+    return result, bookend
 
 
 def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:
@@ -163,7 +180,8 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
                    jit_arithmetic: str | None = None,
                    codes: dict[int, bytes] | None = None,
                    allow_ucf_08: bool = False,
-                   allow_missing_game_end: bool = False) -> list[str]:
+                   allow_missing_game_end: bool = False,
+                   finalized_through: int | None = None) -> list[str]:
     """Return property violations without running or consulting simulator output."""
     issues = []
     identity = hashlib.sha256(raw).hexdigest()
@@ -172,9 +190,13 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
         codes = gecko_codes(raw)
     legacy_ucf = allow_ucf_08 and is_ucf_08(codes)
     if record is not None:
-        # Recheck the inputs below against the identified UCF 0.8 profile.
-        issues.extend(reason for reason in record["reasons"]
-                      if not (legacy_ucf and reason == "missing-recorded-inputs"))
+        # Recheck these against the requested UCF profile and frame range.
+        recheck = set()
+        if legacy_ucf:
+            recheck.add("missing-recorded-inputs")
+        if allow_missing_game_end and game.end is None:
+            recheck.add("incomplete-history")
+        issues.extend(reason for reason in record["reasons"] if reason not in recheck)
     raw_axes = {"raw_analog_x"} if legacy_ucf else RAW_AXES
     try:
         slippi_patches(codes)
@@ -233,10 +255,13 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
     _, reversed_rows = np.unique(ids[::-1], return_index=True)
     rows = np.sort(len(ids) - 1 - reversed_rows)
     frames = ids[rows]
+    last_recorded = int(frames[-1]) if len(frames) else None
+    if finalized_through is not None:
+        frames = frames[frames <= finalized_through]
     if (len(frames) < 2 or frames[0] != -123 or np.any(np.diff(frames) != 1) or
         (game.end is None and not allow_missing_game_end) or
-        (game.metadata.get("lastFrame") is not None and
-         game.metadata["lastFrame"] != int(frames[-1]))):
+        game.metadata.get("lastFrame") not in (None, last_recorded, finalized_through) or
+        (finalized_through is not None and frames[-1] != finalized_through)):
         issues.append("incomplete-history")
     if timer != 480:
         end = game.end or {}
@@ -270,6 +295,8 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
             valid = (fighter.is_valid().to_numpy(zero_copy_only=False) &
                      post.is_valid().to_numpy(zero_copy_only=False) &
                      post.field("character").is_valid().to_numpy(zero_copy_only=False))
+            if finalized_through is not None:
+                valid &= ids <= finalized_through
             present = np.flatnonzero(valid)
             if not len(present):
                 if role == "leader":

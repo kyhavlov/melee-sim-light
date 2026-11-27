@@ -40,8 +40,9 @@ static void msl_write_be32(uint8_t* bytes, uint32_t value) {
 static const char* msl_index_replay_frames(
     const uint8_t* raw, size_t offset, size_t raw_end, const uint16_t sizes[256],
     int32_t first_frame, size_t frame_count, MslReplayFrame* frames, size_t* prefix,
-    size_t* suffix) {
+    size_t* suffix, bool finalized_prefix) {
   MslReplayFrame* open = NULL;
+  MslReplayFrame discarded;
   int32_t current = 0;
   for (; offset < raw_end;) {
     uint8_t command = raw[offset];
@@ -55,13 +56,13 @@ static const char* msl_index_replay_frames(
       }
       current = (int32_t)msl_read_be32(raw + offset + 1);
       int64_t index = (int64_t)current - first_frame;
-      if (index < 0 || (uint64_t)index >= frame_count) {
+      if (index < 0 || ((uint64_t)index >= frame_count && !finalized_prefix)) {
         return "unexpected replay frame number";
       }
       if (*prefix == 0) {
         *prefix = offset;
       }
-      open = &frames[index];
+      open = (uint64_t)index < frame_count ? &frames[index] : &discarded;
       *open = (MslReplayFrame){.start = offset};
     } else if (command == MSL_SLP_POST) {
       if (open == NULL || (int32_t)msl_read_be32(raw + offset + 1) != current ||
@@ -82,7 +83,7 @@ static const char* msl_index_replay_frames(
       open->end = offset + event_size;
       open = NULL;
     } else if (command == MSL_SLP_END) {
-      if (open != NULL || *prefix == 0 ||
+      if (finalized_prefix || open != NULL || *prefix == 0 ||
           (*suffix != 0 && memcmp(raw + *suffix, raw + offset, event_size) != 0)) {
         return "invalid replay game end";
       }
@@ -104,7 +105,8 @@ static const char* msl_index_replay_frames(
 }
 
 PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
-                            const uint8_t* captured, int32_t first_frame, size_t frame_count) {
+                            const uint8_t* captured, int32_t first_frame, size_t frame_count,
+                            bool finalized_prefix) {
   static const char header[] = "{U\003raw[$U#l";
   if (raw_size < 17 || memcmp(raw, header, sizeof(header) - 1) != 0 ||
       raw[MSL_SLP_RAW_BEGIN] != MSL_SLP_PAYLOADS || raw[16] < 4 ||
@@ -127,10 +129,16 @@ PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
     }
   }
   size_t post_bytes = 1 + sizes[MSL_SLP_POST];
-  if (post_bytes != MSL_SLP_INSTANCE_OFFSET && post_bytes != MSL_SLP_STORED_OFFSET) {
+  if (post_bytes < MSL_SLP_STORED_END && post_bytes != MSL_SLP_INSTANCE_OFFSET &&
+      post_bytes != MSL_SLP_STORED_OFFSET) {
     PyErr_SetString(PyExc_ValueError, "unsupported legacy Slippi post-frame size");
     return NULL;
   }
+  if (finalized_prefix && sizes[MSL_SLP_FRAME_END] < 8) {
+    PyErr_SetString(PyExc_ValueError, "missing Slippi frame finalization markers");
+    return NULL;
+  }
+  size_t appended = post_bytes < MSL_SLP_STORED_END ? MSL_SLP_STORED_END - post_bytes : 0;
   MslReplayFrame* frames = calloc(frame_count, sizeof(*frames));
   if (frames == NULL) {
     return PyErr_NoMemory();
@@ -139,7 +147,7 @@ PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
   const char* error;
   Py_BEGIN_ALLOW_THREADS
   error = msl_index_replay_frames(raw, start, raw_end, sizes, first_frame, frame_count, frames,
-                                  &prefix, &suffix);
+                                  &prefix, &suffix, finalized_prefix);
   if (error == NULL) {
     for (size_t i = 0; i < frame_count; ++i) {
       const MslReplayFrame* frame = &frames[i];
@@ -147,7 +155,7 @@ PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
         error = "post-frame fighter coverage differs from the validated replay";
         break;
       }
-      body_size += frame->end - frame->start + frame->fighters * (MSL_SLP_STORED_END - post_bytes);
+      body_size += frame->end - frame->start + frame->fighters * appended;
     }
   }
   Py_END_ALLOW_THREADS
@@ -168,8 +176,10 @@ PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
   Py_BEGIN_ALLOW_THREADS
   memcpy(out, raw, prefix);
   msl_write_be32(out + 11, (uint32_t)(prefix + body_size + raw_end - suffix - MSL_SLP_RAW_BEGIN));
-  out[post_size_offset] = 0;
-  out[post_size_offset + 1] = MSL_SLP_STORED_END - 1;
+  if (appended) {
+    out[post_size_offset] = 0;
+    out[post_size_offset + 1] = MSL_SLP_STORED_END - 1;
+  }
   uint8_t* dest = out + prefix;
   for (size_t i = 0; i < frame_count; ++i) {
     const uint8_t* fighter_data = captured + i * MSL_REGEN_FRAME_BYTES + 1;
@@ -178,15 +188,20 @@ PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
       size_t event_size = 1 + sizes[command];
       memcpy(dest, raw + offset, event_size);
       dest += event_size;
-      if (command == MSL_SLP_POST) {
+      if (command == MSL_SLP_POST && appended) {
         unsigned slot = raw[offset + 5] + 4 * raw[offset + 6];
-        size_t appended = MSL_SLP_STORED_END - post_bytes;
         memcpy(dest, fighter_data + slot * MSL_REGEN_FIGHTER_BYTES +
                          MSL_REGEN_FIGHTER_BYTES - appended, appended);
         dest += appended;
       }
       offset += event_size;
     }
+  }
+  if (finalized_prefix) {
+    // The later source bookend confirmed this frame. Publish that marker
+    // after omitting the provisional frames that carried the confirmation.
+    msl_write_be32(dest - sizes[MSL_SLP_FRAME_END] + 4,
+                   (uint32_t)((int64_t)first_frame + (int64_t)frame_count - 1));
   }
   memcpy(dest, raw + suffix, (size_t)raw_size - suffix);
   Py_END_ALLOW_THREADS

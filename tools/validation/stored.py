@@ -60,7 +60,8 @@ def _sizes(raw: bytes) -> tuple[list[int], int]:
     return _event_sizes(raw[15:273])
 
 
-def expected_stored(raw: bytes, sidecar: StoredSidecar | None, root: Path) -> bytes:
+def expected_stored(raw: bytes, sidecar: StoredSidecar | None, root: Path, *,
+                    finalized_through: int | None = None) -> bytes:
     sizes, count = _sizes(raw)
     if sizes[POST_FRAME] >= STORED_END - 1:
         if sidecar is not None:
@@ -79,6 +80,8 @@ def expected_stored(raw: bytes, sidecar: StoredSidecar | None, root: Path) -> by
             rows[key] = value
     else:
         return b""
+    if finalized_through is not None:
+        rows = {key: value for key, value in rows.items() if key[0] <= finalized_through}
     if not rows:
         raise ValueError("stored fighter state has no post-frame rows")
     first = min(rows)[0]

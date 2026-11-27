@@ -924,8 +924,8 @@ static int load_replay(ArrowNode frames, ReplayView* replay, char* error, size_t
   return 0;
 }
 
-static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char* error,
-                                size_t error_size) {
+static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, int32_t finalized_through,
+                                char* error, size_t error_size) {
   int64_t i;
   int player;
   int32_t min_id = get_i32(&replay->frame_id, 0);
@@ -994,8 +994,9 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
     }
   }
   for (i = 0; i < replay->raw_length; ++i) {
-    int64_t key = (int64_t)get_i32(&replay->frame_id, i) - min_id;
-    if (last[key] == i) {
+    int32_t frame = get_i32(&replay->frame_id, i);
+    int64_t key = (int64_t)frame - min_id;
+    if (last[key] == i && frame <= finalized_through) {
       for (player = 0; player < replay->num_players; ++player) {
         int64_t player_row = last_player[player][key];
         int64_t follower_row = last_follower[player][key];
@@ -1012,7 +1013,7 @@ static int build_finalized_rows(const ReplayView* replay, FrameRows* rows, char*
           rows->player_present[player][rows->count] = 0;
         } else {
           snprintf(error, error_size, "active finalized frame %d has no P%d pre/post row",
-                   get_i32(&replay->frame_id, i), replay->port_1based[player]);
+                   frame, replay->port_1based[player]);
           goto failed;
         }
         rows->player_raw[player][rows->count] = player_row;
@@ -2961,6 +2962,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "regenerate_slp",
       "relaxed_floats",
       "whispy_dead_fighter_fix",
+      "finalized_through",
       NULL,
   };
   PyObject* frames_obj;
@@ -2992,6 +2994,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   Py_ssize_t regenerate_size = 0;
   int relaxed_floats = 0;
   int whispy_dead_fighter_fix = -1;
+  int finalized_through = INT32_MAX;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -3010,14 +3013,15 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiiziiy#y#pi:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiziiy#y#pii:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
           &ucf_shield_drop_084_enabled,
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &slippi_patches,
           &jit_arithmetic, &stored_expected, &stored_expected_size,
-          &regenerate_slp, &regenerate_size, &relaxed_floats, &whispy_dead_fighter_fix)) {
+          &regenerate_slp, &regenerate_size, &relaxed_floats, &whispy_dead_fighter_fix,
+          &finalized_through)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -3085,12 +3089,17 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   frames.schema = schema;
   frames.array = array;
   if (load_replay(frames, &replay, error, sizeof(error)) != 0 ||
-      build_finalized_rows(&replay, &rows, error, sizeof(error)) != 0 ||
+      build_finalized_rows(&replay, &rows, finalized_through, error, sizeof(error)) != 0 ||
       build_match_config(&replay, &rows, ucf_cardinals_1_0_enabled, ucf_shield_sdi_enabled,
                          ucf_sdi_enabled, ucf_shield_drop_extended_enabled,
                          ucf_shield_drop_084_enabled, &state.config,
                          error, sizeof(error)) != 0) {
     PyErr_SetString(PyExc_ValueError, error);
+    goto done;
+  }
+  if (finalized_through != INT32_MAX &&
+      get_i32(&replay.frame_id, rows.raw[rows.count - 1]) != finalized_through) {
+    PyErr_SetString(PyExc_ValueError, "replay does not end at the requested finalized frame");
     goto done;
   }
   state.output_size = sizeof(MslCoreCompare);
@@ -3101,9 +3110,8 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
     state.stored_expected = stored_expected;
   }
   if (regenerate_size != 0) {
-    if (frames_limit != 0 || start_frame_obj != Py_None || signed_zero_equal ||
-        stored_expected_size != 0) {
-      PyErr_SetString(PyExc_ValueError, "regeneration requires a complete strict legacy replay");
+    if (frames_limit != 0 || start_frame_obj != Py_None || signed_zero_equal) {
+      PyErr_SetString(PyExc_ValueError, "regeneration requires validation of every output frame");
       goto done;
     }
     state.regeneration = calloc((size_t)rows.count, MSL_REGEN_FRAME_BYTES);
@@ -3175,7 +3183,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       state.result.first_mismatch_frame == INT64_MIN) {
     int32_t first = get_i32(&replay.frame_id, rows.raw[0]);
     PyObject* slp = msl_regenerate_slp(regenerate_slp, regenerate_size, state.regeneration,
-                                       first, (size_t)rows.count);
+                                       first, (size_t)rows.count, finalized_through != INT32_MAX);
     if (dict_set_owned(result, "regenerated_slp", slp) != 0) {
       Py_CLEAR(result);
     }
@@ -3297,7 +3305,7 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   frames.schema = schema;
   frames.array = array;
   if (load_replay(frames, &replay, error, sizeof(error)) != 0 ||
-      build_finalized_rows(&replay, &rows, error, sizeof(error)) != 0 ||
+      build_finalized_rows(&replay, &rows, INT32_MAX, error, sizeof(error)) != 0 ||
       build_match_config(&replay, &rows, ucf_cardinals_1_0_enabled, ucf_shield_sdi_enabled,
                          ucf_sdi_enabled, ucf_shield_drop_extended_enabled,
                          ucf_shield_drop_084_enabled, &header.config,

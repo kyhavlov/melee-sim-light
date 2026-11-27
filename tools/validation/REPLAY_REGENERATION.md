@@ -15,11 +15,14 @@ simulator workers. On Linux, `--cores 0,2,4,6` pins one worker per listed CPU.
 Regenerated replays preserve the original recording version, metadata, and
 finalized gameplay events. The Post-Frame payload size identifies the added
 stored fighter state, so the original Pre-Frame layout still decodes correctly.
-The converter requires a complete replay by default and preserves the recorded
-Game End event, including placements and quit information.
-`--include-finalized-prefixes` also accepts a truncated file that ends on a
-finalized frame bookend after all available transitions pass validation.
-These members have `complete: false` in the manifest and no Game End event.
+The converter preserves the recorded Game End event. If the event is missing
+and a finalized singles match ends with exactly one player out of stocks, the
+manifest records `game_end: "missing"` and the winning port.
+`--include-finalized-prefixes` also regenerates other incomplete recordings
+through their last confirmed frame. These members have `complete: false` in
+the manifest. When trimming a provisional tail, the converter records the
+discarded frame count and updates the final bookend and any `lastFrame`
+metadata to match the output.
 
 ## Exactness
 

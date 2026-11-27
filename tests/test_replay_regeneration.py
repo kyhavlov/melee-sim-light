@@ -1,3 +1,4 @@
+import hashlib
 import json
 import struct
 from pathlib import Path
@@ -30,20 +31,24 @@ def test_regenerated_zip_preserves_legacy_rows_and_matches_dolphin(tmp_path, fal
     old_sizes, old_count = _sizes(raw)
     old_rows = _post_rows(raw, old_sizes, old_count)
     original_end = 15 + int.from_bytes(raw[11:15], "big")
+    events = raw[15:original_end]
+    concatenated = raw[:11] + struct.pack(">I", 2 * len(events)) + events * 2 + raw[original_end:]
 
     source = tmp_path / "original.zip"
     destination = tmp_path / "regenerated.zip"
     with ZipFile(source, "w") as archive:
         archive.writestr("original.slp", raw)
         archive.writestr("truncated.slp", raw[:original_end - 60])
+        archive.writestr("concatenated.slp", concatenated)
 
     result = regenerate_zip(source, destination, workers=2, cores=())
-    assert result["outcomes"] == {"regenerated": 1, "parse_failed": 1}
+    assert result["outcomes"] == {"regenerated": 1, "parse_failed": 2}
     with ZipFile(destination) as archive:
         assert set(archive.namelist()) == {"original.slp", "regeneration.jsonl"}
         manifest = {row["member"]: row
                     for row in map(json.loads, archive.read("regeneration.jsonl").splitlines())}
         assert manifest["truncated.slp"]["error"]
+        assert "unexpected Slippi event 0x35" in manifest["concatenated.slp"]["error"]
         new_raw = archive.read("original.slp")
 
     new_sizes, new_count = _sizes(new_raw)
@@ -69,7 +74,8 @@ def test_regenerate_finalized_prefix_without_game_end(tmp_path, falcon_recording
     raw, _ = falcon_recording
     sizes, count = _sizes(raw)
     pos = 17 + 3 * count
-    while pos < 15 + int.from_bytes(raw[11:15], "big"):
+    raw_end = 15 + int.from_bytes(raw[11:15], "big")
+    while pos < raw_end:
         event = raw[pos]
         end = pos + 1 + sizes[event]
         if event == 0x3C:
@@ -83,21 +89,29 @@ def test_regenerate_finalized_prefix_without_game_end(tmp_path, falcon_recording
     source = tmp_path / "truncated.zip"
     unfinalized = bytearray(raw[:end])
     struct.pack_into(">i", unfinalized, pos + 5, frame - 1)
+    full_file = unfinalized[:11] + struct.pack(">I", end - 15) + unfinalized[15:]
+    full_file += (b"U\x08metadata{U\x09lastFramel" + struct.pack(">i", frame)
+                  + b"U\x08playedOnSU\x07dolphin}}")
     with ZipFile(source, "w") as archive:
         archive.writestr("finalized.slp", raw[:end])
         archive.writestr("mid-bookend.slp", raw[:end - 1])
         archive.writestr("unfinalized.slp", unfinalized)
+        archive.writestr("unfinalized-with-metadata.slp", full_file)
 
     default = regenerate_zip(source, tmp_path / "default.zip", workers=1, cores=())
-    assert default["outcomes"] == {"parse_failed": 3}
+    assert default["outcomes"] == {"parse_failed": 3, "unsupported": 1}
 
     output = tmp_path / "prefixes.zip"
     result = regenerate_zip(source, output, workers=1, cores=(), include_finalized_prefixes=True)
-    assert result["outcomes"] == {"regenerated": 1, "parse_failed": 2}
+    assert result["outcomes"] == {"regenerated": 2, "parse_failed": 2}
     with ZipFile(output) as archive:
         reports = {r["member"]: r for r in map(json.loads, archive.read("regeneration.jsonl").splitlines())}
         assert reports["finalized.slp"]["complete"] is False
         new_raw = archive.read("finalized.slp")
+        assert reports["unfinalized-with-metadata.slp"]["complete"] is False
+        assert reports["unfinalized-with-metadata.slp"]["finalized_through"] == frame - 1
+        assert reports["unfinalized-with-metadata.slp"]["discarded_tail_frames"] == 1
+        trimmed = archive.read("unfinalized-with-metadata.slp")
 
     replay = tmp_path / "prefix.slp"
     replay.write_bytes(new_raw)
@@ -108,6 +122,59 @@ def test_regenerate_finalized_prefix_without_game_end(tmp_path, falcon_recording
     new_rows = _post_rows(new_raw, *_sizes(new_raw))
     assert new_rows.keys() == {key for key in old_rows if key[0] <= frame}
     assert all(row.startswith(old_rows[key]) for key, row in new_rows.items())
+
+    replay.write_bytes(trimmed)
+    game = _read_slippi(str(replay), False)
+    assert game.end is None
+    assert game.metadata == {"lastFrame": frame - 1, "playedOn": "dolphin"}
+    assert game.frames.field("id").to_pylist() == list(range(-123, frame))
+    trimmed_rows = _post_rows(trimmed, *_sizes(trimmed))
+    assert trimmed_rows == {key: row for key, row in new_rows.items() if key[0] < frame}
+    trimmed_end = 15 + int.from_bytes(trimmed[11:15], "big")
+    assert struct.unpack_from(">Bii", trimmed, trimmed_end - 9) == (0x3C, frame - 1, frame - 1)
+
+    recorded_end = 15 + int.from_bytes(new_raw[11:15], "big")
+    already_recorded = bytearray(new_raw[:recorded_end])
+    struct.pack_into(">i", already_recorded, recorded_end - 4, frame - 1)
+    already_recorded.extend(full_file[end:])
+    source = tmp_path / "stored.zip"
+    output = tmp_path / "stored-prefix.zip"
+    with ZipFile(source, "w") as archive:
+        archive.writestr("stored.slp", already_recorded)
+    result = regenerate_zip(source, output, workers=1, cores=(), include_finalized_prefixes=True)
+    assert result["outcomes"] == {"already_recorded": 1}
+    with ZipFile(output) as archive:
+        assert archive.read("stored.slp") == trimmed
+
+
+def test_regenerate_last_stock_ko_without_game_end(tmp_path, falcon_recording, monkeypatch):
+    raw, _ = falcon_recording
+    sizes, _ = _sizes(raw)
+    end = 15 + int.from_bytes(raw[11:15], "big")
+    last_bookend = end - 1 - sizes[0x39]
+    assert raw[last_bookend] == 0x39
+    assert struct.unpack_from(">Bii", raw, last_bookend - 9) == (0x3C, 10597, 10597)
+    missing_end = (raw[:11] + struct.pack(">I", last_bookend - 15)
+                   + raw[15:last_bookend] + raw[end:])
+    record = {"sha256_slp": hashlib.sha256(missing_end).hexdigest(),
+              "reasons": ["incomplete-history"]}
+    monkeypatch.setattr("tools.validation.admission.evidence", lambda: {"excluded": [record]})
+    source, output = tmp_path / "source.zip", tmp_path / "output.zip"
+    with ZipFile(source, "w") as archive:
+        archive.writestr("missing-end.slp", missing_end)
+
+    assert regenerate_zip(source, output, workers=1, cores=())["outcomes"] == {"regenerated": 1}
+    with ZipFile(output) as archive:
+        report = json.loads(archive.read("regeneration.jsonl"))
+        assert report["game_end"] == "missing" and report["winner"] == "P2"
+        updated = archive.read("missing-end.slp")
+    replay = tmp_path / "missing-end.slp"
+    replay.write_bytes(updated)
+    game = _read_slippi(str(replay), False)
+    assert game.end is None
+    assert game.frames.field("id")[-1].as_py() == 10597
+    updated_end = 15 + int.from_bytes(updated[11:15], "big")
+    assert updated[updated_end:] == raw[end:]
 
 
 def test_movement_tolerance_only_accepts_small_movement_differences(tmp_path, falcon_recording):
