@@ -181,11 +181,12 @@ def test_suite_cannot_bypass_strict_admission(monkeypatch, capsys, arguments):
     assert "suite acceptance requires complete strict admitted replays" in capsys.readouterr().err
 
 
-def test_supported_rule_values_do_not_become_capture_bans(properties_only):
+@pytest.mark.parametrize("method", ["Game", "NoContest"])
+def test_supported_rule_values_do_not_become_capture_bans(properties_only, method):
     game, raw = read_game(VALID)
     game.start["damage_ratio"] = 1.2
     game.start["timer"] = 900
-    game.end = {"method": "Game"}
+    game.end = {"method": method, "lras_initiator": game.start["players"][0]["port"]}
     for index, player in enumerate(game.start["players"]):
         player["stocks"] = 2 + index
         player["damage_start"] = 108 * index
@@ -196,9 +197,24 @@ def test_supported_rule_values_do_not_become_capture_bans(properties_only):
     assert "unsupported-settings" in admission.capture_issues(game, raw)
 
 
-@pytest.mark.parametrize("timer,method", [(900, "Time"), (1, "Game")])
-def test_custom_timer_requires_stockout_before_expiry(properties_only, timer, method):
+@pytest.mark.parametrize("timer,method", [(900, "Time"), (1, "Game"), (900, "NoContest")])
+def test_custom_timer_requires_an_independent_end_before_expiry(properties_only, timer, method):
     game, raw = read_game(VALID)
     game.start["timer"] = timer
     game.end = {"method": method}
+    assert "unsupported-settings" in admission.capture_issues(game, raw)
+
+
+def test_custom_online_timeout_requires_the_clock_expiry_frame(properties_only):
+    game, raw = read_game(VALID)
+    game.start["scene"] = {"major": 8}
+    game.start["timer"] = 30
+    game.end = {"method": "Time"}
+    game.metadata.pop("lastFrame", None)
+    ids = game.frames.field("id").to_numpy()
+    frames = game.frames
+    game.frames = frames.slice(0, int(np.flatnonzero(ids == 1800)[-1]) + 1)
+    assert admission.capture_issues(game, raw) == []
+
+    game.frames = frames.slice(0, int(np.flatnonzero(ids == 1799)[-1]) + 1)
     assert "unsupported-settings" in admission.capture_issues(game, raw)

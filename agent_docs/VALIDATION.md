@@ -60,8 +60,9 @@ Ban captures with any of these properties, even when they currently compare exac
 5. **Unsupported settings or gameplay modifications.** Require supported NTSC
    fighters/stages, UCF, no random items, a positive finite damage ratio and
    Team Attack in teams. Starting stocks, damage and handicap come from each
-   port. A custom timer is allowed for a stockout before the earliest possible
-   expiry. Stadium must be frozen. The recorded frozen toggle or the
+   port. A custom timer is allowed for a stockout or explicit quit before the
+   earliest possible expiry, or for an online singles timeout at the recorded
+   clock expiry. Stadium must be frozen. The recorded frozen toggle or the
    source-reviewed older transformation-bypass patch proves that property;
    an older false toggle alone does not prove unfrozen play.
    Unknown modifications require source review. Header and hook checks cannot

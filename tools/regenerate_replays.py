@@ -9,6 +9,7 @@ import itertools
 import json
 import os
 import shutil
+import struct
 import sys
 import tempfile
 import time
@@ -30,6 +31,7 @@ from tools.validation.stored import POST_FRAME, STORED_END, STORED_OFFSET, _size
 
 
 REPLAY_SUFFIXES = (".slp", ".slp.gz", ".slpz", ".slpz.gz")
+SLIPPI_ICE_CLIMBERS = 14
 
 
 def _decode_member(archive: ZipFile, member: ZipInfo) -> tuple[str, bytes]:
@@ -44,9 +46,36 @@ def _decode_member(archive: ZipFile, member: ZipInfo) -> tuple[str, bytes]:
     return name, raw
 
 
-def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats):
+def _finalized_prefix(raw: bytes) -> bytes:
+    """Repair the envelope when the source ends on a finalized frame bookend."""
+    try:
+        sizes, count = _sizes(raw)
+    except ValueError:
+        return raw
+    pos = 17 + 3 * count
+    while pos < len(raw):
+        event = raw[pos]
+        size = sizes[event]
+        if not size or pos + 1 + size > len(raw):
+            return raw
+        if pos + 1 + size == len(raw) and event == 0x3C and size >= 8:
+            frame, finalized = struct.unpack_from(">ii", raw, pos + 1)
+            if frame == finalized:
+                # Rebuild just the UBJSON envelope. The replay remains unfinished.
+                return raw[:11] + struct.pack(">I", len(raw) - 15) + raw[15:] + b"U\x08metadata{}}"
+        pos += 1 + size
+    return raw
+
+
+def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
+                       include_finalized_prefixes=False):
     try:
         name, raw = _decode_member(archive, member)
+        incomplete = False
+        if include_finalized_prefixes and 15 + int.from_bytes(raw[11:15], "big") > len(raw):
+            repaired = _finalized_prefix(raw)
+            incomplete = repaired is not raw
+            raw = repaired
         # Peppi's file API need only see one member per worker. Keep its
         # temporary file outside the input archive and remove it after parsing.
         with tempfile.NamedTemporaryFile(suffix=".slp") as source:
@@ -65,11 +94,13 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats):
         codes = gecko_codes(raw)
         legacy = is_ucf_08(codes)
         played_on = game.metadata.get("playedOn")
-        if played_on is None and legacy and game.start.get("scene", {}).get("major") == 8:
-            # This profile owns old Slippi online recordings, including
-            # anonymized captures whose UBJSON metadata was stripped.
+        if (played_on is None and (legacy or incomplete) and
+                game.start.get("scene", {}).get("major") == 8):
+            # The netplay scene still identifies the profile when anonymization
+            # or truncation removes the outer metadata.
             played_on = "network"
-        issues = capture_issues(game, raw, played_on=played_on, codes=codes, allow_ucf_08=True)
+        issues = capture_issues(game, raw, played_on=played_on, codes=codes, allow_ucf_08=True,
+                                allow_missing_game_end=incomplete)
         # Transform can publish uninitialized L-cancel data. The native comparison
         # checks the recorded byte on every frame, including the transform.
         issues = [issue for issue in issues if issue != "uninitialized-transform-lcancel"]
@@ -86,10 +117,7 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats):
 
     runner = pool.acquire()
     try:
-        result = native.validate_replay(
-            game.frames,
-            game.start,
-            metadata,
+        options = dict(
             qemu=str(validation.QEMU),
             sysroot=str(validation.SYSROOT),
             binary=str(validation.NATIVE_BINARY),
@@ -106,9 +134,27 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats):
             slippi_patches=slippi_patches(codes),
             stored_expected=stored,
             regenerate_slp=b"" if stored else raw,
-            relaxed_floats=relaxed_floats and not stored,
             whispy_dead_fighter_fix=whispy,
         )
+        result = native.validate_replay(
+            game.frames, game.start, metadata, relaxed_floats=relaxed_floats and not stored, **options
+        )
+        split_fma = False
+        if (not stored and (not result["pass"] or result["tolerated_values"]) and
+                any(player["character"] == SLIPPI_ICE_CLIMBERS for player in game.start["players"])):
+            # Older Dolphin builds can split a double multiply-add in Nana's
+            # position blend. Require an exact match across the entire replay.
+            try:
+                alternate = native.validate_replay(
+                    game.frames, game.start, metadata, jit_arithmetic=1, relaxed_floats=False, **options
+                )
+            except RuntimeError:
+                pool.discard(runner)
+                runner = None
+            else:
+                if alternate["pass"]:
+                    result = alternate
+                    split_fma = True
     except RuntimeError as exc:
         detail = pool.discard(runner)
         runner = None
@@ -130,6 +176,10 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats):
         "frames": result["frames"],
         "version": game.start["slippi"]["version"],
     }
+    if split_fma:
+        report["jit_arithmetic"] = "split-fma"
+    if incomplete:
+        report["complete"] = False
     if result["tolerated_values"]:
         report["status"] = "regenerated_with_tolerance"
         report["tolerated_values"] = result["tolerated_values"]
@@ -143,6 +193,7 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats):
 def regenerate_zip(
     source: Path, destination: Path, *, workers: int, cores: tuple[int, ...],
     start: int = 0, limit: int | None = None, timeout: float = 60, relaxed_floats: bool = False,
+    include_finalized_prefixes: bool = False,
 ) -> dict:
     if source.resolve() == destination.resolve() or destination.exists():
         raise FileExistsError(destination)
@@ -165,7 +216,8 @@ def regenerate_zip(
 
             def submit(member):
                 future = executor.submit(
-                    _regenerate_member, archive, member, native, pool, timeout, relaxed_floats
+                    _regenerate_member, archive, member, native, pool, timeout, relaxed_floats,
+                    include_finalized_prefixes,
                 )
                 jobs[future] = member
 
@@ -221,6 +273,8 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=60, help="timeout per simulation in seconds")
     parser.add_argument("--disable-strict-exactness", action="store_true",
                         help="allow the documented regeneration tolerances")
+    parser.add_argument("--include-finalized-prefixes", action="store_true",
+                        help="also regenerate truncated replays that end on a finalized frame")
     parser.add_argument("--no-build", action="store_true", help="reuse the native runner and validator")
     args = parser.parse_args()
     cores = ()
@@ -242,7 +296,8 @@ def main() -> int:
         validation.build_validation(backend="native")
     summary = regenerate_zip(args.archive, destination, workers=workers, cores=cores,
                              start=args.start, limit=args.limit, timeout=args.timeout,
-                             relaxed_floats=args.disable_strict_exactness)
+                             relaxed_floats=args.disable_strict_exactness,
+                             include_finalized_prefixes=args.include_finalized_prefixes)
     print(json.dumps(summary))
     return int(summary["outcomes"].get("error", 0) != 0)
 

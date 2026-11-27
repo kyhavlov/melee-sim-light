@@ -162,7 +162,8 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
                    fnmsubs_profile: str | None = None,
                    jit_arithmetic: str | None = None,
                    codes: dict[int, bytes] | None = None,
-                   allow_ucf_08: bool = False) -> list[str]:
+                   allow_ucf_08: bool = False,
+                   allow_missing_game_end: bool = False) -> list[str]:
     """Return property violations without running or consulting simulator output."""
     issues = []
     identity = hashlib.sha256(raw).hexdigest()
@@ -233,16 +234,29 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
     rows = np.sort(len(ids) - 1 - reversed_rows)
     frames = ids[rows]
     if (len(frames) < 2 or frames[0] != -123 or np.any(np.diff(frames) != 1) or
-        game.end is None or (game.metadata.get("lastFrame") is not None and
-                            game.metadata["lastFrame"] != int(frames[-1]))):
+        (game.end is None and not allow_missing_game_end) or
+        (game.metadata.get("lastFrame") is not None and
+         game.metadata["lastFrame"] != int(frames[-1]))):
         issues.append("incomplete-history")
-    # A nonstandard timer does not affect a stockout before the earliest
-    # possible expiry, even if the clock started on the first recorded frame.
-    if timer not in range(1, 2**32) or (timer != 480 and (
-        not game.end or game.end.get("method") != "Game" or
-        len(frames) < 2 or int(frames[-1]) - int(frames[0]) >= 60 * timer
-    )):
-        issues.append("unsupported-settings")
+    if timer != 480:
+        end = game.end or {}
+        method = end.get("method")
+        quit_port = end.get("lras_initiator")
+        if timer not in range(1, 2**32) or len(frames) < 2:
+            issues.append("unsupported-settings")
+        else:
+            end_frame = int(frames[-1])
+            ended_early = (end_frame - int(frames[0]) < 60 * timer and
+                           (method == "Game" or (method == "NoContest" and
+                            any(p["port"] == quit_port for p in players))))
+            # Online NTSC singles records expiry at the configured countdown
+            # in 60 Hz frames. See gmvs.c::fn_8016CD98 and gm_GetMatchOutcome.
+            timed_out = (method == "Time" and end_frame == 60 * timer and
+                         start.get("scene", {}).get("major") == 8 and
+                         len(players) == 2 and not start.get("is_teams"))
+            prefix = (allow_missing_game_end and game.end is None and end_frame < 60 * timer)
+            if not (ended_early or timed_out or prefix):
+                issues.append("unsupported-settings")
     ports = game.frames.field("ports")
     for player in players:
         port = player["port"]

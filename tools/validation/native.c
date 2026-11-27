@@ -1415,6 +1415,9 @@ static void build_expected(const ReplayView* replay, const FrameRows* rows, int6
 #define MSL_REGEN_ITEM_VELOCITY_TOLERANCE 0.00005F
 #define MSL_REGEN_GRAB_GROUND_SPEED_TOLERANCE 0.00001F
 #define MSL_REGEN_PHANTASM_VERTICAL_SPEED_TOLERANCE 1e-20F
+#define MSL_REGEN_STAR_KO_VERTICAL_SPEED_TOLERANCE 0.000001F
+#define MSL_REGEN_SAMUS_TETHER_SPEED_TOLERANCE 0.00005F
+#define MSL_REGEN_BELAY_SPEED_TOLERANCE 0.000001F
 #define MSL_REGEN_PROJECTILE_ANGLE_TOLERANCE 0.000005
 #define MSL_REGEN_LASER_BOUNCE_ANGLE_TOLERANCE 0.00001
 #define MSL_REGEN_PROJECTILE_ANGLE_ULPS 2
@@ -1757,14 +1760,16 @@ static int accept_movement_delta(uint32_t expected, uint32_t actual, float toler
 
 static int accept_near_zero_speed(const MslCoreCompare* expected, const MslCoreCompare* actual,
                                   size_t offset, int player, ValidationResult* result) {
-  enum { CATCH_PULL = 213, CATCH_WAIT = 216, FOX_SPECIAL_AIR_S = 351 };
+  enum { CATCH_PULL = 213, CATCH_DASH_PULL = 215, CATCH_WAIT = 216, CATCH_ATTACK = 217,
+         FOX_SPECIAL_AIR_S = 351 };
   int action = expected->action_id[player];
   if (action != actual->action_id[player]) {
     return 0;
   }
   float a, b, bound;
   if (offset == offsetof(MslCoreCompare, speed_ground_x_self) &&
-      (action == CATCH_PULL || action == CATCH_WAIT) &&
+      (action == CATCH_PULL || action == CATCH_DASH_PULL || action == CATCH_WAIT ||
+       action == CATCH_ATTACK) &&
       expected->on_ground[player] && actual->on_ground[player]) {
     // fn_800DA054 writes the difference between two nearly coincident
     // world-space joint positions. A rounded tie leaves the grabber at rest.
@@ -1787,6 +1792,38 @@ static int accept_near_zero_speed(const MslCoreCompare* expected, const MslCoreC
   if ((a == 0.0F && fabsf(b) <= bound) || (b == 0.0F && fabsf(a) <= bound)) {
     ++result->tolerated_values;
     return 1;
+  }
+  return 0;
+}
+
+static float fighter_speed_tolerance(const MslCoreCompare* expected, const MslCoreCompare* actual,
+                                     size_t offset, int player) {
+  enum { DEAD_UP_STAR = 4, DEAD_UP_STAR_ICE = 5, POPO_AIR_BELAY_THROW = 354,
+         SAMUS_AIR_CATCH_HIT = 358 };
+  const int vertical = offset == offsetof(MslCoreCompare, speed_y_self);
+  if (!vertical && offset != offsetof(MslCoreCompare, speed_air_x_self)) {
+    return 0;
+  }
+  const int action = expected->action_id[player];
+  if (action != actual->action_id[player]) {
+    return 0;
+  }
+  if (vertical && (action == DEAD_UP_STAR || action == DEAD_UP_STAR_ICE)) {
+    // ftCo_DeadUpStar_Anim derives the ascent speed from the entry height.
+    return MSL_REGEN_STAR_KO_VERTICAL_SPEED_TOLERANCE;
+  }
+  if (expected->on_ground[player] || actual->on_ground[player] ||
+      expected->char_id[player] != actual->char_id[player]) {
+    return 0;
+  }
+  if (action == SAMUS_AIR_CATCH_HIT && expected->char_id[player] == MSL_CHARACTER_SAMUS) {
+    // ftCo_AirCatchHit_Phys copies the animation position delta before gravity.
+    return MSL_REGEN_SAMUS_TETHER_SPEED_TOLERANCE;
+  }
+  if (action == POPO_AIR_BELAY_THROW && expected->char_id[player] == MSL_CHARACTER_ICE_CLIMBERS &&
+      expected->follower_present[player] && actual->follower_present[player]) {
+    // ftPp_SpecialS_80120E68 derives launch velocity from Popo and Nana's positions.
+    return MSL_REGEN_BELAY_SPEED_TOLERANCE;
   }
   return 0;
 }
@@ -1831,24 +1868,36 @@ static const MslCoreItem* previous_item(const MslCoreItem* items, const MslCoreI
   return NULL;
 }
 
-static int matching_laser_bounce(const StreamState* state, const MslCoreItem* expected,
-                                 const MslCoreItem* actual) {
+typedef enum MslLaserBounce {
+  MSL_LASER_NO_BOUNCE,
+  MSL_LASER_NEW_BOUNCE,
+  MSL_LASER_SAME_BOUNCE,
+} MslLaserBounce;
+
+static MslLaserBounce matching_laser_bounce(const StreamState* state, const MslCoreItem* expected,
+                                           const MslCoreItem* actual) {
   const MslCoreItem* prev_a = previous_item(state->previous_expected_items, expected);
   const MslCoreItem* prev_b = previous_item(state->previous_actual_items, actual);
   if (!prev_a || !prev_b || prev_a->state != expected->state || prev_b->state != actual->state ||
       prev_a->owner != expected->owner || prev_b->owner != actual->owner) {
-    return 0;
+    return MSL_LASER_NO_BOUNCE;
   }
   if (expected->misc1 == prev_a->misc1 && actual->misc1 == prev_b->misc1) {
     size_t slot = prev_a - state->previous_expected_items;
-    return prev_b == &state->previous_actual_items[slot] && state->previous_laser_bounces[slot];
+    if (prev_b == &state->previous_actual_items[slot] && state->previous_laser_bounces[slot]) {
+      return MSL_LASER_SAME_BOUNCE;
+    }
+    return MSL_LASER_NO_BOUNCE;
   }
   // ShieldBounced in itfoxlaser.c rewrites the angle and resets scale to
   // 0.001f (0x3A83126F). A reflector reset also changes the owner.
-  return expected->misc0 == 0x6F && actual->misc0 == 0x6F &&
-         expected->misc1 != prev_a->misc1 && actual->misc1 != prev_b->misc1 &&
-         (expected->vel_x != prev_a->vel_x || expected->vel_y != prev_a->vel_y) &&
-         (actual->vel_x != prev_b->vel_x || actual->vel_y != prev_b->vel_y);
+  if (expected->misc0 == 0x6F && actual->misc0 == 0x6F &&
+      expected->misc1 != prev_a->misc1 && actual->misc1 != prev_b->misc1 &&
+      (expected->vel_x != prev_a->vel_x || expected->vel_y != prev_a->vel_y) &&
+      (actual->vel_x != prev_b->vel_x || actual->vel_y != prev_b->vel_y)) {
+    return MSL_LASER_NEW_BOUNCE;
+  }
+  return MSL_LASER_NO_BOUNCE;
 }
 
 static int needle_frozen(const MslCoreItem* item, const MslCoreItem* previous) {
@@ -1863,7 +1912,7 @@ static int needle_frozen(const MslCoreItem* item, const MslCoreItem* previous) {
 }
 
 // xDEB samples xDE4.y. Air launch initializes it with a fused pos - 3*vel.
-// Motion 0 and motion 4 copy the item's pre-integration Y in their Anim callbacks.
+// Motions 0, 1, 2 and 4 copy pre-integration position in their Anim callbacks.
 // refs/melee/src/melee/it/items/itseakneedlethrown.c
 static NeedleAnchor reconstruct_needle_anchor(const StreamState* state,
                                               const MslCoreItem* expected,
@@ -1886,7 +1935,8 @@ static NeedleAnchor reconstruct_needle_anchor(const StreamState* state,
         return unknown;
       }
       anchor = state->previous_needle_anchors[slot];
-    } else if ((prev_a->state == 0 && expected->state == 0) ||
+    } else if ((prev_a->state == expected->state && expected->state != 3 && expected->state <= 4) ||
+               (prev_a->state == 1 && expected->state == 4) ||
                ((prev_a->state == 0 || prev_a->state == 4) &&
                 (expected->state == 2 || expected->state == 4))) {
       anchor.expected = prev_a->pos_y;
@@ -1926,22 +1976,26 @@ static int accept_item_difference(StreamState* state, const MslCoreItem* expecte
                 (expected->type == MSL_CORE_ITEM_KIND_FOX_LASER ||
                  expected->type == MSL_CORE_ITEM_KIND_FALCO_LASER);
     int shadow_ball = expected->state == 1 && expected->type == MSL_ITEM_KIND_MEWTWO_SHADOW_BALL;
-    float a, b;
-    if ((!laser && !shadow_ball) ||
-        !projectile_angle(expected, &a) || !projectile_angle(actual, &b)) {
+    if (!laser && !shadow_ball) {
       return 0;
     }
-    double delta = fabs((double)a - b);
-    delta = fmin(delta, fabs(projectile_tau - delta));
-    if (delta > MSL_REGEN_PROJECTILE_ANGLE_TOLERANCE) {
-      // Shield contact geometry can vary within the item velocity budget.
-      // Verify the bounce on both sides before allowing the angular residue.
-      if (!laser || delta > MSL_REGEN_LASER_BOUNCE_ANGLE_TOLERANCE ||
-          !matching_laser_bounce(state, expected, actual)) {
+    MslLaserBounce bounce =
+        laser ? matching_laser_bounce(state, expected, actual) : MSL_LASER_NO_BOUNCE;
+    // The animation rebuilds velocity through sinf and cosf but leaves the
+    // angle written by ShieldBounced intact. Verify its byte when it changes.
+    if (bounce != MSL_LASER_SAME_BOUNCE) {
+      float a, b;
+      if (!projectile_angle(expected, &a) || !projectile_angle(actual, &b)) {
         return 0;
       }
-      *laser_bounce = 1;
+      double delta = fabs((double)a - b);
+      double limit = bounce == MSL_LASER_NEW_BOUNCE ? MSL_REGEN_LASER_BOUNCE_ANGLE_TOLERANCE
+                                                   : MSL_REGEN_PROJECTILE_ANGLE_TOLERANCE;
+      if (fmin(delta, fabs(projectile_tau - delta)) > limit) {
+        return 0;
+      }
     }
+    *laser_bounce = bounce != MSL_LASER_NO_BOUNCE;
     if (laser) {
       ++result->tolerated_laser_angles;
     } else {
@@ -1955,6 +2009,19 @@ static int accept_item_difference(StreamState* state, const MslCoreItem* expecte
   }
   ++result->tolerated_values;
   return 1;
+}
+
+static int msl_regen_uninitialized_lcancel(const ReplayView* replay, const FrameRows* rows,
+                                           int64_t logical_pos, int player, uint8_t character) {
+  if (logical_pos == 0 || !rows->player_present[player][logical_pos - 1]) {
+    return 0;
+  }
+  const ReplayPlayer* source = &replay->players[player];
+  uint8_t previous = get_u8(&source->character, rows->player_raw[player][logical_pos - 1]);
+  // The dormant Zelda/Sheik entity can publish fp+0x25FF before
+  // ResetLCancelStatus runs on its first active tick.
+  return (previous == MSL_CHARACTER_ZELDA && character == MSL_CHARACTER_SHEIK) ||
+         (previous == MSL_CHARACTER_SHEIK && character == MSL_CHARACTER_ZELDA);
 }
 
 static int compare_row(StreamState* state, int64_t logical_pos, const MslCoreCompare* actual) {
@@ -2037,7 +2104,19 @@ static int compare_row(StreamState* state, int64_t logical_pos, const MslCoreCom
       }
       if (!compare_bits_equal((FieldKind)spec->kind, expected_bits, actual_bits,
                               signed_zero_equal)) {
-        if (!accept_movement_delta(expected_bits, actual_bits, spec->tolerance,
+        if (relaxed_floats && player >= 0 && player < replay->num_players &&
+            spec->offset == offsetof(MslCoreCompare, l_cancel) && expected_bits > 2 &&
+            actual_bits == 0 && expected.char_id[player] == actual->char_id[player] &&
+            msl_regen_uninitialized_lcancel(replay, rows, logical_pos, player,
+                                            expected.char_id[player])) {
+          ++result->tolerated_values;
+          continue;
+        }
+        float tolerance = spec->tolerance;
+        if (relaxed_floats && player >= 0 && spec->kind == FIELD_F32 && tolerance == 0) {
+          tolerance = fighter_speed_tolerance(&expected, actual, spec->offset, player);
+        }
+        if (!accept_movement_delta(expected_bits, actual_bits, tolerance,
                                    relaxed_floats, result) &&
             !(relaxed_floats && player >= 0 &&
               accept_near_zero_speed(&expected, actual, spec->offset, player, result))) {

@@ -94,8 +94,11 @@ static const char* msl_index_replay_frames(
     }
     offset += event_size;
   }
-  if (open != NULL || *suffix == 0) {
+  if (open != NULL || *prefix == 0) {
     return "incomplete replay frame history";
+  }
+  if (*suffix == 0) {
+    *suffix = raw_end;
   }
   return NULL;
 }
