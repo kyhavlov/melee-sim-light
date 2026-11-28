@@ -39,7 +39,9 @@
 #include <melee/pl/player.h>
 #ifdef MSL_CORE_HOSTED
 #include <runtime/context.h>
+#include <runtime/match.h>
 #include <runtime/source_state.h>
+#include <runtime/wire.h>
 #endif
 
 typedef struct StadiumParams {
@@ -1222,6 +1224,12 @@ void grStadium_801D2A60(Ground_GObj* gobj)
     if (gp->u.display.xF2 >= yaku->x50) {
         gp->u.display.xF2 = 0;
         var_r4 = 0xE;
+#ifdef MSL_CORE_HOSTED
+    } else if (msl_slippi_patch(MSL_PATCH_STADIUM_MONITOR)) {
+        // The replay's Gecko patch selects the timer screen after one draw.
+        (void) HSD_Randf();
+        var_r4 = 1;
+#endif
     } else {
         do {
             val =

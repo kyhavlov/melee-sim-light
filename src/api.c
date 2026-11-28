@@ -113,7 +113,7 @@ static int translate_config(const MslMatchConfig* source, MslCoreMatchConfig* ta
   target->ucf_shield_sdi_enabled = 1;
   target->ucf_sdi_enabled = 1;
   target->ucf_shield_drop_extended_enabled = 1;
-  target->ucf_shield_drop_084_enabled = 1;
+  target->ucf_shield_drop_profile = MSL_UCF_SHIELD_DROP_084;
   const int allow_wobbling = source->allow_wobbling == MSL_WOBBLING_DEFAULT
                                  ? source->num_players == 4
                                  : source->allow_wobbling == MSL_WOBBLING_ALLOW;

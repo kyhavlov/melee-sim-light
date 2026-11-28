@@ -159,6 +159,17 @@ int main(int argc, char** argv)
     msl_core_bind_match(&match);
     msl_core_bind_match_rules(&match.rules);
     if (check_absent_observation(&match) != 0) return 1;
+    Player_SetStocks(match.source_slots[0], 4);
+    Player_SetStocks(match.source_slots[1], 2);
+    Player_SetStocks(match.source_slots[2], 2);
+    Player_SetStocks(match.source_slots[3], 0);
+    int first_team_rank = Player_80033BB8(match.source_slots[0]);
+    int second_team_rank = Player_80033BB8(match.source_slots[2]);
+    if (first_team_rank != 0 || second_team_rank != 0) {
+        fprintf(stderr, "doubles standings broke a tie between surviving stocks (%d, %d)\n",
+                first_team_rank, second_team_rank);
+        return 1;
+    }
     Player_SetStocks(match.source_slots[1], 0);
     gm_80167320(match.source_slots[1], false);
     if (match.rules.ended) {

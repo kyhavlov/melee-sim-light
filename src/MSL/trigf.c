@@ -259,7 +259,10 @@ static __m512 msl_acosf_unit_vector(__m512 x)
 
 static void msl_sincosf_vector(__m512 x, __m512* sin_out, __m512* cos_out)
 {
-    __m512 z = _mm512_mul_ps(x, _mm512_set1_ps(2.0f / (f32) M_PI));
+    // GALE01 0x80326404 rounds the product before adding or subtracting
+    // 0.5. An explicit FMA with zero prevents GCC contracting that adjustment.
+    __m512 z = _mm512_fmadd_ps(x, _mm512_set1_ps(2.0f / (f32) M_PI),
+                               _mm512_setzero_ps());
     __m512i x_bits = _mm512_castps_si512(x);
     __mmask16 negative =
         _mm512_movepi32_mask(_mm512_srai_epi32(x_bits, 31));

@@ -24,6 +24,7 @@
 #include "platform/slippi.h"
 #include "runtime/context.h"
 #include "runtime/fighter_pose.h"
+#include "runtime/match.h"
 #include "runtime/source_state.h"
 #include "runtime/subsystem_profile.h"
 #endif
@@ -1276,6 +1277,12 @@ void Fighter_ChangeMotionState(Fighter_GObj* gobj, FtMotionId msid,
     fp->x221D_b5 = 0;
     fp->reflecting = false;
     fp->x2218_b6 = 0;
+#ifdef MSL_CORE_HOSTED
+    // Recorded Gecko hook at GALE01 0x80069774 clears the interrupt bit.
+    if (fp->allow_interrupt && msl_slippi_patch(MSL_PATCH_RESET_INTERRUPT)) {
+        fp->allow_interrupt = false;
+    }
+#endif
     fp->x221C_b4 = 0;
 
     fp->x1A6A = 0;
@@ -2858,14 +2865,17 @@ void Fighter_CallAcessoryCallbacks_8006C624(Fighter_GObj* gobj)
             return;
         }
 
+        // Ground IK runs before this phase. It restores the authored local
+        // rotations but leaves the solved matrices cached. The source setter
+        // invalidates those matrices before collision uses the pose.
         if (fp->accessory2_cb) {
             fp->accessory2_cb(gobj);
-            Fighter_SetRootPosition(gobj->hsd_obj, &fp->cur_pos);
+            HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
         }
 
         if (fp->accessory1_cb) {
             fp->accessory1_cb(gobj);
-            Fighter_SetRootPosition(gobj->hsd_obj, &fp->cur_pos);
+            HSD_JObjSetTranslate(gobj->hsd_obj, &fp->cur_pos);
         }
     }
 }
@@ -3411,19 +3421,6 @@ void Fighter_8006D9AC(Fighter_GObj* gobj)
     }
 
     ftCo_8009E0A8(gobj);
-#ifdef MSL_CORE_HOSTED
-    // Retail's end-of-frame render recomputes every bone matrix after this
-    // dynamics solve, and ftCo_8009CB40 reads those raw matrices when the
-    // next anim-ownership toggle rewrites the chain anchors. The links must
-    // therefore leave the frame holding the solved pose; otherwise the last
-    // mid-frame HSD_JObjSetupMatrix (pre-solve) wins and the toggle
-    // teleports the chain into a stale pose (retail-probe-verified on
-    // auto-fox YS frame 3469 and marios 33692 frame 36).
-    {
-        extern void msl_fighter_refresh_dynamics_matrices(Fighter* fp);
-        msl_fighter_refresh_dynamics_matrices(fp);
-    }
-#endif
 }
 
 void Fighter_UnkCallCameraCallback_8006D9EC(Fighter_GObj* gobj)

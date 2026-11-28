@@ -2065,6 +2065,17 @@ void Item_8026A8EC(Item_GObj* gobj)
         }
     }
 
+#ifdef MSL_CORE_HOSTED
+    // A tip hit can apply damage after its item has been destroyed.
+    // Retire the source before a new item takes the same GObj slot.
+    for (Fighter_GObj* fighter = HSD_GObj_Entities->fighters; fighter != NULL;
+         fighter = fighter->next) {
+        Fighter* fp = fighter->user_data;
+        if (fp->dmg.x1894 == gobj) {
+            fp->dmg.x1894 = NULL;
+        }
+    }
+#endif
     Item_8026B0B4(gobj);
     efAsync_QueueClear((struct EF_QueuedEffect*) &ip->xBC0);
     HSD_GObjPLink_80390228(gobj);

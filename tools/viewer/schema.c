@@ -19,6 +19,7 @@ int main(void)
     VALUE("VIEWER_PLAYER_SIZE", sizeof(MslCoreViewerPlayer));
     VALUE("VIEWER_HITBOX_SIZE", sizeof(MslCoreViewerHitbox));
     VALUE("ITEM_SIZE", sizeof(MslCoreItem));
+    VALUE("UCF_SHIELD_DROP_084", MSL_UCF_SHIELD_DROP_084);
     puts("");
 
     puts("export const matchConfigOffsets = Object.freeze({");
@@ -42,8 +43,7 @@ int main(void)
     FIELD(MslCoreMatchConfig, ucf_sdi_enabled, "ucfSdiEnabled");
     FIELD(MslCoreMatchConfig, ucf_shield_drop_extended_enabled,
           "ucfShieldDropExtendedEnabled");
-    FIELD(MslCoreMatchConfig, ucf_shield_drop_084_enabled,
-          "ucfShieldDrop084Enabled");
+    FIELD(MslCoreMatchConfig, ucf_shield_drop_profile, "ucfShieldDropProfile");
     FIELD(MslCoreMatchConfig, stage_event_streams, "stageEventStreams");
     FIELD(MslCoreMatchConfig, whispy_dead_fighter_fix, "whispyDeadFighterFix");
     FIELD(MslCoreMatchConfig, players, "players");

@@ -7,6 +7,7 @@ import {
   MATCH_CONFIG_PLAYER_SIZE,
   MATCH_CONFIG_SIZE,
   STAGE_FINAL_DESTINATION,
+  UCF_SHIELD_DROP_084,
   VIEWER_STATE_SIZE,
   inputPlayerOffsets,
   matchConfigOffsets,
@@ -149,7 +150,7 @@ export class MslWasmSim {
     this.io.setUint8(base + matchConfigOffsets.ucfShieldSdiEnabled, 1);
     this.io.setUint8(base + matchConfigOffsets.ucfSdiEnabled, 1);
     this.io.setUint8(base + matchConfigOffsets.ucfShieldDropExtendedEnabled, 1);
-    this.io.setUint8(base + matchConfigOffsets.ucfShieldDrop084Enabled, 1);
+    this.io.setUint8(base + matchConfigOffsets.ucfShieldDropProfile, UCF_SHIELD_DROP_084);
     this.#writePlayerConfig(0, p1Char, 0, true);
     this.#writePlayerConfig(1, p2Char, 1, false);
 

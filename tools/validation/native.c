@@ -157,14 +157,18 @@ typedef struct ReplayView {
   uint32_t initial_random_seed;
   uint8_t is_teams;
   uint8_t friendly_fire;
+  uint8_t online_scene;
   uint8_t online_fnmsubs_zero;
   uint8_t brawl_offscreen_damage;
   uint8_t freeze_dead_up_fall_physics;
   // MSL_PATCH_*, from the capture's gecko list (admission.py).
-  uint8_t slippi_patches;
+  uint16_t slippi_patches;
   // The recording's double-FMA semantics (arithmetic
   // provenance, like the fnmsubs profile).
   uint8_t jit_arithmetic;
+  uint8_t frame_start_rng;
+  uint8_t stock_share_rng;
+  uint8_t recorded_follower_inputs;
   uint8_t whispy_dead_fighter_fix;
   float damage_ratio;
 } ReplayView;
@@ -410,10 +414,11 @@ static int parse_start(PyObject* start, ReplayView* replay) {
   // Scene major 8 proves that the Slippi online code set, including
   // BrawlOffscreenDamage, owns this match.
   // refs/slippi-ssbm-asm/Output/InjectionLists/list_netplay.json
-  replay->online_fnmsubs_zero = PyLong_AsLong(value) == 8;
-  replay->brawl_offscreen_damage = replay->online_fnmsubs_zero;
-  replay->freeze_dead_up_fall_physics = replay->online_fnmsubs_zero;
-  replay->whispy_dead_fighter_fix = replay->online_fnmsubs_zero;
+  replay->online_scene = PyLong_AsLong(value) == 8;
+  replay->online_fnmsubs_zero = replay->online_scene;
+  replay->brawl_offscreen_damage = replay->online_scene;
+  replay->freeze_dead_up_fall_physics = replay->online_scene;
+  replay->whispy_dead_fighter_fix = replay->online_scene;
   if (PyErr_Occurred()) {
     return -1;
   }
@@ -494,14 +499,14 @@ static int parse_start(PyObject* start, ReplayView* replay) {
       }
     }
   }
-  if (replay->num_players != 2 && replay->num_players != 4) {
-    PyErr_Format(PyExc_ValueError, "expected two or four players, got %d",
+  if (replay->num_players < 2 || (replay->num_players == 3 && !replay->is_teams)) {
+    PyErr_Format(PyExc_ValueError, "unsupported player count for replay mode: %d",
                  replay->num_players);
     return -1;
   }
-  if (replay->num_players == 4 && replay->is_teams && !replay->friendly_fire) {
+  if (replay->num_players >= 3 && replay->is_teams && !replay->friendly_fire) {
     PyErr_SetString(PyExc_ValueError,
-                    "four-player teams validation currently requires Team Attack ON");
+                    "teams validation with three or more players requires Team Attack ON");
     return -1;
   }
   for (i = 0; i + 1 < replay->num_players; ++i) {
@@ -673,8 +678,8 @@ static int load_post_fields(ArrowNode post, ReplayPlayer* player, char* error,
 }
 
 static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player,
-                       ReplayPlayer* follower, uint8_t* has_follower, char* error,
-                       size_t error_size) {
+                       ReplayPlayer* follower, uint8_t* has_follower,
+                       int recorded_follower_inputs, char* error, size_t error_size) {
   char port_name[3] = {'P', (char)('0' + port_1based), '\0'};
   ArrowNode port;
   ArrowNode leader;
@@ -767,15 +772,11 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player,
   }
   FIELD(node, "l", "f", player->trigger_l);
   FIELD(node, "r", "f", player->trigger_r);
-#undef FIELD
-
   if (load_post_fields(post, player, error, error_size) != 0) {
     return -1;
   }
 
-  // Peppi emits ports.P{n}.follower only when the replay recorded a second
-  // fighter entity (Ice Climbers). The follower carries pre rows too, but
-  // Nana takes no external input, so only her post lanes are observations.
+  // Peppi emits ports.P{n}.follower only when the replay recorded Nana.
   {
     ArrowNode follower_node;
     int present = node_child_optional(port, "follower", &follower_node, error, error_size);
@@ -788,9 +789,23 @@ static int load_player(ArrowNode ports, int port_1based, ReplayPlayer* player,
           load_post_fields(follower_post, follower, error, error_size) != 0) {
         return -1;
       }
+      if (recorded_follower_inputs) {
+        if (node_child(follower_node, "pre", &pre, error, error_size) != 0 ||
+            node_child(pre, "joystick", &joystick, error, error_size) != 0 ||
+            node_child(pre, "cstick", &cstick, error, error_size) != 0) {
+          return -1;
+        }
+        FIELD(joystick, "x", "f", follower->nml_main_x);
+        FIELD(joystick, "y", "f", follower->nml_main_y);
+        FIELD(cstick, "x", "f", follower->nml_c_x);
+        FIELD(cstick, "y", "f", follower->nml_c_y);
+        FIELD(pre, "triggers", "f", follower->processed_trigger);
+        FIELD(pre, "buttons", "I", follower->processed_buttons);
+      }
       *has_follower = 1;
     }
   }
+#undef FIELD
   return 0;
 }
 
@@ -917,7 +932,8 @@ static int load_replay(ArrowNode frames, ReplayView* replay, char* error, size_t
   }
   for (i = 0; i < replay->num_players; ++i) {
     if (load_player(ports, replay->port_1based[i], &replay->players[i], &replay->followers[i],
-                    &replay->has_follower[i], error, error_size) != 0) {
+                    &replay->has_follower[i], replay->recorded_follower_inputs &&
+                    !replay->cpu_level[i], error, error_size) != 0) {
       return -1;
     }
   }
@@ -1091,6 +1107,12 @@ static void build_input(const ReplayView* replay, const FrameRows* rows, int64_t
     MslCoreInputPlayer* dst = &input->p[player];
     int64_t raw = rows->player_raw[player][logical_pos];
     dst->buttons = get_u16(&src->buttons, raw);
+    if (!rows->player_present[player][logical_pos]) {
+      // Slippi can stop publishing a fighter after their last stock. Do
+      // not hold a stale Start press through that gap and suppress the
+      // stock-share input when the fighter's rows resume.
+      dst->buttons &= ~MSL_BUTTON_START;
+    }
     dst->main_x = get_i8(&src->main_x, raw);
     dst->main_y = src->main_y_from_processed ? processed_stick_i8(get_f32(&src->nml_main_y, raw))
                                              : get_i8(&src->main_y, raw);
@@ -1123,11 +1145,6 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
     snprintf(error, error_size, "replay has no finalized frames");
     return -1;
   }
-  if (replay->num_players != 2 && replay->num_players != 4) {
-    snprintf(error, error_size, "Melee core requires two or four players, got %d",
-             replay->num_players);
-    return -1;
-  }
   if (replay->stage_id != 2 && replay->stage_id != 3 && replay->stage_id != 8 &&
       replay->stage_id != 28 && replay->stage_id != 31 && replay->stage_id != 32) {
     snprintf(error, error_size, "Melee core requires a legal stage id (2,3,8,28,31,32), got %u",
@@ -1155,14 +1172,18 @@ static int build_match_config(const ReplayView* replay, const FrameRows* rows,
       (replay->jit_arithmetic ? MSL_ARITHMETIC_SPLIT_FMA : 0);
   config->brawl_offscreen_damage = replay->brawl_offscreen_damage;
   config->freeze_dead_up_fall_physics = replay->freeze_dead_up_fall_physics;
-  config->replay_flags =
-      replay->slippi_patches | (replay->is_teams ? MSL_PATCH_ALLOW_WOBBLING : 0);
+  config->replay_flags = (uint8_t)(
+      replay->slippi_patches | (replay->is_teams ? MSL_PATCH_ALLOW_WOBBLING : 0));
   config->whispy_dead_fighter_fix = replay->whispy_dead_fighter_fix;
   config->ucf_cardinals_1_0_enabled = (uint8_t)ucf_cardinals_1_0_enabled;
   config->ucf_shield_sdi_enabled = (uint8_t)ucf_shield_sdi_enabled;
   config->ucf_sdi_enabled = (uint8_t)ucf_sdi_enabled;
   config->ucf_shield_drop_extended_enabled = (uint8_t)ucf_shield_drop_extended_enabled;
-  config->ucf_shield_drop_084_enabled = (uint8_t)ucf_shield_drop_084_enabled;
+  config->ucf_shield_drop_profile = ucf_shield_drop_084_enabled
+      ? (replay->slippi_patches & MSL_PATCH_UCF_08_SPOTDODGE
+             ? MSL_UCF_SHIELD_DROP_084_LEGACY_SPOTDODGE
+             : MSL_UCF_SHIELD_DROP_084)
+      : MSL_UCF_SHIELD_DROP_08;
   config->stage_event_streams = (replay->fod_platform_list != NULL ? 1U : 0U) |
                                 (replay->dreamland_whispy_list != NULL ? 2U : 0U);
   for (i = 0; i < replay->num_players; ++i) {
@@ -2335,8 +2356,13 @@ static void refill_write_buffer(StreamState* state) {
     frame.stage_events.fighter_pre_random_seed =
         get_u32(&state->replay->players[seed_player].random_seed,
                 state->rows->player_raw[seed_player][logical_pos]);
-    frame.stage_events.replay_frame_flags = MSL_REPLAY_FRAME_FIGHTER_SEED;
-    if (state->replay->online_fnmsubs_zero) {
+    if (!state->replay->frame_start_rng) {
+      frame.stage_events.replay_frame_flags = MSL_REPLAY_FRAME_FIGHTER_SEED;
+    }
+    if (state->replay->stock_share_rng) {
+      frame.stage_events.replay_frame_flags |= MSL_REPLAY_FRAME_STOCK_SHARE_RNG;
+    }
+    if (state->replay->online_scene) {
       // LoopEngineForRollback.asm reaches the draw pass only after catch-up.
       // A repeated raw frame is still behind the live frame, even when that
       // repetition is the finalized copy used for simulation.
@@ -2352,12 +2378,24 @@ static void refill_write_buffer(StreamState* state) {
     }
     build_input(state->replay, state->rows, logical_pos, &frame.input);
     for (int player = 0; player < state->replay->num_players; ++player) {
-      const ReplayPlayer* src = &state->replay->players[player];
-      int64_t row = state->rows->player_raw[player][logical_pos];
+      const ReplayPlayer* src;
+      int64_t row;
       MslReplayCpuInput* dst =
           &frame.stage_events.cpu_inputs[state->replay->port_1based[player] - 1];
-      if (!state->replay->cpu_level[player] ||
-          !state->rows->player_present[player][logical_pos]) {
+      if (state->replay->cpu_level[player] && state->rows->player_present[player][logical_pos]) {
+        src = &state->replay->players[player];
+        row = state->rows->player_raw[player][logical_pos];
+        dst->kind = MSL_REPLAY_CPU_INPUT_LEADER;
+        dst->random_seed = get_u32(&src->random_seed, row);
+      } else if (state->replay->recorded_follower_inputs && !state->replay->cpu_level[player] &&
+                 state->rows->follower_present[player][logical_pos]) {
+        src = &state->replay->followers[player];
+        row = state->rows->follower_raw[player][logical_pos];
+        if (!primitive_is_valid(&src->processed_buttons, row)) {
+          continue;
+        }
+        dst->kind = MSL_REPLAY_CPU_INPUT_FOLLOWER;
+      } else {
         continue;
       }
       dst->main_x = get_f32(&src->nml_main_x, row);
@@ -2366,8 +2404,6 @@ static void refill_write_buffer(StreamState* state) {
       dst->c_y = get_f32(&src->nml_c_y, row);
       dst->trigger = get_f32(&src->processed_trigger, row);
       dst->buttons = get_u32(&src->processed_buttons, row);
-      dst->random_seed = get_u32(&src->random_seed, row);
-      dst->valid = 1;
     }
     if (state->replay->fod_platform_list != NULL) {
       int64_t start = list_range_start(state->replay->fod_platform_list, raw);
@@ -2963,6 +2999,9 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
       "relaxed_floats",
       "whispy_dead_fighter_fix",
       "finalized_through",
+      "frame_start_rng",
+      "stock_share_rng",
+      "recorded_follower_inputs",
       NULL,
   };
   PyObject* frames_obj;
@@ -2995,6 +3034,9 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   int relaxed_floats = 0;
   int whispy_dead_fighter_fix = -1;
   int finalized_through = INT32_MAX;
+  int frame_start_rng = 0;
+  int stock_share_rng = 0;
+  int recorded_follower_inputs = 0;
   struct ArrowSchema* schema;
   struct ArrowArray* array;
   ArrowNode frames;
@@ -3013,7 +3055,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   (void)self;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "OOOssss|OKdpppppppiiziiy#y#pii:validate_replay", keywords, &frames_obj, &start_obj,
+          args, kwargs, "OOOssss|OKdpppppppiiziiy#y#piippp:validate_replay", keywords, &frames_obj, &start_obj,
           &metadata_obj, &qemu_path, &sysroot, &binary_path, &data_root, &start_frame_obj,
           &frames_limit, &timeout, &signed_zero_equal, &direct_native, &ucf_cardinals_1_0_enabled,
           &ucf_shield_sdi_enabled, &ucf_sdi_enabled, &ucf_shield_drop_extended_enabled,
@@ -3021,7 +3063,7 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
           &runner_stdin, &runner_stdout, &fnmsubs_profile, &slippi_patches,
           &jit_arithmetic, &stored_expected, &stored_expected_size,
           &regenerate_slp, &regenerate_size, &relaxed_floats, &whispy_dead_fighter_fix,
-          &finalized_through)) {
+          &finalized_through, &frame_start_rng, &stock_share_rng, &recorded_follower_inputs)) {
     return NULL;
   }
   if (timeout <= 0.0 || !isfinite(timeout)) {
@@ -3058,16 +3100,21 @@ static PyObject* validate_replay(PyObject* self, PyObject* args, PyObject* kwarg
   }
   if (slippi_patches < 0 ||
       (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_ALLOW_WOBBLING |
-                          MSL_PATCH_RETAIL_SPAWNS | MSL_PATCH_FAST_FALL_EFFECT))) {
+                          MSL_PATCH_RETAIL_SPAWNS | MSL_PATCH_FAST_FALL_EFFECT |
+                          MSL_PATCH_RESET_INTERRUPT | MSL_PATCH_L_CANCEL_FLASH |
+                          MSL_PATCH_STADIUM_MONITOR | MSL_PATCH_UCF_08_SPOTDODGE))) {
     PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
     goto done;
   }
-  replay.slippi_patches = (uint8_t)slippi_patches;
+  replay.slippi_patches = (uint16_t)slippi_patches;
   if (jit_arithmetic < 0 || jit_arithmetic > 1) {
     PyErr_SetString(PyExc_ValueError, "jit_arithmetic must be 0 to 1");
     goto done;
   }
   replay.jit_arithmetic = (uint8_t)jit_arithmetic;
+  replay.frame_start_rng = (uint8_t)frame_start_rng;
+  replay.stock_share_rng = (uint8_t)stock_share_rng;
+  replay.recorded_follower_inputs = (uint8_t)recorded_follower_inputs;
 
   arrow_pair = PyObject_CallMethod(frames_obj, "__arrow_c_array__", NULL);
   if (arrow_pair == NULL) {
@@ -3274,11 +3321,13 @@ static PyObject* write_benchmark_case(PyObject* self, PyObject* args, PyObject* 
   }
   if (slippi_patches < 0 ||
       (slippi_patches & ~(MSL_PATCH_FD_BACKGROUND_FROZEN | MSL_PATCH_ALLOW_WOBBLING |
-                          MSL_PATCH_RETAIL_SPAWNS | MSL_PATCH_FAST_FALL_EFFECT))) {
+                          MSL_PATCH_RETAIL_SPAWNS | MSL_PATCH_FAST_FALL_EFFECT |
+                          MSL_PATCH_RESET_INTERRUPT | MSL_PATCH_L_CANCEL_FLASH |
+                          MSL_PATCH_STADIUM_MONITOR | MSL_PATCH_UCF_08_SPOTDODGE))) {
     PyErr_SetString(PyExc_ValueError, "unsupported slippi_patches bits");
     goto done;
   }
-  replay.slippi_patches = (uint8_t)slippi_patches;
+  replay.slippi_patches = (uint16_t)slippi_patches;
   if (jit_arithmetic < 0 || jit_arithmetic > 1) {
     PyErr_SetString(PyExc_ValueError, "jit_arithmetic must be 0 to 1");
     goto done;

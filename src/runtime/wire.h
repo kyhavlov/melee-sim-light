@@ -50,8 +50,13 @@ typedef struct MslReplayCpuInput {
     float main_x, main_y, c_x, c_y, trigger;
     uint32_t buttons;
     uint32_t random_seed;
-    uint8_t valid;
+    uint8_t kind;
 } MslReplayCpuInput;
+
+enum {
+    MSL_REPLAY_CPU_INPUT_LEADER = 1,
+    MSL_REPLAY_CPU_INPUT_FOLLOWER = 2,
+};
 
 typedef struct MslCoreStageEvents {
     float fod_platform_height[2];
@@ -70,6 +75,7 @@ typedef struct MslCoreStageEvents {
 enum {
     MSL_REPLAY_FRAME_FIGHTER_SEED = 1 << 0,
     MSL_REPLAY_FRAME_SKIP_RENDER = 1 << 1,
+    MSL_REPLAY_FRAME_STOCK_SHARE_RNG = 1 << 2,
 };
 
 typedef struct MslCoreStreamFrame {
@@ -132,15 +138,7 @@ typedef struct MslCoreMatchConfig {
     // only.
     // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Shield Drop Extended.asm
     uint8_t ucf_shield_drop_extended_enabled;
-    // The classic shield drop itself shipped in two versions. UCF 0.84 gates
-    // the spot-dodge suppression on standing on a platform line; the earlier
-    // UCF 0.8 code (unchanged since 0.73) has no platform check and applies
-    // its float rim test everywhere, so a rim-coordinate shield press with the
-    // stick held down on the main floor shields instead of spot-dodging.
-    // Recordings whose embedded gecko list carries the 0.8 code clear this.
-    // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Shield Drop.asm
-    // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF SD.asm
-    uint8_t ucf_shield_drop_084_enabled;
+    uint8_t ucf_shield_drop_profile; // MSL_UCF_SHIELD_DROP_*.
     // Bit 0: Slippi 3.18+ FoD platform events; bit 1: Dream Land Whispy
     // direction events. A present stream is authoritative even on frames with
     // no event, where the last published value remains active.
@@ -160,6 +158,17 @@ enum {
     MSL_PATCH_RETAIL_SPAWNS = 1 << 2,
     MSL_PATCH_FAST_FALL_EFFECT = 1 << 3,
     MSL_REPLAY_IMMEDIATE_ENTRY = 1 << 4,
+    MSL_PATCH_RESET_INTERRUPT = 1 << 5,
+    MSL_PATCH_L_CANCEL_FLASH = 1 << 6,
+    MSL_PATCH_STADIUM_MONITOR = 1 << 7,
+    // Replay admission translates this patch into a shield-drop profile.
+    MSL_PATCH_UCF_08_SPOTDODGE = 1 << 8,
+};
+
+enum {
+    MSL_UCF_SHIELD_DROP_08,
+    MSL_UCF_SHIELD_DROP_084,
+    MSL_UCF_SHIELD_DROP_084_LEGACY_SPOTDODGE,
 };
 
 enum {

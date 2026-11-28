@@ -4806,7 +4806,8 @@ static inline int ftCo_800AA42C_inline0(float clamp, float dist, float near,
     }
     {
         float scale = (dist - near) / (far - near);
-        float tmp = raw + scale * (clamp - raw);
+        // GALE01 0x800AA7A0 fuses this before truncating the stick value.
+        float tmp = __fmadds(scale, clamp - raw, raw);
         int new_clamp = tmp;
         if (new_clamp > clamp) {
             new_clamp = clamp;
@@ -4869,7 +4870,8 @@ void ftCo_800AA42C(Fighter* fp)
     {
         float dx = data->x54.x - fp->cur_pos.x;
         float dy = data->x54.y - fp->cur_pos.y;
-        dist = sqrtf(dx * dx + dy * dy);
+        // GALE01 0x800AA5D4 fuses the X term into the rounded Y square.
+        dist = sqrtf(__fmadds(dx, dx, dy * dy));
     }
     near = data->x38;
     if (dist - near > data->x3C) {

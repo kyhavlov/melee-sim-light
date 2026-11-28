@@ -27,7 +27,7 @@ typedef struct MslCoreMatchRules {
     bool ucf_shield_sdi_enabled;
     bool ucf_sdi_enabled;
     bool ucf_shield_drop_extended_enabled;
-    bool ucf_shield_drop_084_enabled;
+    u8 ucf_shield_drop_profile;
     u32 frame_count;
     bool ended;
     u8 respawn_reservation_timer[6];
@@ -50,7 +50,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                int ucf_shield_sdi_enabled,
                                int ucf_sdi_enabled,
                                int ucf_shield_drop_extended_enabled,
-                               int ucf_shield_drop_084_enabled);
+                               int ucf_shield_drop_profile);
 bool msl_whispy_ignores_dead_fighters(void);
 bool msl_core_uses_online_fnmsubs_zero(void);
 bool msl_core_has_brawl_offscreen_damage(void);

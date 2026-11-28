@@ -16,9 +16,11 @@ from tools.validation.slpz import RAW_HEADER, _event_sizes
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "agent_docs/validation/replay_admission.json"
-RAW_AXES = {"raw_analog_x", "raw_analog_y", "raw_analog_cstick_x", "raw_analog_cstick_y"}
+CSTICK_AXES = {"raw_analog_cstick_x", "raw_analog_cstick_y"}
+RAW_AXES = {"raw_analog_x", "raw_analog_y"} | CSTICK_AXES
 PROCESSED_INPUTS = {"joystick", "cstick", "triggers", "buttons", "random_seed"}
 PHYSICAL_INPUTS = {"buttons_physical", "triggers_physical"}
+REPLAY_PLATFORMS = {"dolphin", "mainline dolphin", "nintendont", "network"}
 # Online/Core/BrawlOffscreenDamage.asm: identical gameplay instructions, with
 # either the old 176-byte or current 224-byte register-save stack frame. Exclude
 # only the relocated final branch, whose instruction form is checked below.
@@ -55,6 +57,16 @@ def is_ucf_08(codes: dict[int, bytes]) -> bool:
                 int.from_bytes(patch[-4:], "big") & 0xFC000003 != 0x48000000):
             return False
     return True
+
+
+def has_ucf_084_cardinals(codes: dict[int, bytes]) -> bool:
+    # Slippi ASM 6d3e140, UCF Pad Buffer + 1.0 Cardinals. The recorded block
+    # contains 48 bytes of mutable pad history after the first branch.
+    patch = codes.get(0xC206B460, b"")
+    return (len(patch) == 680 and
+            hashlib.sha256(patch[8:12] + patch[60:-4]).hexdigest() ==
+            "f1aa8cbb0b44918a5e59bdddfc233a11f206a9400c94092918ca937d0b62ea74" and
+            int.from_bytes(patch[-4:], "big") & 0xFC000003 == 0x48000000)
 
 
 @lru_cache(maxsize=1)
@@ -129,6 +141,16 @@ PATCH_FD_BACKGROUND_FROZEN = 1 << 0
 PATCH_ALLOW_WOBBLING = 1 << 1
 PATCH_RETAIL_SPAWNS = 1 << 2
 PATCH_FAST_FALL_EFFECT = 1 << 3
+PATCH_RESET_INTERRUPT = 1 << 5
+PATCH_L_CANCEL_FLASH = 1 << 6
+PATCH_STADIUM_MONITOR = 1 << 7
+PATCH_UCF_08_SPOTDODGE = 1 << 8
+
+STADIUM_MONITOR_PATCH = {
+    0x041D2AC0: bytes.fromhex("041d2ac038a00000"),
+    0x041D2AC8: bytes.fromhex("041d2ac838800000"),
+    0x041D2B98: bytes.fromhex("041d2b9848000018"),
+}
 
 
 def whispy_patch(codes: dict[int, bytes]) -> int:
@@ -150,6 +172,12 @@ def whispy_patch(codes: dict[int, bytes]) -> int:
 def slippi_patches(codes: dict[int, bytes]) -> int:
     """Identify supported Slippi patches from their recorded instructions."""
     patches = 0
+    spotdodge = codes.get(0xC20998A4, b"")
+    # The 240-byte hook keeps the 0.8 float rim test with the newer UCF bundle.
+    if (len(spotdodge) == 248 and hashlib.sha256(spotdodge[8:-4]).hexdigest() ==
+            "1315df92c5a5b48e9fd424f75d1b7a32d559c728f9481c7802cc5484ff726ceb" and
+            int.from_bytes(spotdodge[-4:], "big") & 0xFC000003 == 0x48000000):
+        patches |= PATCH_UCF_08_SPOTDODGE
     if codes.get(0x0421AAE4, b"")[4:8] == bytes.fromhex("60000000"):
         patches |= PATCH_FD_BACKGROUND_FROZEN
     if 0xC20DA9DC in codes:  # Earlier three-hit version.
@@ -172,6 +200,23 @@ def slippi_patches(codes: dict[int, bytes]) -> int:
                 int.from_bytes(patch[-4:], "big") & 0xFC000003 != 0x48000000):
             raise ValueError("unsupported-fast-fall-effect-patch")
         patches |= PATCH_FAST_FALL_EFFECT
+    patch = codes.get(0xC2069774)
+    if patch is not None:
+        if (len(patch) != 32 or patch[8:-4] != bytes.fromhex(
+                "981a2218881a22183880000050803e30981a2218") or
+                int.from_bytes(patch[-4:], "big") & 0xFC000003 != 0x48000000):
+            raise ValueError("unsupported-interrupt-reset-patch")
+        patches |= PATCH_RESET_INTERRUPT
+    patch = codes.get(0xC208D698, b"")
+    if (len(patch) == 72 and patch[8:-4] == bytes.fromhex(
+            "7c0500004080001cc06600e8ec611824fc60181ed861002880e1002c48000010"
+            "fc60081ed861002880e1002c8103002c90e823407c05000060000000") and
+            int.from_bytes(patch[-4:], "big") & 0xFC000003 == 0x48000000):
+        patches |= PATCH_L_CANCEL_FLASH
+    if any(address in codes for address in STADIUM_MONITOR_PATCH):
+        if not all(codes.get(address) == patch for address, patch in STADIUM_MONITOR_PATCH.items()):
+            raise ValueError("unsupported-stadium-monitor-patch")
+        patches |= PATCH_STADIUM_MONITOR
     return patches
 
 
@@ -180,6 +225,7 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
                    jit_arithmetic: str | None = None,
                    codes: dict[int, bytes] | None = None,
                    allow_ucf_08: bool = False,
+                   allow_missing_cstick: bool = False,
                    allow_missing_game_end: bool = False,
                    finalized_through: int | None = None) -> list[str]:
     """Return property violations without running or consulting simulator output."""
@@ -192,7 +238,7 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
     if record is not None:
         # Recheck these against the requested UCF profile and frame range.
         recheck = set()
-        if legacy_ucf:
+        if legacy_ucf or allow_missing_cstick:
             recheck.add("missing-recorded-inputs")
         if allow_missing_game_end and game.end is None:
             recheck.add("incomplete-history")
@@ -236,7 +282,7 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
         if player.get("type") == "Cpu" and player.get("cpu_level") not in range(1, 10):
             issues.append("missing-cpu-level")
     platform = played_on or game.metadata.get("playedOn")
-    if platform not in ("dolphin", "mainline dolphin", "nintendont", "network"):
+    if platform not in REPLAY_PLATFORMS:
         issues.append("unestablished-arithmetic")
     if fnmsubs_profile is not None:
         profiles = json.loads((ROOT / "agent_docs/validation/arithmetic_provenance.json").read_text())
@@ -255,7 +301,7 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
     _, reversed_rows = np.unique(ids[::-1], return_index=True)
     rows = np.sort(len(ids) - 1 - reversed_rows)
     frames = ids[rows]
-    last_recorded = int(frames[-1]) if len(frames) else None
+    last_recorded = int(frames.max()) if len(frames) else None
     if finalized_through is not None:
         frames = frames[frames <= finalized_through]
     if (len(frames) < 2 or frames[0] != -123 or np.any(np.diff(frames) != 1) or
@@ -308,6 +354,8 @@ def capture_issues(game, raw: bytes, *, played_on: str | None = None,
             player_rows = np.sort(present[len(present) - 1 - last])
             if role == "leader":
                 required = PROCESSED_INPUTS | (raw_axes | PHYSICAL_INPUTS if player["type"] == "Human" else set())
+                if allow_missing_cstick and CSTICK_AXES.isdisjoint(pre.type.names):
+                    required -= CSTICK_AXES
                 if required - set(pre.type.names):
                     issues.append("missing-recorded-inputs")
                 if not np.all(pre.is_valid().to_numpy(zero_copy_only=False)[player_rows]):

@@ -46,6 +46,38 @@ def test_capture_rules_apply_independently_of_exclusion_identity(properties_only
     assert reason in admission.capture_issues(game, raw)
 
 
+def test_legacy_cstick_requires_explicit_admission(properties_only):
+    game, raw = read_game("replays/validation/marios/64303_master-platinum-f57bf677ef721a6e844c0398.slpz")
+    codes = admission.gecko_codes(raw)
+    assert admission.has_ucf_084_cardinals(codes)
+    assert "missing-recorded-inputs" in admission.capture_issues(game, raw, codes=codes)
+    assert "missing-recorded-inputs" not in admission.capture_issues(
+        game, raw, codes=codes, allow_missing_cstick=True
+    )
+    patch = bytearray(codes[0xC206B460])
+    patch[12] ^= 1
+    codes[0xC206B460] = bytes(patch)
+    assert admission.has_ucf_084_cardinals(codes)
+    patch[60] ^= 1
+    codes[0xC206B460] = bytes(patch)
+    assert not admission.has_ucf_084_cardinals(codes)
+
+
+def test_recorded_interrupt_reset_and_l_cancel_flash():
+    reset = bytes.fromhex("c206977400000003981a2218881a22183880000050803e30981a22184b9fe38c")
+    flash = bytes.fromhex(
+        "c208d698000000087c0500004080001cc06600e8ec611824fc60181ed861002880e1002c48000010"
+        "fc60081ed861002880e1002c8103002c90e823407c050000600000004ba222d0"
+    )
+    codes = {0xC2069774: reset, 0xC208D698: flash}
+    mask = admission.PATCH_RESET_INTERRUPT | admission.PATCH_L_CANCEL_FLASH
+    assert admission.slippi_patches({}) & mask == 0
+    assert admission.slippi_patches(codes) & mask == mask
+    codes[0xC2069774] = reset[:8] + b"\x00" + reset[9:]
+    with pytest.raises(ValueError, match="unsupported-interrupt-reset-patch"):
+        admission.slippi_patches(codes)
+
+
 @pytest.mark.parametrize("replay,has_residue", [
     ("sheik/PaleMajorEchidna.slpz", False),
     ("bowser/MildMurkyNewt.slpz", True),
@@ -109,6 +141,20 @@ def test_fast_fall_effect_uses_the_recorded_patch():
     assert admission.slippi_patches({address: patch}) & flag
     with pytest.raises(ValueError, match="unsupported-fast-fall-effect-patch"):
         admission.slippi_patches({address: patch[:16] + b"\0" + patch[17:]})
+
+
+def test_stadium_monitor_requires_all_three_patch_instructions():
+    codes = {
+        0x041D2AC0: bytes.fromhex("041d2ac038a00000"),
+        0x041D2AC8: bytes.fromhex("041d2ac838800000"),
+        0x041D2B98: bytes.fromhex("041d2b9848000018"),
+    }
+    flag = admission.PATCH_STADIUM_MONITOR
+    assert not admission.slippi_patches({}) & flag
+    assert admission.slippi_patches(codes) & flag
+    del codes[0x041D2B98]
+    with pytest.raises(ValueError, match="unsupported-stadium-monitor-patch"):
+        admission.slippi_patches(codes)
 
 
 @pytest.mark.parametrize("key,value", [("is_pal", True), ("item_spawn_frequency", 1),

@@ -36,8 +36,8 @@ void msl_core_decode_match_config(MslCoreMatchConfig* config,
         wire[offsetof(MslCoreMatchConfig, ucf_sdi_enabled)];
     config->ucf_shield_drop_extended_enabled =
         wire[offsetof(MslCoreMatchConfig, ucf_shield_drop_extended_enabled)];
-    config->ucf_shield_drop_084_enabled =
-        wire[offsetof(MslCoreMatchConfig, ucf_shield_drop_084_enabled)];
+    config->ucf_shield_drop_profile =
+        wire[offsetof(MslCoreMatchConfig, ucf_shield_drop_profile)];
     config->whispy_dead_fighter_fix =
         wire[offsetof(MslCoreMatchConfig, whispy_dead_fighter_fix)];
     config->stage_event_streams =
@@ -77,6 +77,6 @@ void msl_core_decode_stage_events(MslCoreStageEvents* events,
         dst->trigger = msl_core_get_lef32(p + offsetof(MslReplayCpuInput, trigger));
         dst->buttons = msl_core_get_le32(p + offsetof(MslReplayCpuInput, buttons));
         dst->random_seed = msl_core_get_le32(p + offsetof(MslReplayCpuInput, random_seed));
-        dst->valid = p[offsetof(MslReplayCpuInput, valid)];
+        dst->kind = p[offsetof(MslReplayCpuInput, kind)];
     }
 }

@@ -211,6 +211,23 @@ static int msl_test_acos_seed(void)
     return 0;
 }
 
+static int msl_test_sincos_quadrant(void)
+{
+    // The retail product rounds to just below 0.5 in magnitude. Adding
+    // 0.5 as a separate operation rounds to 1 and selects the next quadrant.
+    const float angles[3] = { -0x1.921fb4p-1F, 0x1.921fb4p-1F, 0.0F };
+    float sine[3], cosine[3];
+
+    msl_sincosf3(angles, sine, cosine);
+    if (sine[0] != -0x1.6a09e4p-1F || sine[1] != 0x1.6a09e4p-1F ||
+        cosine[0] != 0x1.6a09e8p-1F || cosine[1] != 0x1.6a09e8p-1F)
+    {
+        fprintf(stderr, "sine/cosine quadrant rounding mismatch\n");
+        return -1;
+    }
+    return 0;
+}
+
 static int msl_test_slerp_weights(void)
 {
     static const float weights[] = { 0.0F, 1.0F, 0.5F, 0.25F, -0.5F, 1.5F };
@@ -626,7 +643,8 @@ int main(int argc, char** argv)
     if (msl_fighter_pose_init(&context.match.fighter_pose, 1) != 0 ||
         msl_test_dirty_traversal(&context.match.fighter_pose) != 0 ||
         msl_test_root_translation(&context.match.fighter_pose) != 0 ||
-        msl_test_acos_seed() != 0 || msl_test_slerp_weights() != 0 ||
+        msl_test_acos_seed() != 0 || msl_test_sincos_quadrant() != 0 ||
+        msl_test_slerp_weights() != 0 ||
         msl_test_blend_publication() != 0 || msl_test_srt_concat() != 0 ||
         msl_test_sample_publication(&context.match.fighter_pose) != 0)
     {

@@ -59,7 +59,7 @@ static void config_init(MslCoreMatchConfig* config, uint8_t stage, uint8_t chara
   config->ucf_cardinals_1_0_enabled = 1;
   config->ucf_shield_sdi_enabled = 1;
   config->ucf_sdi_enabled = 1;
-  config->ucf_shield_drop_084_enabled = 1;
+  config->ucf_shield_drop_profile = MSL_UCF_SHIELD_DROP_084;
   for (player = 0; player < player_count; ++player) {
     config->players[player].char_id = character;
     config->players[player].team_id = player == 1 || player == 2;

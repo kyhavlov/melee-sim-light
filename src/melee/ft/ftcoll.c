@@ -3526,11 +3526,16 @@ void ftColl_8007BE3C(Fighter_GObj* gobj)
         return;
     }
 
-    source = (HSD_GObj*) fp->dmg.x1894;
+    source = fp->dmg.x1894;
     {
         HSD_GObj* source_copy = source;
 
+#ifdef MSL_CORE_HOSTED
+        // A destroyed item no longer receives credit for deferred damage.
+        switch (source_copy != NULL ? source_copy->classifier : 0) {
+#else
         switch (source_copy->classifier) {
+#endif
         case HSD_GOBJ_CLASS_FIGHTER:
             victim_gobj = fp->gobj;
             {

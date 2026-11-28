@@ -7,6 +7,7 @@ export const VIEWER_STATE_SIZE = 2332;
 export const VIEWER_PLAYER_SIZE = 192;
 export const VIEWER_HITBOX_SIZE = 24;
 export const ITEM_SIZE = 48;
+export const UCF_SHIELD_DROP_084 = 1;
 
 export const matchConfigOffsets = Object.freeze({
   stageId: 0,
@@ -26,7 +27,7 @@ export const matchConfigOffsets = Object.freeze({
   ucfShieldSdiEnabled: 29,
   ucfSdiEnabled: 30,
   ucfShieldDropExtendedEnabled: 31,
-  ucfShieldDrop084Enabled: 32,
+  ucfShieldDropProfile: 32,
   stageEventStreams: 33,
   whispyDeadFighterFix: 34,
   players: 36,

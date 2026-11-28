@@ -1,5 +1,6 @@
 #include "platform/slippi.h"
 
+#include "runtime/match.h"
 #include "runtime/wire.h"
 
 #include <stdio.h>
@@ -109,11 +110,12 @@ void msl_slippi_apply_fighter_pre_random_seed(void)
 void msl_slippi_apply_cpu_input(struct Fighter* fp)
 {
     MslReplayCpuInput* input;
-    if (fp->x221F_b4 || fp->player_id >= MSL_CORE_MAX_PLAYERS) {
+    if (fp->player_id >= MSL_CORE_MAX_PLAYERS) {
         return;
     }
     input = &msl_bound_slippi_state->cpu_inputs[fp->player_id];
-    if (!input->valid) {
+    if (input->kind != (fp->x221F_b4 ? MSL_REPLAY_CPU_INPUT_FOLLOWER
+                                    : MSL_REPLAY_CPU_INPUT_LEADER)) {
         return;
     }
     // Playback/Core/RestoreGameFrame.asm, before input edges and timers.
@@ -123,10 +125,11 @@ void msl_slippi_apply_cpu_input(struct Fighter* fp)
     fp->input.cstick.y = input->c_y;
     fp->input.x650 = input->trigger;
     fp->input.held_inputs = input->buttons;
-    // Validation also supplies SendGamePreFrame's RNG observation here.
-    // Slippi playback itself only restores RNG when resync is enabled.
-    *seed_ptr = input->random_seed;
-    input->valid = 0;
+    if (input->kind == MSL_REPLAY_CPU_INPUT_LEADER) {
+        // CPU leader validation also restores the RNG observation.
+        *seed_ptr = input->random_seed;
+    }
+    input->kind = 0;
 }
 
 static size_t msl_slippi_fighter_state_index(
@@ -146,6 +149,11 @@ static size_t msl_slippi_fighter_state_index(
 
 void msl_slippi_lcancel_set(struct Fighter* fp, u8 value)
 {
+    // The alternate hook at GALE01 0x8008D698 writes a flash timer
+    // instead of the status byte produced by the Slippi recorder.
+    if (value != 0 && msl_slippi_patch(MSL_PATCH_L_CANCEL_FLASH)) {
+        return;
+    }
     MslCoreSlippiState* state = msl_bound_slippi_state;
     size_t i = msl_slippi_fighter_state_index(state, fp);
 

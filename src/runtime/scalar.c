@@ -12,6 +12,7 @@
 #include "ft/ftdata.h"
 #include "ft/ftanim.h"
 #include "ft/ftdevice.h"
+#include "ft/ftdynamics.h"
 #include "ft/ftlib.h"
 #include "gr/grdatfiles.h"
 #include "gr/grizumi.h"
@@ -217,6 +218,29 @@ static const MslCoreStageSpec* stage_spec(uint8_t external_id)
         }
     }
     return NULL;
+}
+
+static bool uses_neutral_spawns(const MslCoreMatchConfig* config)
+{
+    int team_counts[3] = { 0 };
+
+    if (config->replay_flags & MSL_PATCH_RETAIL_SPAWNS) {
+        return false;
+    }
+    if (!config->is_teams) {
+        return true;
+    }
+    // NeutralSpawn.asm::CheckIf2v2 leaves the retail spawns in place unless
+    // every represented team has exactly two players.
+    for (int i = 0; i < config->num_players; ++i) {
+        ++team_counts[config->players[i].team_id];
+    }
+    for (int i = 0; i < ARRAY_SIZE(team_counts); ++i) {
+        if (team_counts[i] != 0 && team_counts[i] != 2) {
+            return false;
+        }
+    }
+    return true;
 }
 
 static int neutral_spawn_order(const MslCoreMatch* match, int player)
@@ -1136,7 +1160,7 @@ static int match_construct(MslCoreMatch* match,
                               match->config.ucf_shield_sdi_enabled,
                               match->config.ucf_sdi_enabled,
                               match->config.ucf_shield_drop_extended_enabled,
-                              match->config.ucf_shield_drop_084_enabled);
+                              match->config.ucf_shield_drop_profile);
     msl_camera_state_init(&match->camera);
     msl_slippi_state_init(&match->slippi, match->config.stage_event_streams);
 
@@ -1229,6 +1253,7 @@ static int match_construct(MslCoreMatch* match,
 #endif
     int first_entry_delay =
         match->config.replay_flags & MSL_REPLAY_IMMEDIATE_ENTRY ? 0 : 5;
+    bool neutral_spawns = uses_neutral_spawns(&match->config);
     for (i = 0; i < match->config.num_players; ++i) {
         int slot = match->source_slots[i];
         int spawn_order = neutral_spawn_order(match, i);
@@ -1236,11 +1261,9 @@ static int match_construct(MslCoreMatch* match,
                                 ? &spec->teams_spawn[spawn_order]
                                 : &spec->singles_spawn[spawn_order];
         Vec3 retail_spawn;
-        // Without Slippi's NeutralSpawn each fighter enters at the stage's
-        // spawn point for its own port (gmvs.c::getSpawnPoint, stage.c::Stage_80224E64).
-        if ((match->config.replay_flags & MSL_PATCH_RETAIL_SPAWNS) &&
-            Ground_801C2D24(slot, &retail_spawn))
-        {
+        // Retail assigns the stage spawn point for the fighter's own port
+        // (gmvs.c::getSpawnPoint, stage.c::Stage_80224E64).
+        if (!neutral_spawns && Ground_801C2D24(slot, &retail_spawn)) {
             spawn = &retail_spawn;
         }
         uint8_t encoded = match->config.players[i].facing_and_port;
@@ -2377,6 +2400,7 @@ int msl_core_match_step_prepare(MslCoreMatch* match,
     // ordinary HSD stream during this frame.
     // refs/slippi-ssbm-asm/{Recording/SendGamePreFrame.asm,
     // Playback/Core/RestoreGameFrame.asm}
+    uint32_t carried_seed = match->random_seed;
     *seed_ptr = frame_seed;
     match->random_seed = frame_seed;
 
@@ -2416,7 +2440,16 @@ int msl_core_match_step_prepare(MslCoreMatch* match,
     // transfer at that same boundary.
     // refs/melee/src/melee/gm/gm_1A45.c::gm_801A4D34
     // refs/melee/src/melee/gm/gm_16AE.c::{fn_8016CFE0,fn_8016B918}
-    msl_core_apply_team_stock_steal();
+    if (stage_events->replay_frame_flags & MSL_REPLAY_FRAME_STOCK_SHARE_RNG) {
+        // A stock share can initialize CPU state before Slippi's priority-0
+        // frame seed restore. Carry the preceding frame's stream into OnFrame.
+        // refs/slippi-ssbm-asm/Playback/Core/RestoreInitialRNG.s
+        *seed_ptr = carried_seed;
+        msl_core_apply_team_stock_steal();
+        *seed_ptr = frame_seed;
+    } else {
+        msl_core_apply_team_stock_steal();
+    }
     return 0;
 }
 
@@ -2517,9 +2550,8 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
     // refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18
     // Retail's intervening fighter draw walks the complete visible JObj tree
     // through HSD_JObjDispAll. Hosted fighter construction has no
-    // DObj/MObj/PObj graph, so the only remaining Match-wide render owner is
-    // camera visibility/magnifier/DeadUp publication. Items retain their
-    // independent lazy-matrix publication below.
+    // DObj/MObj/PObj graph. Publish the camera state and the retained
+    // dynamics matrices. Items publish their own matrices below.
     // refs/melee/src/melee/ft/ftdrawcommon.c::{
     //   ftDrawCommon_80080E18,ftDrawCommon_800805C8}
     // refs/melee/src/sysdolphin/baselib/jobj.c::{
@@ -2543,6 +2575,12 @@ int msl_core_match_step_finish(MslCoreMatch* match, uint32_t frame_seed)
             }
         }
         msl_camera_publish_match_visibility(visible_fighters, visible_count);
+        for (i = 0; i < visible_count; ++i) {
+            Fighter* fp = GET_FIGHTER(visible_fighters[i]);
+            if (!fp->x221F_b3 && fp->dynamics_num != 0) {
+                msl_fighter_refresh_dynamics_matrices(fp);
+            }
+        }
 #ifdef MSL_SUBSYSTEM_PROFILE
         msl_profile_add(MSL_PROFILE_FINISH_FIGHTER_VISIBILITY,
                              msl_profile_cycles() - started);

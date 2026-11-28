@@ -347,23 +347,6 @@ int ifMagnify_802FB6E8(int slot)
     (void) slot;
     return 0;
 }
-void ifStatus_802F69C0(s32 recipient, s32 donor)
-{
-    (void) recipient;
-    (void) donor;
-}
-void ifStatus_802F6AF8(s32 slot)
-{
-    (void) slot;
-}
-void ifStatus_802F6C04(s32 slot)
-{
-    (void) slot;
-}
-void ifStatus_802F6D10(s32 slot)
-{
-    (void) slot;
-}
 // The native ABI tolerates the old unspecified-argument stubs, but Wasm
 // enforces indirect-call signatures. Keep these reached debug-only item
 // owners precisely typed; their source effects only toggle debug overlays.

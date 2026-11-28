@@ -14,6 +14,7 @@
 #include "gm/forward.h"
 #include "gm/gm_1601.h"
 #include "gr/ground.h"
+#include "gr/grpstadium.h"
 #include "gr/stage.h"
 #include "mp/mpcoll.h"
 #include "pl/player.h"
@@ -46,8 +47,8 @@ static _Thread_local MslCoreMatchRules* msl_bound_match_rules;
 #define msl_ucf_sdi_enabled (msl_bound_match_rules->ucf_sdi_enabled)
 #define msl_ucf_shield_drop_extended_enabled \
     (msl_bound_match_rules->ucf_shield_drop_extended_enabled)
-#define msl_ucf_shield_drop_084_enabled \
-    (msl_bound_match_rules->ucf_shield_drop_084_enabled)
+#define msl_ucf_shield_drop_profile \
+    (msl_bound_match_rules->ucf_shield_drop_profile)
 #define msl_match_frame_count (msl_bound_match_rules->frame_count)
 #define msl_match_ended (msl_bound_match_rules->ended)
 #define msl_respawn_reservation_timer                                         \
@@ -100,7 +101,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
                                int ucf_shield_sdi_enabled,
                                int ucf_sdi_enabled,
                                int ucf_shield_drop_extended_enabled,
-                               int ucf_shield_drop_084_enabled)
+                               int ucf_shield_drop_profile)
 {
     memset(rules, 0, sizeof(*rules));
     msl_core_bind_match_rules(rules);
@@ -115,7 +116,7 @@ void msl_core_match_rules_init(MslCoreMatchRules* rules, int is_teams,
     msl_ucf_sdi_enabled = ucf_sdi_enabled != 0;
     msl_ucf_shield_drop_extended_enabled =
         ucf_shield_drop_extended_enabled != 0;
-    msl_ucf_shield_drop_084_enabled = ucf_shield_drop_084_enabled != 0;
+    msl_ucf_shield_drop_profile = ucf_shield_drop_profile;
 }
 
 bool msl_slippi_patch(int patch)
@@ -416,9 +417,9 @@ void msl_ucf_apply_dashback(Fighter* fp)
     // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF DB.asm
     // refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Dashback.asm
     float stick_x = fp->input.lstick.x;
-    float dash_input = msl_ucf_shield_drop_084_enabled
-                           ? stick_x * fp->facing_dir
-                           : msl_absf(stick_x);
+    float dash_input = msl_ucf_shield_drop_profile == MSL_UCF_SHIELD_DROP_08
+                           ? msl_absf(stick_x)
+                           : stick_x * fp->facing_dir;
     if (dash_input < p_ftCommonData->x3C) {
         return;
     }
@@ -512,10 +513,12 @@ bool msl_ucf_suppress_spotdodge(const Fighter* fp)
     if (fp->input.cstick.y <= p_ftCommonData->x314) {
         return false;
     }
-    if (!msl_ucf_shield_drop_084_enabled) {
+    if (msl_ucf_shield_drop_profile != MSL_UCF_SHIELD_DROP_084) {
         // refs/slippi-ssbm-asm/External/UCF 0.8/Logic/UCF SD.asm: the float
         // rim test, then the tilt timer, then the -0.8 floor; no platform
         // check, and the timer bound is the literal 3 rather than x320.
+        // Slippi also recorded a 240-byte hook with this same test alongside
+        // the newer dashback and squat-reverse code.
         float x = msl_ucf_08_rim_lane(fp->input.lstick.x);
         float y = msl_ucf_08_rim_lane(fp->input.lstick.y);
         if (x * x + y * y < 1.0F) {
@@ -561,7 +564,7 @@ float msl_ucf_squatrv_threshold(const Fighter* fp, float vanilla_threshold)
     // Only the 0.84 bundle raises the release threshold for a one-frame
     // rim input (UCF DBOOC SquatRv Fix.asm at 0x800D65EC).
     if (fp->x670_timer_lstick_tilt_x < 1 &&
-        msl_ucf_shield_drop_084_enabled &&
+        msl_ucf_shield_drop_profile != MSL_UCF_SHIELD_DROP_08 &&
         msl_ucf_is_rim_coord(fp->input.lstick))
     {
         return 0.5900F;
@@ -614,54 +617,49 @@ static int msl_match_standings_score(int slot)
     if (stocks != 0) {
         return stocks;
     }
-    return (int) (Player_GetMatchFrameCount(slot) / 60u) - 0xFFFFFF;
+    u32 survival = Player_GetMatchFrameCount(slot);
+    if (survival == UINT32_MAX) {
+        // gm_80166378 substitutes the live frame count for an unset time.
+        survival = msl_match_frame_count;
+    }
+    return (int) (survival / 60u) - 0xFFFFFF;
 }
 
 int gm_8016C5C0(int slot)
 {
-    int other;
-    int score = msl_match_standings_score(slot);
     int loser_rank = 0;
-    u8 seen_teams = 0;
+    if (!msl_is_teams) {
+        int score = msl_match_standings_score(slot);
+        for (int other = 0; other < 4; ++other) {
+            if (other != slot && Player_GetPlayerSlotType(other) != Gm_PKind_NA &&
+                score < msl_match_standings_score(other))
+            {
+                ++loser_rank;
+            }
+        }
+        return loser_rank;
+    }
 
-    // gm_8016C5C0 publishes MatchPlayerData::is_big_loser in singles and the
-    // equivalent team standing in teams. Recompute the bounded source table
-    // from the live Player statistics instead of retaining the scene-owned
-    // MatchEnd reporting aggregate.
-    // refs/melee/src/melee/gm/{gm_16AE.c::gm_8016C5C0,
-    //     gm_1601.c::gm_80166378}
-    for (other = 0; other < 4; ++other) {
-        if (other == slot ||
-            Player_GetPlayerSlotType(other) == Gm_PKind_NA) {
+    // Stock teams are ranked by the sum of surviving stocks. Once a team
+    // is eliminated, its longest survivor supplies its score.
+    // refs/melee/src/melee/gm/gm_1601.c::{fn_80165E7C,fn_80165FA4}
+    int scores[3] = { 0 };
+    int own_team = Player_GetTeam(slot);
+    for (int player = 0; player < 4; ++player) {
+        if (Player_GetPlayerSlotType(player) == Gm_PKind_NA) {
             continue;
         }
-        if (!msl_is_teams) {
-            if (score < msl_match_standings_score(other)) {
-                ++loser_rank;
-            }
-        } else if (Player_GetTeam(other) != Player_GetTeam(slot)) {
-            int i;
-            int own_team_score = 0;
-            int other_team_score = 0;
-            int other_team = Player_GetTeam(other);
-            if ((seen_teams & (1U << other_team)) != 0) {
-                continue;
-            }
-            seen_teams |= (u8) (1U << other_team);
-            for (i = 0; i < 4; ++i) {
-                if (Player_GetPlayerSlotType(i) == Gm_PKind_NA) {
-                    continue;
-                }
-                if (Player_GetTeam(i) == Player_GetTeam(slot)) {
-                    own_team_score += msl_match_standings_score(i);
-                }
-                if (Player_GetTeam(i) == other_team) {
-                    other_team_score += msl_match_standings_score(i);
-                }
-            }
-            if (own_team_score < other_team_score) {
-                ++loser_rank;
-            }
+        int* team_score = &scores[Player_GetTeam(player)];
+        int score = msl_match_standings_score(player);
+        if (score > 0) {
+            *team_score = (*team_score > 0 ? *team_score : 0) + score;
+        } else if (*team_score == 0 || (*team_score < 0 && score > *team_score)) {
+            *team_score = score;
+        }
+    }
+    for (int team = 0; team < ARRAY_SIZE(scores); ++team) {
+        if (scores[team] != 0 && scores[own_team] < scores[team]) {
+            ++loser_rank;
         }
     }
     return loser_rank;
@@ -826,6 +824,29 @@ bool msl_core_match_is_over(void) { return msl_match_ended; }
 // refs/melee/src/melee/if/ifstatus.c::{ifStatus_802F6508,ifStatus_802F6E1C}
 void ifStatus_802F6508(int slot) { (void) slot; }
 void ifStatus_802F6E1C(int slot) { (void) slot; }
+
+static void msl_publish_stock_loss(int slot)
+{
+    if (stage_info.internal_stage_id != PSTADIUM || Player_GetStocks(slot) != 0) {
+        return;
+    }
+    int slot_type = Player_GetPlayerSlotType(slot);
+    // ifStatus_TriggerStockLoss calls gm_8016B8D4 on elimination. Its Stadium
+    // monitor transition affects the timing of later RNG draws.
+    if (slot_type == Gm_PKind_Human || slot_type == Gm_PKind_Cpu) {
+        grStadium_801D3B4C(slot, slot_type);
+    }
+}
+
+void ifStatus_802F69C0(s32 recipient, s32 donor)
+{
+    (void) donor;
+    msl_publish_stock_loss(recipient);
+}
+
+void ifStatus_802F6AF8(s32 slot) { msl_publish_stock_loss(slot); }
+void ifStatus_802F6C04(s32 slot) { msl_publish_stock_loss(slot); }
+void ifStatus_802F6D10(s32 slot) { msl_publish_stock_loss(slot); }
 
 // GALE01 versus replays use the US language setting. These are the direct
 // fixed-domain projections of refs/melee/src/melee/lb/lblanguage.c; retaining

@@ -177,16 +177,10 @@ void msl_fighter_refresh_dynamics_matrices(Fighter* fp)
 {
     ssize_t i;
 
-    // Retail rebuilds every fighter bone matrix during the frame-end render
-    // pass, so code that reads a chain JObj's mtx raw — ftCo_8009CB40's
-    // re-anchor writes unk_2C from jobj->mtx[i][3] on animation changes —
-    // always sees the previous frame's world pose. The compact headless tree
-    // carries no DObjs, so publish_render_matrices_pass never touches
-    // fighter bones and chain links past the hurt-capsule bone were NEVER
-    // built (identity: dl-fox validator 51 re-anchored Fox's tail tip to
-    // x=0 exactly, forking the tail after every damage animation change).
-    // Refresh the retained chains at the same publication phase whose
-    // capsule values already match retail.
+    // ftCo_8009CB40 reads the previous draw's matrices to reanchor a chain
+    // when animation hands it back to dynamics. Hitlag pauses the solve,
+    // but the draw still updates the joints moved by hitlag callbacks.
+    // refs/melee/src/melee/ft/ftdrawcommon.c::ftDrawCommon_80080E18
     for (i = 0; i < fp->dynamics_num; ++i) {
         struct DynamicsData* link = fp->dynamic_bone_sets[i].dyn_desc.data;
         for (; link != NULL; link = link->next) {

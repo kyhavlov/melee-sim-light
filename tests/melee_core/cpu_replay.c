@@ -16,22 +16,25 @@ static MslCoreMatch copy;
 static int check_input(MslCoreMatch* target, const MslReplayCpuInput* input)
 {
     Fighter* fp = target->fighters[1]->user_data;
+    bool follower = input->kind == MSL_REPLAY_CPU_INPUT_FOLLOWER;
     msl_core_bind_match(target);
     msl_slippi_state_bind(&target->slippi);
-    // A follower shares the port but must not consume the leader's sample.
-    fp->x221F_b4 = 1;
+    uint32_t expected_seed = follower ? *seed_ptr : input->random_seed;
+    // Both fighters share the port. Only the matching fighter consumes the input.
+    fp->x221F_b4 = !follower;
+    msl_slippi_apply_cpu_input(fp);
+    if (target->slippi.cpu_inputs[2].kind != input->kind) return -1;
+    fp->x221F_b4 = follower;
     msl_slippi_apply_cpu_input(fp);
     fp->x221F_b4 = 0;
-    if (!target->slippi.cpu_inputs[2].valid) return -1;
-    msl_slippi_apply_cpu_input(fp);
     if (memcmp(&fp->input.lstick.x, &input->main_x, sizeof(float)) ||
         memcmp(&fp->input.lstick.y, &input->main_y, sizeof(float)) ||
         memcmp(&fp->input.cstick.x, &input->c_x, sizeof(float)) ||
         memcmp(&fp->input.cstick.y, &input->c_y, sizeof(float)) ||
         memcmp(&fp->input.x650, &input->trigger, sizeof(float)) ||
         fp->input.held_inputs != input->buttons ||
-        *seed_ptr != input->random_seed ||
-        target->slippi.cpu_inputs[2].valid)
+        *seed_ptr != expected_seed ||
+        target->slippi.cpu_inputs[2].kind)
     {
         fprintf(stderr, "recorded CPU input lost bits or port ownership\n");
         return -1;
@@ -77,7 +80,7 @@ int main(int argc, char** argv)
     sample->trigger = 0.3125F;
     sample->buttons = 0x80000100U;
     sample->random_seed = 0x89abcdefU;
-    sample->valid = 1;
+    sample->kind = MSL_REPLAY_CPU_INPUT_LEADER;
     for (size_t i = 0; i < 7; ++i) {
         uint32_t bits;
         memcpy(&bits, (const uint8_t*) sample + i * 4, 4);
@@ -85,7 +88,7 @@ int main(int argc, char** argv)
                              2 * sizeof(*sample) + i * 4, bits);
     }
     wire[offsetof(MslCoreStageEvents, cpu_inputs) +
-         2 * sizeof(*sample) + offsetof(MslReplayCpuInput, valid)] = 1;
+         2 * sizeof(*sample) + offsetof(MslReplayCpuInput, kind)] = sample->kind;
     msl_core_decode_stage_events(&decoded, wire);
     if (memcmp(&decoded, &events, sizeof(events))) return 1;
     msl_slippi_state_bind(&match.slippi);
@@ -98,9 +101,13 @@ int main(int argc, char** argv)
         msl_core_match_restore(&match, saved, written) ||
         check_input(&match, sample)) return 1;
     free(saved);
+    sample->kind = MSL_REPLAY_CPU_INPUT_FOLLOWER;
+    sample->random_seed = 0x01234567U;
+    msl_slippi_stage_events_begin(&events);
+    if (check_input(&match, sample)) return 1;
     config.players[1].cpu_level = 0;
     if (msl_core_match_reset(&match, &game_data, &config, &input) ||
-        match.slippi.cpu_inputs[2].valid ||
+        match.slippi.cpu_inputs[2].kind ||
         Player_GetPlayerSlotType(2) != Gm_PKind_Human) return 1;
     msl_core_match_destroy(&copy);
     msl_core_match_destroy(&match);
