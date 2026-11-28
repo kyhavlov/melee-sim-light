@@ -1,0 +1,87 @@
+/* The sound core's names for the decomp's lbaudio_ax.c (src/sound/decomp/lb): every function it defines is renamed msl_snd_*, so the
+ * simulator's gameplay stubs (src/stubs/headless_exclusions.c, src/Runtime/audio.c) keep their names and call
+ * these only while the sound core is on. Its HSD object calls go to the sound core's own pool (src/sound/core.c). */
+#ifndef MSL_SOUND_RENAME_H
+#define MSL_SOUND_RENAME_H
+#define lbAudioAx_8002305C msl_snd_lbAudioAx_8002305C
+#define lbAudioAx_80023090 msl_snd_lbAudioAx_80023090
+#define lbAudioAx_800230C8 msl_snd_lbAudioAx_800230C8
+#define lbAudioAx_80023130 msl_snd_lbAudioAx_80023130
+#define lbAudioAx_80023220 msl_snd_lbAudioAx_80023220
+#define lbAudioAx_800233EC msl_snd_lbAudioAx_800233EC
+#define lbAudioAx_80023694 msl_snd_lbAudioAx_80023694
+#define lbAudioAx_800236B8 msl_snd_lbAudioAx_800236B8
+#define lbAudioAx_800236DC msl_snd_lbAudioAx_800236DC
+#define lbAudioAx_80023710 msl_snd_lbAudioAx_80023710
+#define lbAudioAx_80023730 msl_snd_lbAudioAx_80023730
+#define lbAudioAx_800237A8 msl_snd_lbAudioAx_800237A8
+#define lbAudioAx_80023870 msl_snd_lbAudioAx_80023870
+#define lbAudioAx_8002392C msl_snd_lbAudioAx_8002392C
+#define lbAudioAx_80023968 msl_snd_lbAudioAx_80023968
+#define lbAudioAx_80023A44 msl_snd_lbAudioAx_80023A44
+#define lbAudioAx_80023B24 msl_snd_lbAudioAx_80023B24
+#define lbAudioAx_80023F28 msl_snd_lbAudioAx_80023F28
+#define lbAudioAx_80024030 msl_snd_lbAudioAx_80024030
+#define lbAudioAx_800240B4 msl_snd_lbAudioAx_800240B4
+#define lbAudioAx_8002411C msl_snd_lbAudioAx_8002411C
+#define lbAudioAx_80024184 msl_snd_lbAudioAx_80024184
+#define lbAudioAx_80024304 msl_snd_lbAudioAx_80024304
+#define lbAudioAx_8002438C msl_snd_lbAudioAx_8002438C
+#define lbAudioAx_800243F4 msl_snd_lbAudioAx_800243F4
+#define lbAudioAx_800245D4 msl_snd_lbAudioAx_800245D4
+#define lbAudioAx_800245F4 msl_snd_lbAudioAx_800245F4
+#define lbAudioAx_80024614 msl_snd_lbAudioAx_80024614
+#define lbAudioAx_80024634 msl_snd_lbAudioAx_80024634
+#define lbAudioAx_80024B1C msl_snd_lbAudioAx_80024B1C
+#define lbAudioAx_80024B58 msl_snd_lbAudioAx_80024B58
+#define lbAudioAx_80024B94 msl_snd_lbAudioAx_80024B94
+#define lbAudioAx_80024BD0 msl_snd_lbAudioAx_80024BD0
+#define lbAudioAx_80024C08 msl_snd_lbAudioAx_80024C08
+#define lbAudioAx_80024C84 msl_snd_lbAudioAx_80024C84
+#define lbAudioAx_80024D50 msl_snd_lbAudioAx_80024D50
+#define lbAudioAx_80024D78 msl_snd_lbAudioAx_80024D78
+#define lbAudioAx_80024DC4 msl_snd_lbAudioAx_80024DC4
+#define lbAudioAx_80024E50 msl_snd_lbAudioAx_80024E50
+#define lbAudioAx_80024E84 msl_snd_lbAudioAx_80024E84
+#define lbAudioAx_80024F08 msl_snd_lbAudioAx_80024F08
+#define lbAudioAx_80024F6C msl_snd_lbAudioAx_80024F6C
+#define lbAudioAx_80024FDC msl_snd_lbAudioAx_80024FDC
+#define lbAudioAx_80024FF4 msl_snd_lbAudioAx_80024FF4
+#define lbAudioAx_8002500C msl_snd_lbAudioAx_8002500C
+#define lbAudioAx_80025038 msl_snd_lbAudioAx_80025038
+#define lbAudioAx_80025064 msl_snd_lbAudioAx_80025064
+#define lbAudioAx_80025098 msl_snd_lbAudioAx_80025098
+#define lbAudioAx_800263E8 msl_snd_lbAudioAx_800263E8
+#define lbAudioAx_800264E4 msl_snd_lbAudioAx_800264E4
+#define lbAudioAx_80026510 msl_snd_lbAudioAx_80026510
+#define lbAudioAx_800265C4 msl_snd_lbAudioAx_800265C4
+#define lbAudioAx_80026E84 msl_snd_lbAudioAx_80026E84
+#define lbAudioAx_80026EBC msl_snd_lbAudioAx_80026EBC
+#define lbAudioAx_80026F2C msl_snd_lbAudioAx_80026F2C
+#define lbAudioAx_8002702C msl_snd_lbAudioAx_8002702C
+#define lbAudioAx_80027168 msl_snd_lbAudioAx_80027168
+#define lbAudioAx_80027648 msl_snd_lbAudioAx_80027648
+#define lbAudioAx_8002785C msl_snd_lbAudioAx_8002785C
+#define lbAudioAx_80027AB0 msl_snd_lbAudioAx_80027AB0
+#define lbAudioAx_80027DBC msl_snd_lbAudioAx_80027DBC
+#define lbAudioAx_80027DF8 msl_snd_lbAudioAx_80027DF8
+#define lbAudioAx_8002835C msl_snd_lbAudioAx_8002835C
+#define lbAudioAx_8002838C msl_snd_lbAudioAx_8002838C
+#define lbAudioAx_80028690 msl_snd_lbAudioAx_80028690
+#define lbAudioAx_80028B2C msl_snd_lbAudioAx_80028B2C
+#define lbAudioAx_80028B4C msl_snd_lbAudioAx_80028B4C
+#define lbAudioAx_80028B6C msl_snd_lbAudioAx_80028B6C
+#define lbAudioAx_80028B90 msl_snd_lbAudioAx_80028B90
+#define GObj_Create msl_snd_GObj_Create
+#define GObj_InitUserData msl_snd_GObj_InitUserData
+#define HSD_GObjFree msl_snd_GObjFree
+#define HSD_GObj_SetupProc msl_snd_GObj_SetupProc
+#define HSD_ObjAlloc msl_snd_ObjAlloc
+#define HSD_ObjFree msl_snd_ObjFree
+#define HSD_Randi msl_snd_Randi
+/* a VS match, and the stage table (core.c) */
+#define gm_8016B184 msl_snd_gm_8016B184
+#define Stage_8022519C msl_snd_Stage_8022519C
+/* the memory card's sound balance (core.c: the game's default, the middle) */
+#define gm_801603B0 msl_snd_gm_801603B0
+#endif
