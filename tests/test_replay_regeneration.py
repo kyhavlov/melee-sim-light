@@ -2,19 +2,36 @@ import hashlib
 import json
 import struct
 from pathlib import Path
+import zipfile
 from zipfile import ZipFile
 
 import pytest
 from peppi_py import _read_slippi
 
+from tools import regenerate_replays
 from tools.regenerate_replays import _finalized_prefix, regenerate_zip
 from tools.validation.admission import replay_events
+from tools.validation.deflate_zip import DeflateZipFile, deflate_member
 from tools.validation.slpz import decompress_slpz
 from tools.validation.stored import POST_FRAME, _post_rows, _sizes, expected_stored
 from tools.validation.validate_replay import NATIVE, NATIVE_BINARY, load_suite
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_deflated_members_with_zip64_and_manifest(tmp_path, monkeypatch):
+    destination = tmp_path / "output.zip"
+    members = {"é.slp": b"first" * 64, "second.slp": b"second", "regeneration.jsonl": b"{}\n"}
+    monkeypatch.setattr(zipfile, "ZIP64_LIMIT", 32)
+    with DeflateZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name in ("é.slp", "second.slp"):
+            archive.write_deflated(*deflate_member(name, members[name], 5))
+        archive.writestr("regeneration.jsonl", members["regeneration.jsonl"])
+
+    with ZipFile(destination) as archive:
+        assert archive.testzip() is None
+        assert {name: archive.read(name) for name in archive.namelist()} == members
 
 
 @pytest.fixture
@@ -26,7 +43,11 @@ def falcon_recording():
     return decompress_slpz((ROOT / case.replay).read_bytes()), case.stored_sidecar
 
 
-def test_regenerated_zip_preserves_legacy_rows_and_matches_dolphin(tmp_path, falcon_recording):
+@pytest.mark.parametrize("workers_per_process", [1, 8])
+def test_regenerated_zip_preserves_legacy_rows_and_matches_dolphin(
+    tmp_path, falcon_recording, monkeypatch, workers_per_process
+):
+    monkeypatch.setattr(regenerate_replays, "WORKERS_PER_PROCESS", workers_per_process)
     raw, sidecar = falcon_recording
     old_sizes, old_count = _sizes(raw)
     old_rows = _post_rows(raw, old_sizes, old_count)

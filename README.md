@@ -184,17 +184,19 @@ verifies them by checksum on later builds.
 
 ## Regenerate Slippi replays
 
-The project also supports regenerating Slippi replays up to Slippi version 3.20.0:
+This project can also be used for regenerating older-versioned Slippi replays (pre-3.20.0)
+in order to backfill missing observations.
 
-```sh
-python -m tools.regenerate_replays archive.zip --limit 1000 --workers 8
+Example with a 13,424-replay doubles archive on a 96-core machine.
+
+```console
+$ python -m tools.regenerate_replays archive.zip --workers 72
+{"outcomes": {"parse_failed": 66, "unsupported": 878, "regenerated": 12477, "diverged": 2, "regenerated_with_tolerance": 1}, "compared_frames": 101650355, "seconds": 71.734, "output_bytes": 15062380633}
 ```
 
-This can be used to add missing data and observations to older-versioned replays.
-The simulator verifies each replay and adds stored fighter state to older
-recordings. Results and a per-replay manifest go in `archive.regenerated.zip`.
-See the [replay regeneration guide](tools/validation/REPLAY_REGENERATION.md)
-for batch options and validation rules.
+Will produce `archive.regenerated.zip` next to the input ZIP, containing the updated replays.
+
+See the [replay regeneration guide](tools/validation/REPLAY_REGENERATION.md) for options and validation rules.
 
 ## Runtime API Reference
 

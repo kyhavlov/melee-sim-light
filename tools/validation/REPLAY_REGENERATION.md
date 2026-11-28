@@ -9,6 +9,8 @@ selected replay, including parse failures, unsupported captures, and the first
 validation mismatch in rejected replays.
 
 The default processes the full ZIP with up to 16 workers and Deflate level 5.
+The CLI uses the native release build. Workers validate and compress replays
+in parallel, then stream the compressed entries into one output ZIP.
 Use `--start` and `--limit` for a range, or `--output` to choose the output path.
 `--workers` overrides the worker count. On Linux, `--cores 0,2,4,6` pins one
 worker per listed CPU. `--compression-level` overrides the Deflate level.

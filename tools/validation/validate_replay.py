@@ -36,6 +36,7 @@ PPC_BINARY = BUILD / "ppc" / "melee-core-ppc"
 NATIVE_BINARY = Path(
     os.environ.get("MSL_CORE_NATIVE_BINARY", BUILD / "native" / "melee-core-native")
 )
+NATIVE_RELEASE_BINARY = BUILD / "native-release" / "melee-core-native"
 TOOLCHAIN = BUILD / "toolchain" / "root"
 QEMU = TOOLCHAIN / "usr" / "bin" / "qemu-ppc-static"
 SYSROOT = TOOLCHAIN / "usr" / "powerpc-linux-gnu"
@@ -95,7 +96,12 @@ class _NativeRunner:
 
 
 class _NativeRunnerPool:
-    def __init__(self, count: int, cores: tuple[int, ...] = ()) -> None:
+    def __init__(
+        self, count: int, cores: tuple[int, ...] = (), *,
+        binary: Path | None = None, data_dir: Path | None = None,
+    ) -> None:
+        self.binary = NATIVE_BINARY if binary is None else binary
+        self.data_dir = game_data_dir() if data_dir is None else data_dir
         self._available: queue.LifoQueue[_NativeRunner] = queue.LifoQueue()
         self._runners: list[_NativeRunner] = []
         self._lock = threading.Lock()
@@ -109,7 +115,7 @@ class _NativeRunnerPool:
             raise
 
     def _spawn(self, core: int | None) -> _NativeRunner:
-        command = [str(NATIVE_BINARY), str(game_data_dir()), "--server"]
+        command = [str(self.binary), str(self.data_dir), "--server"]
         if core is not None:
             command[:0] = ["taskset", "-c", str(core)]
         process = subprocess.Popen(
@@ -283,6 +289,8 @@ def _has_full_replay_coverage(result: dict[str, object]) -> bool:
 def build_validation(*, backend: str, jobs: int = 4) -> None:
     if backend == "native":
         targets = ["validator", "native"]
+    elif backend == "native-release":
+        targets = ["validator", "native-release"]
     elif backend == "ppc":
         targets = ["validator", "ppc"]
     elif backend == "both":

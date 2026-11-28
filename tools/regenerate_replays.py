@@ -7,6 +7,7 @@ import concurrent.futures
 import gzip
 import itertools
 import json
+import multiprocessing
 import os
 import re
 import shutil
@@ -14,6 +15,8 @@ import struct
 import sys
 import tempfile
 import time
+from contextlib import closing
+from multiprocessing.connection import wait
 from pathlib import Path
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -30,6 +33,7 @@ from tools.validation.admission import (
     slippi_patches,
     whispy_patch,
 )
+from tools.validation.deflate_zip import DeflateZipFile, deflate_member
 from tools.validation.reconstruct_cstick import CStickRecovery
 from tools.validation.slpz import decompress_slpz
 from tools.validation.stored import POST_FRAME, STORED_END, STORED_OFFSET, _sizes, expected_stored
@@ -40,6 +44,7 @@ SLIPPI_FINAL_DESTINATION = 32
 SLIPPI_ICE_CLIMBERS = 14
 SLIPPI_DAMAGE_FLY_ROLL = "91"
 DEFAULT_COMPRESSION_LEVEL = 5
+WORKERS_PER_PROCESS = 8
 
 
 def _decode_member(archive: ZipFile, member: ZipInfo) -> tuple[str, bytes]:
@@ -248,8 +253,8 @@ def _regenerate_replay(name, raw, native, pool, timeout, relaxed_floats,
         options = dict(
             qemu=str(validation.QEMU),
             sysroot=str(validation.SYSROOT),
-            binary=str(validation.NATIVE_BINARY),
-            data_dir=str(validation.game_data_dir()),
+            binary=str(pool.binary),
+            data_dir=str(pool.data_dir),
             timeout=timeout,
             native=True,
             ucf_cardinals_1_0_enabled=not legacy,
@@ -439,68 +444,159 @@ def _regenerate_replay(name, raw, native, pool, timeout, relaxed_floats,
     return (name, output), report
 
 
+def _selected_members(archive, start, stop):
+    members = (member for member in archive.infolist()
+               if not member.is_dir() and member.filename.lower().endswith(REPLAY_SUFFIXES))
+    return itertools.islice(members, start, stop)
+
+
+def _process_members(archive, start, stop, workers, cores, settings):
+    binary, data_dir, timeout, relaxed_floats, include_finalized_prefixes, compression_level = settings
+    native = validation.load_native()
+    members = _selected_members(archive, start, stop)
+    with validation._NativeRunnerPool(workers, cores, binary=binary, data_dir=data_dir) as pool, \
+            concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        def process(member):
+            replay, report = _regenerate_member(
+                archive, member, native, pool, timeout, relaxed_floats,
+                include_finalized_prefixes,
+            )
+            if replay is None:
+                return None, b"", report
+            name, raw = replay
+            info, compressed = deflate_member(name, raw, compression_level)
+            return info, compressed, report
+
+        jobs = {executor.submit(process, member): member.filename
+                for member in itertools.islice(members, 2 * workers)}
+        while jobs:
+            ready, _ = concurrent.futures.wait(jobs, return_when=concurrent.futures.FIRST_COMPLETED)
+            for future in ready:
+                name = jobs.pop(future)
+                yield name, *future.result()
+                member = next(members, None)
+                if member is not None:
+                    jobs[executor.submit(process, member)] = member.filename
+
+
+def _archive_identity(archive):
+    info = os.fstat(archive.fp.fileno())
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+
+def _send_members(connection, source, identity, start, stop, workers, cores, settings):
+    with connection, ZipFile(source) as archive, closing(
+        _process_members(archive, start, stop, workers, cores, settings)
+    ) as results:
+        if _archive_identity(archive) != identity:
+            raise RuntimeError("source archive changed while starting replay workers")
+        for name, info, compressed, report in results:
+            connection.send((name, info, report))
+            if info is not None:
+                connection.send_bytes(compressed)
+
+
+def _parallel_members(source, identity, start, count, workers, cores, settings):
+    # Each process has its own Python interpreter and ZIP reader. The output
+    # receives bounded streams of compressed members through the pipes.
+    context = multiprocessing.get_context("spawn")
+    readers = {}
+    try:
+        for index in range(0, workers, WORKERS_PER_PROCESS):
+            end = min(index + WORKERS_PER_PROCESS, workers)
+            first = start + count * index // workers
+            stop = start + count * end // workers
+            reader, writer = context.Pipe(duplex=False)
+            with writer:
+                process = context.Process(
+                    target=_send_members,
+                    args=(writer, source, identity, first, stop, end - index, cores[index:end], settings),
+                )
+                try:
+                    process.start()
+                except BaseException:
+                    reader.close()
+                    raise
+            readers[reader] = process
+
+        while readers:
+            for reader in wait(readers):
+                try:
+                    name, info, report = reader.recv()
+                except EOFError:
+                    process = readers.pop(reader)
+                    reader.close()
+                    process.join()
+                    exitcode = process.exitcode
+                    process.close()
+                    if exitcode:
+                        raise RuntimeError(f"replay worker process exited with status {exitcode}")
+                    continue
+                compressed = reader.recv_bytes() if info is not None else b""
+                yield name, info, compressed, report
+    finally:
+        for reader in readers:
+            reader.close()
+        for process in readers.values():
+            process.join(timeout=1)
+            if process.is_alive():
+                process.terminate()
+                process.join()
+            process.close()
+
+
 def regenerate_zip(
     source: Path, destination: Path, *, workers: int, cores: tuple[int, ...],
     start: int = 0, limit: int | None = None, timeout: float = 60, relaxed_floats: bool = True,
     include_finalized_prefixes: bool = True, compression_level: int = DEFAULT_COMPRESSION_LEVEL,
+    binary: Path | None = None,
 ) -> dict:
     if source.resolve() == destination.resolve() or destination.exists():
         raise FileExistsError(destination)
-    native = validation.load_native()
-    validation.game_data_dir()
+    data_dir = validation.game_data_dir()
     started = time.monotonic()
     with ZipFile(source) as archive, tempfile.NamedTemporaryFile(
         dir=destination.parent, suffix=".zip"
     ) as pending, tempfile.TemporaryFile() as manifest:
-        members = (member for member in archive.infolist()
-                   if not member.is_dir() and member.filename.lower().endswith(REPLAY_SUFFIXES))
-        selection = iter(itertools.islice(members, start, None if limit is None else start + limit))
+        identity = _archive_identity(archive)
+        stop = None if limit is None else start + limit
+        count = sum(1 for _ in _selected_members(archive, start, stop))
+        if not count:
+            raise ValueError("no replay members in the selected archive range")
+        workers = min(workers, count)
+        settings = binary, data_dir, timeout, relaxed_floats, include_finalized_prefixes, compression_level
+        results = (_process_members(archive, start, start + count, workers, cores[:workers], settings)
+                   if workers <= WORKERS_PER_PROCESS else
+                   _parallel_members(source, identity, start, count, workers, cores, settings))
         counts: dict[str, int] = {}
         frames = 0
         output_names: set[str] = set()
-        with validation._NativeRunnerPool(workers, cores) as pool, ZipFile(
+        with closing(results), DeflateZipFile(
             pending.name, mode="w", compression=ZIP_DEFLATED, compresslevel=compression_level
-        ) as output, concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            jobs = {}
-
-            def submit(member):
-                future = executor.submit(
-                    _regenerate_member, archive, member, native, pool, timeout, relaxed_floats,
-                    include_finalized_prefixes,
-                )
-                jobs[future] = member
-
-            for member in itertools.islice(selection, 2 * workers):
-                submit(member)
-            while jobs:
-                ready, _ = concurrent.futures.wait(jobs, return_when=concurrent.futures.FIRST_COMPLETED)
-                for future in ready:
-                    member = jobs.pop(future)
-                    replay, report = future.result()
-                    if replay is not None:
-                        name, raw = replay
-                        if name in output_names:
-                            report = {"status": "error", "error": f"duplicate output member {name}"}
-                        else:
-                            output.writestr(name, raw)
-                            output_names.add(name)
-                    status = report["status"]
-                    counts[status] = counts.get(status, 0) + 1
-                    frames += report.get("frames", 0)
-                    report["member"] = member.filename
-                    manifest.write((json.dumps(report) + "\n").encode())
-                    next_member = next(selection, None)
-                    if next_member is not None:
-                        submit(next_member)
-                done = sum(counts.values())
-                if done // 100 != (done - len(ready)) // 100:
+        ) as output:
+            for done, (member, info, compressed, report) in enumerate(results, 1):
+                if info is not None:
+                    name = info.filename
+                    if name in output_names:
+                        report = {"status": "error", "error": f"duplicate output member {name}"}
+                    else:
+                        output.write_deflated(info, compressed)
+                        output_names.add(name)
+                status = report["status"]
+                counts[status] = counts.get(status, 0) + 1
+                frames += report.get("frames", 0)
+                report["member"] = member
+                manifest.write((json.dumps(report) + "\n").encode())
+                if done % 100 == 0:
                     print(f"{done} replays {counts}", file=sys.stderr, flush=True)
-            if not counts:
-                raise ValueError("no replay members in the selected archive range")
+            if sum(counts.values()) != count:
+                raise RuntimeError("replay workers did not return every selected member")
             manifest.seek(0)
             with output.open("regeneration.jsonl", "w") as dest:
                 shutil.copyfileobj(manifest, dest)
         # Publish only a complete archive and preserve an existing destination.
+        if _archive_identity(archive) != identity:
+            raise RuntimeError("source archive changed during replay regeneration")
         os.link(pending.name, destination)
     return {
         "outcomes": counts,
@@ -547,12 +643,14 @@ def main() -> int:
         parser.error("workers, limit and timeout must be positive and start must be non-negative")
     destination = args.output or args.archive.with_suffix(".regenerated.zip")
     if not args.no_build:
-        validation.build_validation(backend="native")
+        validation.build_validation(backend="native-release")
+    binary = (validation.NATIVE_BINARY if "MSL_CORE_NATIVE_BINARY" in os.environ else
+              validation.NATIVE_RELEASE_BINARY)
     summary = regenerate_zip(args.archive, destination, workers=workers, cores=cores,
                              start=args.start, limit=args.limit, timeout=args.timeout,
                              relaxed_floats=not args.strict_exactness,
                              include_finalized_prefixes=not args.complete_only,
-                             compression_level=args.compression_level)
+                             compression_level=args.compression_level, binary=binary)
     print(json.dumps(summary))
     return int(summary["outcomes"].get("error", 0) != 0)
 
