@@ -3,15 +3,15 @@
 From a source checkout with the validation dependencies and extracted game data,
 run `python -m tools.regenerate_replays archive.zip`. The input ZIP can contain
 `.slp`, `.slp.gz`, `.slpz`, or `.slpz.gz` members. The output defaults to
-`archive.regenerated.zip` and contains verified `.slp` files and a
+`archive.regenerated.zip` beside the input ZIP and contains verified `.slp` files and a
 `regeneration.jsonl` manifest. The manifest records an outcome for each
 selected replay, including parse failures, unsupported captures, and the first
 validation mismatch in rejected replays.
 
-Use `--start` to skip replay members and `--limit` to select a batch. Use
-`--output` to name each batch's ZIP. `--workers` sets the number of persistent
-simulator workers. On Linux, `--cores 0,2,4,6` pins one worker per listed CPU.
-`--compression-level` sets the ZIP Deflate level and defaults to 5.
+The default processes the full ZIP with up to 16 workers and Deflate level 5.
+Use `--start` and `--limit` for a range, or `--output` to choose the output path.
+`--workers` overrides the worker count. On Linux, `--cores 0,2,4,6` pins one
+worker per listed CPU. `--compression-level` overrides the Deflate level.
 
 Regenerated replays preserve the original recording version, metadata, and
 finalized gameplay events. The Post-Frame payload size identifies the added
@@ -19,24 +19,52 @@ stored fighter state, so the original Pre-Frame layout still decodes correctly.
 The converter preserves the recorded Game End event. If the event is missing
 and a finalized singles match ends with exactly one player out of stocks, the
 manifest records `game_end: "missing"` and the winning port.
-`--include-finalized-prefixes` also regenerates other incomplete recordings
-through their last confirmed frame. These members have `complete: false` in
-the manifest. When trimming a provisional tail, the converter records the
+If rollback repeats an identical Game End, the converter keeps the final copy.
+The converter also regenerates incomplete recordings through their last
+confirmed frame. These members have `complete: false` in the manifest.
+Use `--complete-only` to skip them. When trimming a provisional tail, the converter records the
 discarded frame count and updates the final bookend and any `lastFrame`
-metadata to match the output.
+metadata to match the output. When Game End follows a finalized bookend,
+the converter keeps Game End and drops any later speculative frames.
+If recording stopped before writing the raw stream length, the converter
+can recover the finalized prefix when it validates exactly. If an active
+player's rows stop early in an unclosed recording, the prefix ends before
+the first missing row. The converter can also
+repair a length that extends past a finalized Game End into metadata.
+The manifest marks repaired envelopes with `repaired_envelope: true`.
+
+Older netplay captures with the recorded UCF 0.84 patch can omit raw C-stick
+axes. The converter tries an input consistent with the recorded stick position
+and ASDI displacement, then validates the full replay. The manifest records
+the number of reconstructed snaps. The original input events are preserved.
 
 ## Exactness
 
-By default, the converter requires an exact match on the
-[gameplay projection](../../agent_docs/VALIDATION.md). It verifies stored fighter
-state on replays that already contain it. For older Ice Climbers recordings,
+The converter compares the [gameplay projection](../../agent_docs/VALIDATION.md)
+and verifies stored fighter state on replays that already contain it. For older Ice Climbers recordings,
 the converter also tries split multiply-add arithmetic if the default run differs.
 It uses that run only if every compared field matches exactly, and records
 `jit_arithmetic: split-fma` in the manifest.
+Regeneration also requires an exact match when a known recording platform
+lacks the arithmetic provenance required for the locked replay suite.
+For netplay captures with an attack-velocity mismatch, it also tries retail
+`fnmsubs` arithmetic and records `fnmsubs_profile: retail` when validation passes.
+If the first mismatch is only the sign of zero, that retry can use the same
+movement tolerances as the original run.
+An Ice Climbers capture can require both settings.
+For a DamageFlyRoll mismatch, netplay captures can also retry using only the
+recorded frame-start RNG seeds. An exact match records `rng_profile: frame-start`.
+On Final Destination, older netplay captures can record the background freeze
+code while the background animates. An exact retry with the animated background
+records `fd_background_profile: animated`.
+For Ice Climbers in teams, an exact retry that carries the previous frame's
+RNG into stock sharing records `rng_profile: stock-share`.
+A final exact retry can drive Nana with her recorded Pre-Frame inputs for
+human-controlled Ice Climbers. It records `recorded_follower_inputs: true`.
 
-`--disable-strict-exactness` allows
-the differences below when filling in missing stored state. The original
-recorded values are preserved and the manifest counts accepted differences.
+When filling in missing stored state, the converter allows the differences
+below and counts them in the manifest. The original recorded values are
+preserved. Use `--strict-exactness` to require exact matches.
 
 | Field | Maximum difference | Conditions |
 | --- | --- | --- |

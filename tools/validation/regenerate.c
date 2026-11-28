@@ -40,7 +40,7 @@ static void msl_write_be32(uint8_t* bytes, uint32_t value) {
 static const char* msl_index_replay_frames(
     const uint8_t* raw, size_t offset, size_t raw_end, const uint16_t sizes[256],
     int32_t first_frame, size_t frame_count, MslReplayFrame* frames, size_t* prefix,
-    size_t* suffix, bool finalized_prefix) {
+    size_t* suffix, bool trim_provisional) {
   MslReplayFrame* open = NULL;
   MslReplayFrame discarded;
   int32_t current = 0;
@@ -56,7 +56,7 @@ static const char* msl_index_replay_frames(
       }
       current = (int32_t)msl_read_be32(raw + offset + 1);
       int64_t index = (int64_t)current - first_frame;
-      if (index < 0 || ((uint64_t)index >= frame_count && !finalized_prefix)) {
+      if (index < 0 || ((uint64_t)index >= frame_count && !trim_provisional)) {
         return "unexpected replay frame number";
       }
       if (*prefix == 0) {
@@ -83,7 +83,7 @@ static const char* msl_index_replay_frames(
       open->end = offset + event_size;
       open = NULL;
     } else if (command == MSL_SLP_END) {
-      if (finalized_prefix || open != NULL || *prefix == 0 ||
+      if (open != NULL || *prefix == 0 ||
           (*suffix != 0 && memcmp(raw + *suffix, raw + offset, event_size) != 0)) {
         return "invalid replay game end";
       }
@@ -106,7 +106,7 @@ static const char* msl_index_replay_frames(
 
 PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
                             const uint8_t* captured, int32_t first_frame, size_t frame_count,
-                            bool finalized_prefix) {
+                            bool trim_provisional) {
   static const char header[] = "{U\003raw[$U#l";
   if (raw_size < 17 || memcmp(raw, header, sizeof(header) - 1) != 0 ||
       raw[MSL_SLP_RAW_BEGIN] != MSL_SLP_PAYLOADS || raw[16] < 4 ||
@@ -134,7 +134,7 @@ PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
     PyErr_SetString(PyExc_ValueError, "unsupported legacy Slippi post-frame size");
     return NULL;
   }
-  if (finalized_prefix && sizes[MSL_SLP_FRAME_END] < 8) {
+  if (trim_provisional && sizes[MSL_SLP_FRAME_END] < 8) {
     PyErr_SetString(PyExc_ValueError, "missing Slippi frame finalization markers");
     return NULL;
   }
@@ -147,7 +147,7 @@ PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
   const char* error;
   Py_BEGIN_ALLOW_THREADS
   error = msl_index_replay_frames(raw, start, raw_end, sizes, first_frame, frame_count, frames,
-                                  &prefix, &suffix, finalized_prefix);
+                                  &prefix, &suffix, trim_provisional);
   if (error == NULL) {
     for (size_t i = 0; i < frame_count; ++i) {
       const MslReplayFrame* frame = &frames[i];
@@ -197,7 +197,7 @@ PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
       offset += event_size;
     }
   }
-  if (finalized_prefix) {
+  if (trim_provisional) {
     // The later source bookend confirmed this frame. Publish that marker
     // after omitting the provisional frames that carried the confirmation.
     msl_write_be32(dest - sizes[MSL_SLP_FRAME_END] + 4,

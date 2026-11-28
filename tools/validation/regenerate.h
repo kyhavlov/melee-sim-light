@@ -13,6 +13,6 @@ enum {
 
 PyObject* msl_regenerate_slp(const uint8_t* raw, Py_ssize_t raw_size,
                             const uint8_t* frames, int32_t first_frame, size_t frame_count,
-                            bool finalized_prefix);
+                            bool trim_provisional);
 
 #endif

@@ -79,8 +79,8 @@ def gecko_codes(raw: bytes) -> dict[int, bytes]:
     return replay_events(raw)[0]
 
 
-def replay_events(raw: bytes) -> tuple[dict[int, bytes], tuple[int, int] | None]:
-    """Read Gecko codes and the frame numbers if the stream ends at a bookend."""
+def replay_events(raw: bytes) -> tuple[dict[int, bytes], tuple[int, int] | None, list[int]]:
+    """Read Gecko codes, the terminal bookend and Game End event offsets."""
     if len(raw) < 17 or raw[:11] != RAW_HEADER:
         raise ValueError("unsupported SLP event envelope")
     end = 15 + int.from_bytes(raw[11:15], "big")
@@ -89,7 +89,8 @@ def replay_events(raw: bytes) -> tuple[dict[int, bytes], tuple[int, int] | None]
     sizes, count = _event_sizes(raw[15:min(end, 273)])
     position = 17 + 3 * count
     chunks = []
-    bookend = None
+    last_bookend_end = 0
+    endings = []
     while position < end:
         command = raw[position]
         size = sizes[command]
@@ -104,9 +105,18 @@ def replay_events(raw: bytes) -> tuple[dict[int, bytes], tuple[int, int] | None]
                 chunks.append(payload[:int.from_bytes(payload[-4:-2], "big")])
         elif command == 0x3D:
             chunks.append(raw[position + 1:next_position])
-        elif next_position == end and command == 0x3C and size >= 8:
-            bookend = struct.unpack_from(">ii", raw, position + 1)
+        elif command == 0x3C and size >= 8:
+            last_bookend_end = next_position
+        elif command == 0x39:
+            endings.append(position)
         position = next_position
+    tail = end
+    for offset in reversed(endings):
+        if offset + 1 + sizes[0x39] != tail:
+            break
+        tail = offset
+    bookend = (struct.unpack_from(">ii", raw, tail - sizes[0x3C])
+               if last_bookend_end == tail else None)
     codes = b"".join(chunks)
     if len(codes) % 8:
         raise ValueError("truncated Gecko block")
@@ -122,7 +132,7 @@ def replay_events(raw: bytes) -> tuple[dict[int, bytes], tuple[int, int] | None]
             raise ValueError("truncated Gecko block")
         result[address] = codes[position:position + size]
         position += size
-    return result, bookend
+    return result, bookend, endings
 
 
 def stadium_is_frozen(start: dict, codes: dict[int, bytes]) -> bool:

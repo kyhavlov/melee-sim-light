@@ -8,6 +8,7 @@ import gzip
 import itertools
 import json
 import os
+import re
 import shutil
 import struct
 import sys
@@ -20,18 +21,24 @@ from peppi_py import _read_slippi
 
 from tools.validation import validate_replay as validation
 from tools.validation.admission import (
+    PATCH_FD_BACKGROUND_FROZEN,
+    REPLAY_PLATFORMS,
     capture_issues,
+    has_ucf_084_cardinals,
     is_ucf_08,
     replay_events,
     slippi_patches,
     whispy_patch,
 )
+from tools.validation.reconstruct_cstick import CStickRecovery
 from tools.validation.slpz import decompress_slpz
 from tools.validation.stored import POST_FRAME, STORED_END, STORED_OFFSET, _sizes, expected_stored
 
 
 REPLAY_SUFFIXES = (".slp", ".slp.gz", ".slpz", ".slpz.gz")
+SLIPPI_FINAL_DESTINATION = 32
 SLIPPI_ICE_CLIMBERS = 14
+SLIPPI_DAMAGE_FLY_ROLL = "91"
 DEFAULT_COMPRESSION_LEVEL = 5
 
 
@@ -47,25 +54,68 @@ def _decode_member(archive: ZipFile, member: ZipInfo) -> tuple[str, bytes]:
     return name, raw
 
 
-def _finalized_prefix(raw: bytes) -> bytes:
-    """Repair the envelope when the source ends on a finalized frame bookend."""
+def _finalized_prefix(raw: bytes, *, through: int | None = None) -> bytes:
+    """Repair an interrupted envelope using its last complete bookend."""
     try:
         sizes, count = _sizes(raw)
     except ValueError:
         return raw
+    unclosed = int.from_bytes(raw[11:15], "big") == 0
     pos = 17 + 3 * count
+    end = 0
     while pos < len(raw):
         event = raw[pos]
         size = sizes[event]
-        if not size or pos + 1 + size > len(raw):
+        next_pos = pos + 1 + size
+        if not size:
             return raw
-        if pos + 1 + size == len(raw) and event == 0x3C and size >= 8:
+        if next_pos > len(raw):
+            break
+        if event == 0x3C and size >= 8:
             frame, finalized = struct.unpack_from(">ii", raw, pos + 1)
-            if frame == finalized:
-                # Rebuild just the UBJSON envelope. The replay remains unfinished.
-                return raw[:11] + struct.pack(">I", len(raw) - 15) + raw[15:] + b"U\x08metadata{}}"
-        pos += 1 + size
-    return raw
+            if through is not None and -123 < through <= finalized <= frame:
+                raw = raw[:pos + 5] + struct.pack(">i", through) + raw[pos + 9:next_pos]
+                end = next_pos
+                break
+            if (unclosed and -123 < finalized <= frame) or (next_pos == len(raw) and frame == finalized):
+                end = next_pos
+        elif unclosed and event == 0x39 and end == pos:
+            end = next_pos
+        pos = next_pos
+    if not end:
+        return raw
+    return raw[:11] + struct.pack(">I", end - 15) + raw[15:end] + b"U\x08metadata{}}"
+
+
+def _collapse_duplicate_endings(raw: bytes, endings: list[int], size: int) -> bytes:
+    """Keep the final copy of a Game End repeated during rollback."""
+    last = endings[-1]
+    if any(raw[start:start + size] != raw[last:last + size] for start in endings[:-1]):
+        raise ValueError("conflicting Game End events")
+    parts = []
+    position = 15
+    for start in endings[:-1]:
+        parts.append(raw[position:start])
+        position = start + size
+    parts.append(raw[position:])
+    length = int.from_bytes(raw[11:15], "big") - size * (len(endings) - 1)
+    return raw[:11] + struct.pack(">I", length) + b"".join(parts)
+
+
+def _read_replay_events(raw: bytes):
+    try:
+        return raw, *replay_events(raw)
+    except ValueError:
+        declared_end = 15 + int.from_bytes(raw[11:15], "big")
+        metadata_start = raw.find(b"U\x08metadata{", 15)
+        if not 15 <= metadata_start < declared_end:
+            raise
+        repaired = raw[:11] + struct.pack(">I", metadata_start - 15) + raw[15:]
+        codes, bookend, endings = replay_events(repaired)
+        if not endings or bookend is None or bookend[0] != bookend[1]:
+            raise
+        # The declared event stream ran into the metadata after Game End.
+        return repaired, codes, bookend, endings
 
 
 def _last_stock_winner(game, frame: int) -> str | None:
@@ -85,58 +135,89 @@ def _last_stock_winner(game, frame: int) -> str | None:
 
 
 def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
-                       include_finalized_prefixes=False):
+                       include_finalized_prefixes):
     try:
         name, raw = _decode_member(archive, member)
+    except (BadZipFile, EOFError, OSError, RuntimeError, ValueError) as exc:
+        return None, {"status": "error", "error": str(exc)}
+    return _regenerate_replay(name, raw, native, pool, timeout, relaxed_floats,
+                              include_finalized_prefixes)
+
+
+def _regenerate_replay(name, raw, native, pool, timeout, relaxed_floats,
+                       include_finalized_prefixes):
+    try:
         repaired_envelope = False
-        if include_finalized_prefixes and 15 + int.from_bytes(raw[11:15], "big") > len(raw):
+        declared_length = int.from_bytes(raw[11:15], "big")
+        if include_finalized_prefixes and (not declared_length or 15 + declared_length > len(raw)):
             repaired = _finalized_prefix(raw)
             repaired_envelope = repaired is not raw
             raw = repaired
-        # Peppi's file API need only see one member per worker. Keep its
-        # temporary file outside the input archive and remove it after parsing.
-        with tempfile.NamedTemporaryFile(suffix=".slp") as source:
-            source.write(raw)
-            source.flush()
-            try:
+            if repaired_envelope and not declared_length:
+                relaxed_floats = False
+        try:
+            repaired, codes, bookend, endings = _read_replay_events(raw)
+            if repaired is not raw:
+                raw = repaired
+                repaired_envelope = True
+                relaxed_floats = False
+            sizes, _ = _sizes(raw)
+            if len(endings) > 1:
+                raw = _collapse_duplicate_endings(raw, endings, sizes[0x39] + 1)
+            # Peppi stops at the first Game End. Give it the canonical ending.
+            with tempfile.NamedTemporaryFile(suffix=".slp") as source:
+                source.write(raw)
+                source.flush()
                 game = _read_slippi(source.name, False)
-            except OSError as exc:
-                return None, {"status": "parse_failed", "error": str(exc)}
-        if 15 + int.from_bytes(raw[11:15], "big") > len(raw):
-            return None, {"status": "unsupported", "reasons": ["incomplete-history"]}
-        sizes, _ = _sizes(raw)
+        except (OSError, ValueError) as exc:
+            return None, {"status": "parse_failed", "error": str(exc)}
+        except BaseException as exc:
+            # PyO3 wraps parser assertions in a BaseException subclass.
+            if (type(exc).__module__, type(exc).__name__) != ("pyo3_runtime", "PanicException"):
+                raise
+            return None, {"status": "parse_failed", "error": str(exc)}
         post_size = sizes[POST_FRAME]
         if post_size < STORED_END - 1 and post_size not in (0x50, STORED_OFFSET - 1):
             return None, {"status": "unsupported", "reasons": ["post-frame-layout"]}
-        try:
-            codes, bookend = replay_events(raw)
-        except ValueError as exc:
-            return None, {"status": "parse_failed", "error": str(exc)}
-        missing_end = (
-            game.end is None and bookend is not None and len(game.frames) > 0
+        terminal_bookend = (
+            bookend is not None and len(game.frames) > 0
             and game.frames.field("id")[-1].as_py() == bookend[0]
         )
-        finalized_end = missing_end and bookend[0] == bookend[1]
+        missing_end = game.end is None and terminal_bookend
+        finalized_end = terminal_bookend and bookend[0] == bookend[1]
         finalized_through = None
-        if missing_end and include_finalized_prefixes and bookend[1] < bookend[0]:
-            finalized_through = bookend[1]
-        allow_missing_end = finalized_end or finalized_through is not None
+        if (missing_end and include_finalized_prefixes) or (game.end is not None and finalized_end):
+            last_published = int(game.frames.field("id").to_numpy(zero_copy_only=False).max())
+            if bookend[1] < last_published:
+                # Rollback can leave speculative frames ahead of the last bookend.
+                finalized_through = bookend[1]
+        allow_missing_end = missing_end and (finalized_end or finalized_through is not None)
         legacy = is_ucf_08(codes)
+        online = game.start.get("scene", {}).get("major") == 8
+        # Slippi's 0x40-byte Pre-Frame payload includes raw main-stick Y but
+        # predates raw C-stick X/Y (Slippi ASM c852afa).
+        missing_cstick = online and sizes[0x37] == 0x40 and has_ucf_084_cardinals(codes)
         played_on = game.metadata.get("playedOn")
-        if (played_on is None and (legacy or allow_missing_end) and
-                game.start.get("scene", {}).get("major") == 8):
+        if played_on is None and online:
             # The netplay scene still identifies the profile without metadata.
             played_on = "network"
         issues = capture_issues(game, raw, played_on=played_on, codes=codes, allow_ucf_08=True,
+                                allow_missing_cstick=missing_cstick,
                                 allow_missing_game_end=allow_missing_end,
                                 finalized_through=finalized_through)
         # Transform can publish uninitialized L-cancel data. The native comparison
         # checks the recorded byte on every frame, including the transform.
         issues = [issue for issue in issues if issue != "uninitialized-transform-lcancel"]
-        if issues:
+        # A known platform can still lack arithmetic provenance for the strict
+        # corpus. Regeneration may use a profile only if the full match is exact.
+        exact_arithmetic_retry = (issues == ["unestablished-arithmetic"] and
+                                  played_on in REPLAY_PLATFORMS)
+        if issues and not exact_arithmetic_retry:
             return None, {"status": "unsupported", "reasons": issues}
+        if exact_arithmetic_retry:
+            relaxed_floats = False
         winner = None
-        if finalized_end:
+        if missing_end and finalized_end:
             if not repaired_envelope:
                 winner = _last_stock_winner(game, bookend[0])
             if winner is None and not include_finalized_prefixes:
@@ -185,35 +266,130 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
         )
         if finalized_through is not None:
             options["finalized_through"] = finalized_through
-        result = native.validate_replay(
-            game.frames, game.start, metadata, relaxed_floats=relaxed_floats and not stored, **options
-        )
+
+        def compare(**profile):
+            settings = options | profile
+
+            def run(frames):
+                return native.validate_replay(frames, game.start, metadata, **settings)
+
+            if missing_cstick:
+                ports = [player["port"] for player in game.start["players"]]
+                return CStickRecovery(game.frames, ports).validate(run)
+            return run(game.frames), 0
+
+        result, recovered_snaps = compare(relaxed_floats=relaxed_floats and not stored)
+        if missing_cstick and not result["pass"] and result["tolerated_values"]:
+            # A tolerated displacement can hide the input reconstruction
+            # needed to reproduce a collision on the same frame.
+            alternate, snaps = compare(relaxed_floats=False)
+            if alternate["pass"]:
+                result, recovered_snaps = alternate, snaps
+        retry_retail = False
+        retail_fnmsubs = False
+        frame_start_rng = False
+        animated_fd = False
+        if not result["pass"] and online:
+            first = next(iter(result["details"]), {})
+            field = first.get("field", "").partition("[")[0].removeprefix("follower_")
+            roll_mismatch = (field == "action_id" and
+                             SLIPPI_DAMAGE_FLY_ROLL in (first["expected"], first["actual"]))
+            retry_retail = field in ("speed_x_attack", "speed_y_attack")
+            if retry_retail:
+                # Netplay captures can use the retail zero sign on cancellation.
+                signed_zero = {first["expected"], first["actual"]} == {
+                    "0 (0x00000000)", "-0 (0x80000000)"
+                }
+                alternate, snaps = compare(fnmsubs_profile="retail",
+                                           relaxed_floats=relaxed_floats and not stored and signed_zero)
+                if alternate["pass"]:
+                    result, recovered_snaps = alternate, snaps
+                    retail_fnmsubs = True
+            elif not stored and roll_mismatch:
+                # Some netplay captures need the full RNG stream from the frame
+                # start. The extra fighter reseed can count earlier draws twice.
+                alternate, snaps = compare(frame_start_rng=True, relaxed_floats=False)
+                if alternate["pass"]:
+                    result, recovered_snaps = alternate, snaps
+                    frame_start_rng = True
+            patches = options["slippi_patches"]
+            if (not result["pass"] and not stored and
+                    game.start["stage"] == SLIPPI_FINAL_DESTINATION and
+                    patches & PATCH_FD_BACKGROUND_FROZEN and
+                    (field == "animation_index" or roll_mismatch)):
+                # Historical netplay Gecko lists can carry the freeze write
+                # while the capture uses the animated background's RNG.
+                alternate, snaps = compare(slippi_patches=patches & ~PATCH_FD_BACKGROUND_FROZEN,
+                                           relaxed_floats=False)
+                if alternate["pass"]:
+                    result, recovered_snaps = alternate, snaps
+                    animated_fd = True
         split_fma = False
-        if (not stored and (not result["pass"] or result["tolerated_values"]) and
-                any(player["character"] == SLIPPI_ICE_CLIMBERS for player in game.start["players"])):
+        has_ice_climbers = any(player["character"] == SLIPPI_ICE_CLIMBERS
+                               for player in game.start["players"])
+        if not stored and has_ice_climbers and (not result["pass"] or result["tolerated_values"]):
             # Older Dolphin builds can split a double multiply-add in Nana's
             # position blend. Require an exact match across the entire replay.
             try:
-                alternate = native.validate_replay(
-                    game.frames, game.start, metadata, jit_arithmetic=1, relaxed_floats=False, **options
-                )
+                split_retail = False
+                alternate, snaps = compare(jit_arithmetic=1, relaxed_floats=False)
+                if retry_retail and not alternate["pass"]:
+                    alternate, snaps = compare(fnmsubs_profile="retail", jit_arithmetic=1,
+                                               relaxed_floats=False)
+                    split_retail = True
             except RuntimeError:
                 pool.discard(runner)
                 runner = None
             else:
                 if alternate["pass"]:
-                    result = alternate
+                    result, recovered_snaps = alternate, snaps
                     split_fma = True
+                    retail_fnmsubs = split_retail
+        stock_share_rng = False
+        recorded_follower_inputs = False
+        if (runner is not None and not stored and not result["pass"] and
+                has_ice_climbers and game.start["is_teams"]):
+            alternate, snaps = compare(stock_share_rng=True, relaxed_floats=False)
+            if alternate["pass"]:
+                result, recovered_snaps = alternate, snaps
+                stock_share_rng = True
+            else:
+                alternate, snaps = compare(recorded_follower_inputs=True, relaxed_floats=False)
+                if alternate["pass"]:
+                    result, recovered_snaps = alternate, snaps
+                    recorded_follower_inputs = True
     except RuntimeError as exc:
         detail = pool.discard(runner)
         runner = None
         return None, {"status": "error", "error": f"{exc}: {detail}" if detail else str(exc)}
     except ValueError as exc:
+        loss = re.fullmatch(r"active finalized frame (-?\d+) has no (P[1-4]) pre/post row",
+                            str(exc))
+        if loss and repaired_envelope and not declared_length and missing_end:
+            frame, port = int(loss[1]), loss[2]
+            fighter = game.frames.field("ports").field(port).field("leader")
+            ids = game.frames.field("id").to_numpy(zero_copy_only=False)
+            present = (fighter.field("pre").is_valid().to_numpy(zero_copy_only=False) |
+                       fighter.field("post").is_valid().to_numpy(zero_copy_only=False))
+            if frame > -122 and not (present & (ids >= frame)).any():
+                prefix = _finalized_prefix(raw, through=frame - 1)
+                if prefix is not raw:
+                    pool.release(runner)
+                    runner = None
+                    output, report = _regenerate_replay(name, prefix, native, pool, timeout,
+                                                        False, include_finalized_prefixes)
+                    if output is not None:
+                        report.update(repaired_envelope=True, complete=False, finalized_through=frame - 1,
+                                      discarded_tail_frames=int(ids.max()) - frame + 1)
+                        return output, report
         return None, {"status": "unsupported", "reasons": [str(exc)]}
     finally:
         if runner is not None:
             pool.release(runner)
     if not result["pass"]:
+        if exact_arithmetic_retry:
+            return None, {"status": "unsupported", "reasons": ["unestablished-arithmetic"],
+                          "details": result["details"][:1]}
         return None, {
             "status": "diverged",
             "first_mismatch_frame": result["first_mismatch_frame"],
@@ -227,15 +403,31 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
     }
     if split_fma:
         report["jit_arithmetic"] = "split-fma"
+    if retail_fnmsubs:
+        report["fnmsubs_profile"] = "retail"
+    if frame_start_rng:
+        report["rng_profile"] = "frame-start"
+    elif stock_share_rng:
+        report["rng_profile"] = "stock-share"
+    if recorded_follower_inputs:
+        report["recorded_follower_inputs"] = True
+    if animated_fd:
+        report["fd_background_profile"] = "animated"
+    if missing_cstick:
+        report["reconstructed_cstick_snaps"] = recovered_snaps
+    if len(endings) > 1:
+        report["discarded_duplicate_game_ends"] = len(endings) - 1
+    if repaired_envelope:
+        report["repaired_envelope"] = True
     if game.end is None:
         report["game_end"] = "missing"
         if winner is not None:
             report["winner"] = winner
         else:
             report["complete"] = False
-        if finalized_through is not None:
-            report["finalized_through"] = finalized_through
-            report["discarded_tail_frames"] = bookend[0] - finalized_through
+    if finalized_through is not None:
+        report["finalized_through"] = finalized_through
+        report["discarded_tail_frames"] = last_published - finalized_through
     if result["tolerated_values"]:
         report["status"] = "regenerated_with_tolerance"
         report["tolerated_values"] = result["tolerated_values"]
@@ -249,8 +441,8 @@ def _regenerate_member(archive, member, native, pool, timeout, relaxed_floats,
 
 def regenerate_zip(
     source: Path, destination: Path, *, workers: int, cores: tuple[int, ...],
-    start: int = 0, limit: int | None = None, timeout: float = 60, relaxed_floats: bool = False,
-    include_finalized_prefixes: bool = False, compression_level: int = DEFAULT_COMPRESSION_LEVEL,
+    start: int = 0, limit: int | None = None, timeout: float = 60, relaxed_floats: bool = True,
+    include_finalized_prefixes: bool = True, compression_level: int = DEFAULT_COMPRESSION_LEVEL,
 ) -> dict:
     if source.resolve() == destination.resolve() or destination.exists():
         raise FileExistsError(destination)
@@ -322,33 +514,35 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path, help="ZIP archive containing Slippi replays")
     parser.add_argument("-o", "--output", type=Path,
-                        help="output ZIP (default: ARCHIVE.regenerated.zip)")
+                        help="output ZIP (default: ARCHIVE.regenerated.zip next to the input)")
     parser.add_argument("--start", type=int, default=0, help="skip this many replay members")
     parser.add_argument("--limit", type=int, help="maximum replay members to process")
-    parser.add_argument("--workers", type=int, help="number of persistent simulation workers")
+    parser.add_argument("--workers", type=int, help="number of simulation workers (default: up to 16)")
     parser.add_argument("--cores", help="comma-separated logical CPUs, one per native worker (Linux)")
     parser.add_argument("--timeout", type=float, default=60, help="timeout per simulation in seconds")
     parser.add_argument("--compression-level", type=int, choices=range(1, 10),
                         default=DEFAULT_COMPRESSION_LEVEL, metavar="LEVEL",
                         help="ZIP Deflate compression level from 1 to 9 (default: %(default)s)")
-    parser.add_argument("--disable-strict-exactness", action="store_true",
-                        help="allow the documented regeneration tolerances")
-    parser.add_argument("--include-finalized-prefixes", action="store_true",
-                        help="also regenerate incomplete replays through their last confirmed frame")
+    parser.add_argument("--strict-exactness", action="store_true",
+                        help="require exact matches for all compared fields")
+    parser.add_argument("--complete-only", action="store_true",
+                        help="skip incomplete recordings")
     parser.add_argument("--no-build", action="store_true", help="reuse the native runner and validator")
     args = parser.parse_args()
+    available_cpus = os.sched_getaffinity(0) if hasattr(os, "sched_getaffinity") else None
     cores = ()
     if args.cores:
         try:
             cores = tuple(int(core) for core in args.cores.split(","))
         except ValueError:
             parser.error("--cores must be comma-separated CPU numbers")
-        if (not hasattr(os, "sched_getaffinity") or not shutil.which("taskset") or
-                len(set(cores)) != len(cores) or not set(cores) <= os.sched_getaffinity(0)):
+        if (available_cpus is None or not shutil.which("taskset") or
+                len(set(cores)) != len(cores) or not set(cores) <= available_cpus):
             parser.error("--cores requires distinct available Linux CPU numbers and taskset")
         if args.workers is not None and args.workers != len(cores):
             parser.error("--workers must equal the number of pinned cores")
-    workers = args.workers if args.workers is not None else len(cores) or min(16, os.cpu_count() or 1)
+    cpu_count = len(available_cpus) if available_cpus is not None else os.cpu_count() or 1
+    workers = args.workers if args.workers is not None else len(cores) or min(16, cpu_count)
     if workers < 1 or args.start < 0 or (args.limit is not None and args.limit < 1) or args.timeout <= 0:
         parser.error("workers, limit and timeout must be positive and start must be non-negative")
     destination = args.output or args.archive.with_suffix(".regenerated.zip")
@@ -356,8 +550,8 @@ def main() -> int:
         validation.build_validation(backend="native")
     summary = regenerate_zip(args.archive, destination, workers=workers, cores=cores,
                              start=args.start, limit=args.limit, timeout=args.timeout,
-                             relaxed_floats=args.disable_strict_exactness,
-                             include_finalized_prefixes=args.include_finalized_prefixes,
+                             relaxed_floats=not args.strict_exactness,
+                             include_finalized_prefixes=not args.complete_only,
                              compression_level=args.compression_level)
     print(json.dumps(summary))
     return int(summary["outcomes"].get("error", 0) != 0)
