@@ -124,6 +124,18 @@ def _read_replay_events(raw: bytes):
         return repaired, codes, bookend, endings
 
 
+def _trim_last_frame(raw: bytes, last_frame: int | None, through: int) -> bytes:
+    if last_frame in (None, through):
+        return raw
+    end = 15 + int.from_bytes(raw[11:15], "big")
+    key = b"U\x09lastFramel"
+    previous = key + struct.pack(">i", last_frame)
+    trailer = raw[end:]
+    if trailer.count(previous) != 1:
+        raise ValueError("ambiguous-last-frame-metadata")
+    return raw[:end] + trailer.replace(previous, key + struct.pack(">i", through))
+
+
 def _last_stock_winner(game, frame: int) -> str | None:
     players = game.start["players"]
     if (len(players) != 2 or game.start["is_teams"] or
@@ -234,14 +246,11 @@ def _regenerate_replay(name, raw, native, pool, timeout, relaxed_floats,
             return None, {"status": "unsupported", "reasons": [str(exc)]}
         metadata = dict(game.metadata, playedOn=played_on)
         last_frame = game.metadata.get("lastFrame")
-        if finalized_through is not None and last_frame not in (None, finalized_through):
-            end = 15 + int.from_bytes(raw[11:15], "big")
-            key = b"U\x09lastFramel"
-            previous = key + struct.pack(">i", last_frame)
-            trailer = raw[end:]
-            if trailer.count(previous) != 1:
-                return None, {"status": "unsupported", "reasons": ["ambiguous-last-frame-metadata"]}
-            raw = raw[:end] + trailer.replace(previous, key + struct.pack(">i", finalized_through))
+        if finalized_through is not None:
+            try:
+                raw = _trim_last_frame(raw, last_frame, finalized_through)
+            except ValueError as exc:
+                return None, {"status": "unsupported", "reasons": [str(exc)]}
         stored = b""
         if post_size >= STORED_END - 1:
             stored = expected_stored(raw, None, validation.ROOT,
@@ -372,7 +381,13 @@ def _regenerate_replay(name, raw, native, pool, timeout, relaxed_floats,
     except ValueError as exc:
         loss = re.fullmatch(r"active finalized frame (-?\d+) has no (P[1-4]) pre/post row",
                             str(exc))
-        if loss and repaired_envelope and not declared_length and missing_end:
+        game_end = game.end or {}
+        if loss and include_finalized_prefixes and (
+            (repaired_envelope and not declared_length and missing_end)
+            or (finalized_end and game_end.get("method") == "NoContest"
+                and any(player["port"] == game_end.get("lras_initiator")
+                        for player in game.start["players"]))
+        ):
             frame, port = int(loss[1]), loss[2]
             fighter = game.frames.field("ports").field(port).field("leader")
             ids = game.frames.field("id").to_numpy(zero_copy_only=False)
@@ -381,11 +396,20 @@ def _regenerate_replay(name, raw, native, pool, timeout, relaxed_floats,
             if frame > -122 and not (present & (ids >= frame)).any():
                 prefix = _finalized_prefix(raw, through=frame - 1)
                 if prefix is not raw:
+                    if game_end:
+                        prefix_end = 15 + int.from_bytes(prefix[11:15], "big")
+                        source_end = 15 + int.from_bytes(raw[11:15], "big")
+                        try:
+                            prefix = _trim_last_frame(prefix[:prefix_end] + raw[source_end:],
+                                                      last_frame, frame - 1)
+                        except ValueError as metadata_error:
+                            return None, {"status": "unsupported", "reasons": [str(metadata_error)]}
                     pool.release(runner)
                     runner = None
                     output, report = _regenerate_replay(name, prefix, native, pool, timeout,
                                                         False, include_finalized_prefixes)
                     if output is not None:
+                        report.pop("winner", None)
                         report.update(repaired_envelope=True, complete=False, finalized_through=frame - 1,
                                       discarded_tail_frames=int(ids.max()) - frame + 1)
                         return output, report

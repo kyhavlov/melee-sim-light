@@ -30,9 +30,11 @@ metadata to match the output. When Game End follows a finalized bookend,
 the converter keeps Game End and drops any later speculative frames.
 If recording stopped before writing the raw stream length, the converter
 can recover the finalized prefix when it validates exactly. If an active
-player's rows stop early in an unclosed recording, the prefix ends before
-the first missing row. The converter can also
-repair a length that extends past a finalized Game End into metadata.
+player's rows are missing for the rest of an unclosed recording or one
+that ended in a quit, the prefix stops before the first missing row and
+omits any quit event.
+The converter can also repair a length that extends past a finalized Game
+End into metadata.
 The manifest marks repaired envelopes with `repaired_envelope: true`.
 
 Older netplay captures with the recorded UCF 0.84 patch can omit raw C-stick

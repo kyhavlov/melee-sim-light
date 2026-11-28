@@ -139,6 +139,18 @@ def test_regenerate_finalized_prefix_without_game_end(tmp_path, falcon_recording
         elif event not in (0x37, 0x38) or raw[pos + 5] != 0:
             dropout.extend(raw[pos:stop])
         pos = stop
+
+    def closed_recording(events, end_frame, method):
+        game_end = bytes((0x39, method, 1)) + b"\xff" * (sizes[0x39] - 2)
+        trailer = (b"U\x08metadata{U\x09lastFramel" + struct.pack(">i", end_frame)
+                   + b"U\x08playedOnSU\x07dolphin}}")
+        return raw[:11] + struct.pack(">I", len(events) + len(game_end)) + events + game_end + trailer
+
+    pos = next_end
+    while raw[pos] != 0x3C:
+        pos += 1 + sizes[raw[pos]]
+    assert struct.unpack_from(">i", raw, pos + 1) == (frame + 2,)
+    resumed = dropout + raw[next_end:pos] + struct.pack(">Bii", 0x3C, frame + 2, frame + 2)
     # A rollback at the end leaves frame + 1 in the file after frame is finalized.
     events = raw[15:next_end] + raw[frame_start:end]
     rolled_back = raw[:11] + struct.pack(">I", len(events)) + events + full_file[end:]
@@ -149,14 +161,17 @@ def test_regenerate_finalized_prefix_without_game_end(tmp_path, falcon_recording
         archive.writestr("unfinalized-with-metadata.slp", full_file)
         archive.writestr("rolled-back.slp", rolled_back)
         archive.writestr("dropout.slp", raw[:11] + bytes(4) + dropout)
+        archive.writestr("quit-after-dropout.slp", closed_recording(dropout, frame + 1, 7))
+        archive.writestr("game-after-dropout.slp", closed_recording(dropout, frame + 1, 2))
+        archive.writestr("quit-after-gap.slp", closed_recording(resumed, frame + 2, 7))
 
     complete = regenerate_zip(source, tmp_path / "complete.zip", workers=1, cores=(),
                               include_finalized_prefixes=False)
-    assert complete["outcomes"] == {"parse_failed": 4, "unsupported": 2}
+    assert complete["outcomes"] == {"parse_failed": 4, "unsupported": 5}
 
     output = tmp_path / "prefixes.zip"
     result = regenerate_zip(source, output, workers=1, cores=())
-    assert result["outcomes"] == {"regenerated": 4, "parse_failed": 2}
+    assert result["outcomes"] == {"regenerated": 5, "parse_failed": 2, "unsupported": 2}
     with ZipFile(output) as archive:
         reports = {r["member"]: r for r in map(json.loads, archive.read("regeneration.jsonl").splitlines())}
         assert reports["finalized.slp"]["complete"] is False
@@ -165,6 +180,13 @@ def test_regenerate_finalized_prefix_without_game_end(tmp_path, falcon_recording
         assert reports["dropout.slp"]["finalized_through"] == frame
         assert reports["dropout.slp"]["discarded_tail_frames"] == 1
         assert archive.read("dropout.slp") == new_raw
+        quit_prefix = reports["quit-after-dropout.slp"]
+        assert quit_prefix["complete"] is False and "winner" not in quit_prefix
+        assert quit_prefix["finalized_through"] == frame
+        assert quit_prefix["discarded_tail_frames"] == 1
+        assert reports["game-after-dropout.slp"]["status"] == "unsupported"
+        assert reports["quit-after-gap.slp"]["status"] == "unsupported"
+        quit_result = archive.read("quit-after-dropout.slp")
         assert reports["unfinalized-with-metadata.slp"]["complete"] is False
         assert reports["unfinalized-with-metadata.slp"]["finalized_through"] == frame - 1
         assert reports["unfinalized-with-metadata.slp"]["discarded_tail_frames"] == 1
@@ -183,6 +205,13 @@ def test_regenerate_finalized_prefix_without_game_end(tmp_path, falcon_recording
     new_rows = _post_rows(new_raw, *_sizes(new_raw))
     assert new_rows.keys() == {key for key in old_rows if key[0] <= frame}
     assert all(row.startswith(old_rows[key]) for key, row in new_rows.items())
+
+    replay.write_bytes(quit_result)
+    game = _read_slippi(str(replay), False)
+    assert game.end is None
+    assert game.metadata == {"lastFrame": frame, "playedOn": "dolphin"}
+    assert game.frames.field("id").to_pylist() == list(range(-123, frame + 1))
+    assert _post_rows(quit_result, *_sizes(quit_result)) == new_rows
 
     replay.write_bytes(rolled_back_result)
     game = _read_slippi(str(replay), False)
