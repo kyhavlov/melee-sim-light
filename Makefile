@@ -382,13 +382,16 @@ ifeq ($(NATIVE_RELEASE_PROFILE),1)
 # change canonical outputs when admitted at O1. Preserve their measured source
 # profiles while the remaining native closure uses the strict optimized default.
 NATIVE_RELEASE_O0_OBJS := \
-	$(filter-out $(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftanim.o,\
+	$(filter-out $(addprefix $(NATIVE_OBJ_DIR)/gameplay/melee/ft/,\
+		ftanim.o ftcoll.o ftdynamics.o),\
 		$(filter $(NATIVE_OBJ_DIR)/gameplay/melee/ft/%,$(NATIVE_UPSTREAM_OBJS))) \
 	$(filter $(NATIVE_OBJ_DIR)/gameplay/melee/it/%,$(NATIVE_UPSTREAM_OBJS)) \
 	$(NATIVE_OBJ_DIR)/gameplay/sysdolphin/baselib/quatlib.o
 NATIVE_RELEASE_O1_OBJS := \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/mp/mpcoll.o
 NATIVE_RELEASE_O2_OBJS := \
+	$(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftcoll.o \
+	$(NATIVE_OBJ_DIR)/gameplay/melee/ft/ftdynamics.o \
 	$(NATIVE_OBJ_DIR)/gameplay/melee/lb/lb_00B0.o \
 	$(NATIVE_OBJ_DIR)/src/runtime/camera.o
 NATIVE_RELEASE_OPT_OBJS := \

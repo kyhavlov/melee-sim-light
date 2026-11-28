@@ -249,6 +249,29 @@ static inline bool HSD_JObjMtxIsDirty(HSD_JObj* jobj)
     return result;
 }
 
+#ifdef MSL_CORE_NATIVE
+static inline void msl_jobj_check_depend(HSD_JObj* jobj)
+{
+    u32 flags = jobj->flags;
+    HSD_JObj* parent = jobj->parent;
+
+    if (flags & JOBJ_MTX_DIRTY) {
+        return;
+    }
+    if (flags & JOBJ_USER_DEF_MTX) {
+        if (!(flags & JOBJ_MTX_INDEP_PARENT) && parent != NULL &&
+            HSD_JObjMtxIsDirty(parent))
+        {
+            jobj->flags = flags | JOBJ_MTX_DIRTY;
+        }
+    } else if ((flags & JOBJ_JOINT) || jobj->robj != NULL ||
+               (parent != NULL && (parent->flags & JOBJ_MTX_DIRTY)))
+    {
+        jobj->flags = flags | JOBJ_MTX_DIRTY;
+    }
+}
+#endif
+
 static inline void HSD_JObjSetMtxDirtyOutOfLineLeaf(HSD_JObj* jobj)
 {
     (HSD_JObjSetMtxDirty)(jobj);

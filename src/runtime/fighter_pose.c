@@ -2024,7 +2024,11 @@ static void interpret_joint(MslFighterPoseJoint* node)
 static void animate_node(MslFighterPoseJoint* node)
 {
     HSD_JObj* joint = node->joint;
+#ifdef MSL_CORE_NATIVE
+    msl_jobj_check_depend(joint);
+#else
     HSD_JObjCheckDepend(joint);
+#endif
     if (!(node->flags & AOBJ_NO_ANIM)) {
         interpret_joint(node);
     }

@@ -42,6 +42,9 @@ void HSD_JObjCheckDepend(HSD_JObj* jobj)
         return;
     }
 
+#ifdef MSL_CORE_NATIVE
+    msl_jobj_check_depend(jobj);
+#else
     switch (HSD_JObjMtxIsDirty(jobj)) {
     case false:
         if ((jobj->flags & JOBJ_USER_DEF_MTX)) {
@@ -61,6 +64,7 @@ void HSD_JObjCheckDepend(HSD_JObj* jobj)
         }
         break;
     }
+#endif
 }
 
 void JObjResetRST(HSD_JObj* jobj, HSD_Joint* joint)
