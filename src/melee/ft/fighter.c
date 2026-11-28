@@ -118,6 +118,10 @@
 #include <MSL/math_ppc.h>
 #include <MSL/trigf.h>
 
+#if defined(MSL_NATIVE_INLINE_FMADDS) && defined(__GNUC__) && !defined(__clang__)
+#pragma GCC optimize ("O2")
+#endif
+
 #ifndef MSL_CORE_HOSTED
 extern struct UnkCostumeList CostumeListsForeachCharacter[FTKIND_MAX];
 #endif
@@ -2407,6 +2411,10 @@ void Fighter_Spaghetti_8006AD10(Fighter_GObj* gobj)
     } while (0)
 
 
+#if defined(MSL_NATIVE_INLINE_FMADDS) && defined(__GNUC__) && !defined(__clang__)
+// Keep the replay-exact compiler profile for fighter physics.
+__attribute__((optimize("O0")))
+#endif
 void Fighter_procUpdate(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
