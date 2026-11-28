@@ -6,6 +6,14 @@
 
 #define MSL_CORE_HOSTED 1
 
+// The viewer build (Makefile MSL_GX_RECORD=1) also runs the game's display
+// code and records the GX command stream it sends. What it adds is under
+// `#if MSL_GX_RECORD`; without the flag the build is the headless simulator,
+// unchanged (make flag-off-check).
+#ifndef MSL_GX_RECORD
+#define MSL_GX_RECORD 0
+#endif
+
 // The decomp's MSL stddef supplies this spelling transitively. Hosted libc
 // does not, while several exact translation units use it directly.
 typedef unsigned int usize_t;
